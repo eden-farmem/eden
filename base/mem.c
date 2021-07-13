@@ -61,6 +61,7 @@ __mem_map_anom(void *base, size_t len, size_t pgsize,
 {
 	void *addr;
 	int flags = MAP_PRIVATE | MAP_ANONYMOUS | MAP_POPULATE;
+	int ret;
 
 	len = align_up(len, pgsize);
 
@@ -87,13 +88,17 @@ __mem_map_anom(void *base, size_t len, size_t pgsize,
 		return MAP_FAILED;
 	}
 
+	log_info("mmap");
 	addr = mmap(base, len, PROT_READ | PROT_WRITE, flags, -1, 0);
 	if (addr == MAP_FAILED)
 		return MAP_FAILED;
 
 	BUILD_ASSERT(sizeof(unsigned long) * 8 >= NNUMA);
-	if (mbind(addr, len, numa_policy, mask ? mask : NULL,
-		  mask ? NNUMA : 0, MPOL_MF_STRICT))
+	log_info("mbind");
+	ret = mbind(addr, len, numa_policy, mask ? mask : NULL,
+		  mask ? NNUMA : 0, MPOL_MF_STRICT);
+	log_info("mbind ret: %d, errno: %d", ret, errno);
+	if (ret)
 		goto fail;
 
 	touch_mapping(addr, len, pgsize);

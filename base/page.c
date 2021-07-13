@@ -358,12 +358,15 @@ int page_init(void)
 		    MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
 	if (addr == MAP_FAILED)
 		return -ENOMEM;
+	
 
 	/* Align to the next 2MB boundary. */
 	addr = (void *)align_up((uintptr_t)addr, PGSIZE_2MB);
 
+
 	/* Then map NUMA-local large pages on top. */
 	for (i = 0; i < numa_count; i++) {
+		log_info("mapping large pages on numa node %d", i);
 		node = &lgpage_nodes[i];
 		node->tbl = mem_map_anom(
 			(char *)addr + i * LGPAGE_META_LEN,
@@ -377,6 +380,7 @@ int page_init(void)
 	}
 
 	page_tbl = addr;
+	log_info("page init done");
 	return 0;
 }
 
