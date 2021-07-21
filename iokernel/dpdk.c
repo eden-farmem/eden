@@ -168,6 +168,7 @@ int dpdk_init()
 {
 	char *argv[4];
 	char buf[10];
+	char name[50];
 
 	/* init args */
 	argv[0] = "./iokerneld";
@@ -184,8 +185,24 @@ int dpdk_init()
 		return -1;
 	}
 
-	/* check that there is a port to send/receive on */
-	if (!rte_eth_dev_is_valid_port(0)) {
+	ret = rte_eth_dev_get_name_by_port(0, name);
+	if (ret){
+		log_err("dpdk: error getting port name");
+		return -1;
+	}
+
+	dp.port = 0;	/* default port is 0 unless specified */
+	if (strlen(dp.port_pci_name) > 0){
+		ret = rte_eth_dev_get_port_by_name(dp.port_pci_name, &(dp.port));
+		if (ret) {
+			log_err("dpdk: error getting port id from provided name %s", dp.port_pci_name);
+			return -1;
+		}
+		log_debug("dpdk: port id %d found for name %s", dp.port, dp.port_pci_name);
+	}
+
+	/* check that the port is valid to send/receive on */
+	if (!rte_eth_dev_is_valid_port(dp.port)) {
 		log_err("dpdk: no available ports");
 		return -1;
 	}
@@ -202,7 +219,6 @@ int dpdk_init()
 int dpdk_late_init()
 {
 	/* initialize port */
-	dp.port = 0;
 	if (dpdk_port_init(dp.port, dp.rx_mbuf_pool) != 0) {
 		log_err("dpdk: cannot init port %"PRIu8 "\n", dp.port);
 		return -1;

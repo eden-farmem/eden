@@ -127,6 +127,16 @@ int main(int argc, char *argv[])
 {
 	int ret;
 
+
+	/* Accept pci slot name to target the dpdk port of a specific interface */
+	if (argc >= 2) {
+		assert(strlen(argv[1]) < 50);
+		strcpy(dp.port_pci_name, argv[1]);
+	}
+	else {
+		strcpy(dp.port_pci_name, "");
+	}
+
 	ret = run_init_handlers("iokernel", iok_init_handlers,
 			ARRAY_SIZE(iok_init_handlers));
 	if (ret)

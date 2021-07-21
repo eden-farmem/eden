@@ -201,6 +201,7 @@ enum {
  */
 struct dataplane {
 	uint8_t			port;
+	char	port_pci_name[50];
 	struct rte_mempool	*rx_mbuf_pool;
 
 	struct proc		*clients[IOKERNEL_MAX_PROC];
