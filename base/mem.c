@@ -96,7 +96,7 @@ __mem_map_anom(void *base, size_t len, size_t pgsize,
 	BUILD_ASSERT(sizeof(unsigned long) * 8 >= NNUMA);
 	log_info("mbind");
 	ret = mbind(addr, len, numa_policy, mask ? mask : NULL,
-		  mask ? NNUMA : 0, MPOL_MF_STRICT);
+		  mask ? NNUMA : 0, MPOL_MF_STRICT | MPOL_MF_MOVE);
 	log_info("mbind ret: %d, errno: %d", ret, errno);
 	if (ret)
 		goto fail;
