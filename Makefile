@@ -1,6 +1,8 @@
 DPDK_PATH = dpdk
-INC     = -I./inc -I$(DPDK_PATH)/build/include
+PKGCONF ?= pkg-config
+INC     = -I./inc
 CFLAGS  = -g -Wall -std=gnu11 -D_GNU_SOURCE $(INC) -mssse3
+CFLAGS += $(shell $(PKGCONF) --cflags libdpdk)
 LDFLAGS = -T base/base.ld -no-pie
 LD	= gcc
 CC	= gcc
@@ -58,27 +60,29 @@ test_obj = $(test_src:.c=.o)
 test_targets = $(basename $(test_src))
 
 # dpdk libs
-DPDK_LIBS= -L$(DPDK_PATH)/build/lib
-DPDK_LIBS += -Wl,-whole-archive -lrte_pmd_e1000 -Wl,-no-whole-archive
-DPDK_LIBS += -Wl,-whole-archive -lrte_pmd_ixgbe -Wl,-no-whole-archive
-DPDK_LIBS += -Wl,-whole-archive -lrte_mempool_ring -Wl,-no-whole-archive
-DPDK_LIBS += -ldpdk
-DPDK_LIBS += -lrte_eal
-DPDK_LIBS += -lrte_ethdev
-DPDK_LIBS += -lrte_hash
-DPDK_LIBS += -lrte_mbuf
-DPDK_LIBS += -lrte_mempool
-DPDK_LIBS += -lrte_mempool
-DPDK_LIBS += -lrte_mempool_stack
-DPDK_LIBS += -lrte_ring
-# additional libs for running with Mellanox NICs
-ifneq ($(MLX5),)
-DPDK_LIBS +=  -lrte_pmd_mlx5 -libverbs -lmlx5 -lmnl
-else
-ifneq ($(MLX4),)
-DPDK_LIBS += -lrte_pmd_mlx4 -libverbs -lmlx4
-endif
-endif
+# DPDK_LIBS= -L$(DPDK_PATH)/build/lib
+# DPDK_LIBS += -Wl,-whole-archive -lrte_pmd_e1000 -Wl,-no-whole-archive
+# DPDK_LIBS += -Wl,-whole-archive -lrte_pmd_ixgbe -Wl,-no-whole-archive
+# DPDK_LIBS += -Wl,-whole-archive -lrte_mempool_ring -Wl,-no-whole-archive
+# DPDK_LIBS += -ldpdk
+# DPDK_LIBS += -lrte_eal
+# DPDK_LIBS += -lrte_ethdev
+# DPDK_LIBS += -lrte_hash
+# DPDK_LIBS += -lrte_mbuf
+# DPDK_LIBS += -lrte_mempool
+# DPDK_LIBS += -lrte_mempool
+# DPDK_LIBS += -lrte_mempool_stack
+# DPDK_LIBS += -lrte_ring
+# # additional libs for running with Mellanox NICs
+# ifneq ($(MLX5),)
+# DPDK_LIBS +=  -lrte_pmd_mlx5 -libverbs -lmlx5 -lmnl
+# else
+# ifneq ($(MLX4),)
+# DPDK_LIBS += -lrte_pmd_mlx4 -libverbs -lmlx4
+# endif
+# endif
+DPDK_LIBS = $(shell $(PKGCONF) --static --libs libdpdk)
+
 
 # must be first
 all: libbase.a libnet.a libruntime.a iokerneld iokerneld-noht $(test_targets)
