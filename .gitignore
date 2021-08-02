@@ -7,3 +7,5 @@ iokerneld-noht
 *~
 .cproject
 .project
+.vscode
+run.*

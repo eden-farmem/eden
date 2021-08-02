@@ -90,13 +90,13 @@ struct tcpconn {
 	uint16_t		tx_last_win;
 	struct mbuf		*tx_pending;
 	struct list_head	txq;
-	bool			do_fast_retransmit;
+	uint8_t			do_fast_retransmit;
 	uint32_t		fast_retransmit_last_ack;
 
 	/* timeouts */
 	uint64_t next_timeout;
-	bool			ack_delayed;
-	bool			rcv_wnd_full;
+	uint8_t			ack_delayed;
+	uint8_t			rcv_wnd_full;
 	uint64_t		ack_ts;
 	uint64_t		time_wait_ts;
 	int			rep_acks;

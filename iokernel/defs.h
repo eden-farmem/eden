@@ -28,6 +28,7 @@
 #define IOKERNEL_CMD_BURST_SIZE		64
 #define IOKERNEL_RX_BURST_SIZE		64
 #define IOKERNEL_CONTROL_BURST_SIZE	4
+#define STATS 1
 
 
 /*
@@ -63,7 +64,7 @@ struct thread {
 struct proc {
 	pid_t			pid;
 	struct shm_region	region;
-	bool			removed;
+	uint8_t			removed;
 	struct ref		ref;
 	unsigned int		kill:1;       /* the proc is being torn down */
 	unsigned int		overloaded:1; /* the proc needs more cores */
@@ -91,9 +92,11 @@ struct proc {
 	struct eth_addr		mac;
 
 	/* next pending timer, only valid if pending_timer is true */
-	bool			pending_timer;
+	/* BUGFIX: Changing bools to uint8_t. Bool size is gcc implementation 
+	 * specific and introduce wrong alignments of fields. */
+	uint8_t			pending_timer;
 	uint64_t		deadline_us;
-	unsigned int		timer_idx;
+	unsigned int	timer_idx;
 
 	/* Unique identifier -- never recycled across runtimes*/
 	uintptr_t		uniqid;
