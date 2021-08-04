@@ -781,11 +781,11 @@ int cores_init(void)
 
 	/* assign first non-zero core on socket 0 to the dataplane thread */
 	for (i = 1; i < cpu_count; i++) {
-		if (cpu_info_tbl[i].package == 0)
+		if (cpu_info_tbl[i].package == NUMA_NODE)
 			break;
 	}
 	if (i == cpu_count)
-		panic("cores: couldn't find any cores on package 0");
+		panic("cores: couldn't find any cores on package %d", NUMA_NODE);
 	core_assign.dp_core = i;
 
 	/* parse hyperthread information */
@@ -835,13 +835,13 @@ int cores_init(void)
 			continue;
 #endif
 
-		if (cpu_info_tbl[i].package == 0)
+		if (cpu_info_tbl[i].package == NUMA_NODE)
 			core_init(i);
 	}
 
 	log_info("cores: linux on core %d, control on %d, dataplane on %d",
-		 core_assign.linux_core, core_assign.ctrl_core,
-		 core_assign.dp_core);
+		core_assign.linux_core, core_assign.ctrl_core,
+		core_assign.dp_core);
 
 	return 0;
 }
