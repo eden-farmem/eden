@@ -21,6 +21,10 @@ else
 CFLAGS += -DNDEBUG -O3
 endif
 
+ifneq ($(NUMA_NODE),)
+CFLAGS += -DNUMA_NODE=$(NUMA_NODE)
+endif
+
 ifneq ($(TCP_RX_STATS),)
 CFLAGS += -DTCP_RX_STATS
 endif
