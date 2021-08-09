@@ -20,7 +20,7 @@ static inline uint16_t chksum_internet(const void *buf, int len)
 {
         uint64_t sum;
 
-        asm volatile("xorq %0, %0\n"
+        __asm__ volatile("xorq %0, %0\n"
 
              /* process 8 byte chunks */
              "movl %2, %%edx\n"

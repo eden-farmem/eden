@@ -624,10 +624,10 @@ static inline struct list_node *list_node_from_off_(void *ptr, size_t off)
 	 check_type(((type *)0)->member, struct list_node))
 
 #define list_off_var_(var, member)			\
-	(offsetof(typeof(*var), member) +		\
+	(offsetof(__typeof__(*var), member) +		\
 	 check_type(var->member, struct list_node))
 
-#define list_typeof(var) typeof(var)
+#define list_typeof(var) __typeof__(var)
 
 /* Returns member, or NULL if at end of list. */
 static inline void *list_entry_or_null(const struct list_head *h,

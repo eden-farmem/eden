@@ -40,12 +40,12 @@ static inline void rcu_read_unlock(void)
 
 #ifdef __CHECKER__
 #define rcu_check_type(p) \
-	((void)(((typeof(*(p)) __rcu *)p) == p))
+	((void)(((__typeof__(*(p)) __rcu *)p) == p))
 #else /* __CHECKER__ */
 #define rcu_check_type(p)
 #endif /* __CHECKER__ */
 
-#define RCU_INITIALIZER(v) (typeof(*(v)) __force __rcu *)(v)
+#define RCU_INITIALIZER(v) (__typeof__(*(v)) __force __rcu *)(v)
 
 /**
  * RCU_INIT_POINTER - initializes an RCU pointer
@@ -71,7 +71,7 @@ static inline void rcu_read_unlock(void)
 	({						\
 		rcu_check_type(p);			\
 		assert(rcu_read_lock_held());		\
-		load_consume((typeof(*(p)) __force **)(&p));\
+		load_consume((__typeof__(*(p)) __force **)(&p));\
 	})
 
 /**
@@ -91,7 +91,7 @@ static inline void rcu_read_unlock(void)
 	({						\
 		rcu_check_type(p);			\
 		assert(rcu_read_lock_held() || !!(c));	\
-		load_consume((typeof(*(p)) __force **)(&p));\
+		load_consume((__typeof__(*(p)) __force **)(&p));\
 	})
 
 /**

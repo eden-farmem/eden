@@ -13,7 +13,7 @@
 
 /* used to define perthread variables */
 #define DEFINE_PERTHREAD(type, name) \
-	typeof(type) __perthread_##name __perthread \
+	__typeof__(type) __perthread_##name __perthread \
 	__attribute__((section(".perthread,\"\",@nobits#")))
 
 /* used to make perthread variables externally available */
@@ -32,7 +32,7 @@ extern unsigned int thread_count;
  * Returns a perthread variable.
  */
 #define perthread_get_remote(var, thread)			\
-	(*((__force typeof(__perthread_##var) *)		\
+	(*((__force __typeof__(__perthread_##var) *)		\
 	 ((uintptr_t)&__perthread_##var + (uintptr_t)perthread_offsets[thread])))
 
 static inline void *__perthread_get(void __perthread *key)
@@ -47,7 +47,7 @@ static inline void *__perthread_get(void __perthread *key)
  * Returns a perthread variable.
  */
 #define perthread_get(var)					\
-	(*((typeof(__perthread_##var) *)(__perthread_get(&__perthread_##var))))
+	(*((__typeof__(__perthread_##var) *)(__perthread_get(&__perthread_##var))))
 
 /**
  * thread_is_active - is the thread initialized?

@@ -41,9 +41,9 @@
 #define HAS_BUILTIN_BSWAP 1
 #endif
 
-#define barrier() asm volatile("" ::: "memory")
+#define barrier() __asm__ volatile("" ::: "memory")
 
-#define	ACCESS_ONCE(x) (*(volatile typeof(x) *)&(x))
+#define	ACCESS_ONCE(x) (*(volatile __typeof__(x) *)&(x))
 
 #define type_is_native(t) \
 	(sizeof(t) == sizeof(char)  || \

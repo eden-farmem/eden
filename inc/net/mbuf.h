@@ -179,19 +179,19 @@ static inline unsigned int mbuf_length(struct mbuf *m)
  * In most situations you should use these instead of the raw ops above.
  */
 #define mbuf_pull_hdr(mbuf, hdr) \
-	(typeof(hdr) *)mbuf_pull(mbuf, sizeof(hdr))
+	(__typeof__(hdr) *)mbuf_pull(mbuf, sizeof(hdr))
 
 #define mbuf_pull_hdr_or_null(mbuf, hdr) \
-	(typeof(hdr) *)mbuf_pull_or_null(mbuf, sizeof(hdr))
+	(__typeof__(hdr) *)mbuf_pull_or_null(mbuf, sizeof(hdr))
 
 #define mbuf_push_hdr(mbuf, hdr) \
-	(typeof(hdr) *)mbuf_push(mbuf, sizeof(hdr))
+	(__typeof__(hdr) *)mbuf_push(mbuf, sizeof(hdr))
 
 #define mbuf_put_hdr(mbuf, hdr) \
-	(typeof(hdr) *)mbuf_put(mbuf, sizeof(hdr))
+	(__typeof__(hdr) *)mbuf_put(mbuf, sizeof(hdr))
 
 #define mbuf_trim_hdr(mbuf, hdr) \
-	(typeof(hdr) *)mbuf_trim(mbuf, sizeof(hdr))
+	(__typeof__(hdr) *)mbuf_trim(mbuf, sizeof(hdr))
 
 /**
  * mbuf_mark_network_offset - sets the network offset to the data pointer
@@ -234,10 +234,10 @@ static inline unsigned char *mbuf_transport_offset(struct mbuf *m)
 }
 
 #define mbuf_network_hdr(mbuf, hdr) \
-	(typeof(hdr) *)mbuf_network_offset(mbuf)
+	(__typeof__(hdr) *)mbuf_network_offset(mbuf)
 
 #define mbuf_transport_hdr(mbuf, hdr) \
-	(typeof(hdr) *)mbuf_transport_offset(mbuf)
+	(__typeof__(hdr) *)mbuf_transport_offset(mbuf)
 
 /**
  * mbuf_init - initializes an mbuf

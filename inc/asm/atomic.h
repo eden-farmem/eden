@@ -13,7 +13,7 @@
  * Ensures all loads and stores before the barrier complete
  * before all loads and stores after the barrier.
  */
-#define mb() asm volatile("mfence" ::: "memory")
+#define mb() __asm__ volatile("mfence" ::: "memory")
 
 /**
  * rmb - a read memory barrier
@@ -50,7 +50,7 @@ do {						\
 #define load_acquire(p)				\
 ({						\
 	BUILD_ASSERT(type_is_native(*p));	\
-	typeof(*p) __p = ACCESS_ONCE(*p);	\
+	__typeof__(*p) __p = ACCESS_ONCE(*p);	\
 	barrier();				\
 	__p;					\
 })
@@ -62,7 +62,7 @@ do {						\
 #define load_consume(p)				\
 ({						\
 	BUILD_ASSERT(type_is_native(*p));	\
-	typeof(*p) __p = ACCESS_ONCE(*p);	\
+	__typeof__(*p) __p = ACCESS_ONCE(*p);	\
 	barrier();				\
 	__p;					\
 })

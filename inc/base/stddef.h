@@ -17,9 +17,9 @@
  */
 
 #define check_type(expr, type)                  \
-	((typeof(expr) *)0 != (type *)0)
+	((__typeof__(expr) *)0 != (type *)0)
 #define check_types_match(expr1, expr2)         \
-	((typeof(expr1) *)0 != (typeof(expr2) *)0)
+	((__typeof__(expr1) *)0 != (__typeof__(expr2) *)0)
 
 /**
  * container_of - get pointer to enclosing structure
@@ -45,7 +45,7 @@
  * @member: the name of this member within the structure.
  */
 #define container_of_var(member_ptr, container_var, member)             \
-	container_of(member_ptr, typeof(*container_var), member)
+	container_of(member_ptr, __typeof__(*container_var), member)
 
 /**
  * ARRAY_SIZE - get the number of elements in a visible array
@@ -59,8 +59,8 @@
  * Arguments @a and @b are evaluated exactly once
  */
 #define max(a, b) \
-	({typeof(a) _a = (a); \
-	  typeof(b) _b = (b); \
+	({__typeof__(a) _a = (a); \
+	  __typeof__(b) _b = (b); \
 	  _a > _b ? _a : _b;})
 
 /**
@@ -69,8 +69,8 @@
  * Arguments @a and @b are evaluated exactly once
  */
 #define min(a, b) \
-	({typeof(a) _a = (a); \
-	  typeof(b) _b = (b); \
+	({__typeof__(a) _a = (a); \
+	  __typeof__(b) _b = (b); \
 	  _a < _b ? _a : _b;})
 
 /**
@@ -90,7 +90,7 @@
  */
 #define align_up(x, align)			\
 	({assert(is_power_of_two(align));	\
-	 (((x) - 1) | ((typeof(x))(align) - 1)) + 1;})
+	 (((x) - 1) | ((__typeof__(x))(align) - 1)) + 1;})
 
 /**
  * align_down - rounds a value down to an alignment
@@ -101,7 +101,7 @@
  */
 #define align_down(x, align)			\
 	({assert(is_power_of_two(align));	\
-	 ((x) & ~((typeof(x))(align) - 1));})
+	 ((x) & ~((__typeof__(x))(align) - 1));})
 
 /**
  * div_up - divides two numbers, rounding up to an integer
@@ -176,4 +176,4 @@ static inline bool wraps_gte(uint32_t a, uint32_t b)
  * swapvars - swaps the contents of two values
  */
 #define swapvars(a, b) \
-	do { typeof(a) _t = (a); (a) = (b); (b) = _t; } while(0)
+	do { __typeof__(a) _t = (a); (a) = (b); (b) = _t; } while(0)
