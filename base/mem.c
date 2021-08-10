@@ -234,9 +234,24 @@ int mem_lookup_page_phys_addrs(void *addr, size_t len,
 	if (pgsize == PGSIZE_4KB)
 		return -EINVAL;
 
-	fd = open("/proc/self/pagemap", O_RDONLY);
-	if (fd < 0)
+#ifdef WITH_KONA
+	/* With kona, we assume that memcached is running as sudo -u user 
+	 * and has (only) changed the effective user of the process. We need to 
+	 * set it back to root temporarily to get access to pagemap. 
+	 * */
+	uid_t euid = geteuid();
+	if (seteuid(0)) {
+		log_err("Seteuid to root failed, errno: %d", errno);
 		return -EIO;
+	}
+#endif
+
+	fd = open("/proc/self/pagemap", O_RDONLY);
+	if (fd < 0) {
+		log_err("failed to open pagemap. errno %d", errno);
+		ret = -EIO;
+		goto out2;
+	}
 
 	for (pos = (uintptr_t)addr; pos < (uintptr_t)addr + len;
 	     pos += pgsize) {
@@ -259,5 +274,9 @@ int mem_lookup_page_phys_addrs(void *addr, size_t len,
 
 out:
 	close(fd);
+out2:
+#ifdef WITH_KONA
+	seteuid(euid);
+#endif
 	return ret;
 }
