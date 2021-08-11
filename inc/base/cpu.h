@@ -8,8 +8,12 @@
 #include <base/limits.h>
 #include <base/bitmap.h>
 
+/* Ideally should be runtime settings */
 #ifndef NUMA_NODE
-#define NUMA_NODE 0		/* Ideally should be a runtime parameter */
+#define NUMA_NODE 0		
+#endif
+#ifndef EXCLUDE_CORES
+#define EXCLUDE_CORES		// comma-separated list of numbers
 #endif
 
 extern int cpu_count; /* the number of available CPUs */

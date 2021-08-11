@@ -28,6 +28,7 @@ struct thread *ts[NCPU];
 
 /* maps each cpu number to the number of its hyperthread buddy */
 static int cpu_siblings[NCPU];
+static int cpu_excluded[NCPU];
 
 unsigned int get_nr_avail_cores(void)
 {
@@ -778,10 +779,21 @@ void cores_adjust_assignments(void)
 int cores_init(void)
 {
 	int i, j;
+	char *token, *end;
 
-	/* assign first non-zero core on socket 0 to the dataplane thread */
+	/* note down excluded cores */
+	int macro[] = { EXCLUDE_CORES };
+   	memset(cpu_excluded, 0, sizeof(cpu_excluded));
+	for (i = 0; i < sizeof(macro)/sizeof(int); i++) {
+        if (macro[i] < 0 || macro[i] >= NCPU)
+            panic("bad core num %d in EXCLUDED_CORES macro: %s\n", macro[i]);
+		cpu_excluded[macro[i]] = 1;
+		log_debug("cpu exlcuded with EXCLUDED_CORES macro: %d", macro[i]);
+	}
+
+	/* assign first non-zero non-excluded core on socket 0 to the dataplane thread */
 	for (i = 1; i < cpu_count; i++) {
-		if (cpu_info_tbl[i].package == NUMA_NODE)
+		if (cpu_info_tbl[i].package == NUMA_NODE && !cpu_excluded[i])
 			break;
 	}
 	if (i == cpu_count)
@@ -835,7 +847,7 @@ int cores_init(void)
 			continue;
 #endif
 
-		if (cpu_info_tbl[i].package == NUMA_NODE)
+		if (cpu_info_tbl[i].package == NUMA_NODE && !cpu_excluded[i])
 			core_init(i);
 	}
 

@@ -25,6 +25,10 @@ ifneq ($(NUMA_NODE),)
 CFLAGS += -DNUMA_NODE=$(NUMA_NODE)
 endif
 
+ifneq ($(EXCLUDE_CORES),)
+CFLAGS += -DEXCLUDE_CORES=$(EXCLUDE_CORES)
+endif
+
 ifneq ($(WITH_KONA),)
 CFLAGS += -DWITH_KONA
 endif
