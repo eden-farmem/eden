@@ -15,4 +15,6 @@ echo 4096 > /sys/devices/system/node/node0/hugepages/hugepages-2048kB/nr_hugepag
 # Anil: It seems like we need pages on all nodes?
 echo 4096 > /sys/devices/system/node/node1/hugepages/hugepages-2048kB/nr_hugepages
 
-
+# Disable turbo: This is temporary and only works with intel pstate driver
+# https://askubuntu.com/questions/619875/disabling-intel-turbo-boost-in-ubuntu
+echo "1" | sudo tee /sys/devices/system/cpu/intel_pstate/no_turbo

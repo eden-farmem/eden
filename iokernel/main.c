@@ -127,7 +127,6 @@ int main(int argc, char *argv[])
 {
 	int ret;
 
-
 	/* Accept pci slot name to target the dpdk port of a specific interface */
 	if (argc >= 2) {
 		assert(strlen(argv[1]) < 50);

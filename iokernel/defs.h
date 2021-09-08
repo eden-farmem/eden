@@ -15,7 +15,7 @@
 #include "mlx.h"
 #include "ref.h"
 
-/* #define STATS 1 */
+#define STATS 1 
 
 /*
  * Constant limits
@@ -28,7 +28,6 @@
 #define IOKERNEL_CMD_BURST_SIZE		64
 #define IOKERNEL_RX_BURST_SIZE		64
 #define IOKERNEL_CONTROL_BURST_SIZE	4
-#define STATS 1
 
 
 /*

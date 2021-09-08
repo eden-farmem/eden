@@ -10,11 +10,14 @@
 #include <base/time.h>
 #include <runtime/thread.h>
 #include <runtime/udp.h>
+#include <runtime/timer.h>
 
 #include "defs.h"
 
 /* port 40 is permanently reserved, so should be fine for now */
-#define STAT_PORT	40
+#define STAT_PORT			40
+#define STAT_REPORT_LOCAL 	1
+#define STAT_INTERVAL_SECS 	1
 
 static const char *stat_names[] = {
 	/* scheduler counters */
@@ -88,6 +91,25 @@ static ssize_t stat_write_buf(char *buf, size_t len)
 	return pos - buf;
 }
 
+#ifdef STAT_REPORT_LOCAL 
+static void stat_worker(void *arg)
+{
+	char buf[UDP_MAX_PAYLOAD];
+	ssize_t ret, len;
+
+	while (true) {
+		timer_sleep(STAT_INTERVAL_SECS * 1000000);
+
+		len = stat_write_buf(buf, UDP_MAX_PAYLOAD);
+		if (len < 0) {
+			log_err("stat: couldn't generate stat buffer");
+			continue;
+		}
+		log_info("STATS>%s\n", buf);
+	}
+}
+
+#else
 static void stat_worker(void *arg)
 {
 	const size_t cmd_len = strlen("stat");
@@ -123,6 +145,7 @@ static void stat_worker(void *arg)
 		WARN_ON(ret != len);
 	}
 }
+#endif
 
 /**
  * stat_init_late - starts the stat responder thread
