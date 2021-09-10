@@ -1,6 +1,7 @@
 #![feature(integer_atomics)]
 #![feature(nll)]
 #![feature(test)]
+#![feature(const_if_match)]
 #[macro_use]
 extern crate clap;
 
@@ -61,7 +62,7 @@ enum Distribution {
     Constant(u64),
     Exponential(f64),
     Bimodal1(f64),
-    Bimodal2(f64),
+    Bimodal2(f64)
 }
 impl Distribution {
     fn name(&self) -> &'static str {
@@ -238,10 +239,12 @@ fn run_memcached_preload(
     addr: SocketAddrV4,
     nthreads: usize,
 ) -> bool {
+    eprintln!("preloading {} kv pairs", memcached::NVALUES);
     let perthread = (memcached::NVALUES as usize + nthreads - 1) / nthreads;
     let join_handles: Vec<JoinHandle<_>> = (0..nthreads)
         .map(|i| {
             backend.spawn_thread(move || {
+                // eprintln!("starting preload");
                 let sock1 = Arc::new(match tport {
                     Transport::Tcp => backend.create_tcp_connection(None, addr).unwrap(),
                     Transport::Udp => backend
@@ -250,13 +253,13 @@ fn run_memcached_preload(
                 });
                 let socket = sock1.clone();
                 backend.spawn_thread(move || {
-                    backend.sleep(Duration::from_secs(20));
+                    backend.sleep(Duration::from_secs(60));
                     if Arc::strong_count(&socket) > 1 {
-                        println!("Timing out socket");
                         socket.shutdown();
                     }
                 });
 
+                // eprintln!("preloading {} kv pairs", perthread);
                 let mut vec_s: Vec<u8> = Vec::with_capacity(4096);
                 let mut vec_r: Vec<u8> = vec![0; 4096];
                 for n in 0..perthread {
@@ -264,7 +267,7 @@ fn run_memcached_preload(
                     MemcachedProtocol::set_request(
                         (i * perthread + n) as u64,
                         0,
-                        &mut vec_s,
+                        &mut vec_s, 
                         tport,
                     );
 
@@ -283,6 +286,7 @@ fn run_memcached_preload(
             })
         })
         .collect();
+        eprintln!("preloading done");
 
     return join_handles.into_iter().all(|j| j.join().unwrap());
 }
@@ -325,7 +329,8 @@ fn gen_classic_packet_schedule(
         service: distribution,
         output: output,
         runtime: runtime,
-        discard_pct: 10,
+        // discard_pct: 10,     // UNDO?
+        discard_pct: 0,
     });
 
     sched
@@ -354,10 +359,13 @@ fn gen_loadshift_experiment(
 }
 
 fn process_result(sched: &RequestSchedule, packets: &mut [Packet], wct_start: SystemTime) -> bool {
+    let plen = packets.len();
+    if plen == 0 {
+        return true
+    }
     let start_unix = wct_start + packets[0].target_start;
 
     // Discard the first X% of the packets.
-    let plen = packets.len();
     let packets = &mut packets[plen * sched.discard_pct / 100..];
 
     let never_sent = packets.iter().filter(|p| p.actual_start.is_none()).count();
@@ -367,7 +375,8 @@ fn process_result(sched: &RequestSchedule, packets: &mut [Packet], wct_start: Sy
         .count()
         - never_sent;
 
-    if packets.len() - dropped - never_sent <= 1 {
+    eprintln!("{}, {}, {}, {}", packets.len(), packets.len() - (dropped + never_sent), dropped, never_sent);
+    if packets.len() - dropped - never_sent < 1 {
         match sched.output {
             OutputMode::Silent => {}
             _ => {
@@ -459,6 +468,9 @@ fn process_result(sched: &RequestSchedule, packets: &mut [Packet], wct_start: Sy
         }
         print!("Latencies: ");
         for k in buckets.keys() {
+            // if k > &1000 {
+            //     continue;           // TODO: UNDO!!
+            // }
             print!("{}:{} ", k, buckets[k]);
         }
         println!("");
@@ -509,12 +521,16 @@ fn run_client(
             (thread_packets, vec![None; packets_per_thread], socket)
         })
         .collect();
-
+    
+    eprintln!("reached barrier");
     if let Some(ref mut g) = *barrier_group {
         g.barrier();
     }
+    eprintln!("crossed barrier; starting the run");
     let start_unix = SystemTime::now();
     let start = Instant::now();
+
+    eprintln!("{}, {}", packet_schedules.len(), packet_schedules[0].0.len());
 
     let mut send_threads = Vec::new();
     let mut receive_threads = Vec::new();
@@ -533,7 +549,7 @@ fn run_client(
                             _ => (),
                         }
                         if e.kind() != ErrorKind::UnexpectedEof {
-                            println!("Receive thread: {}", e);
+                            eprintln!("Receive thread: {}", e);
                         }
                         break;
                     }
@@ -602,6 +618,7 @@ fn run_client(
         })
         .collect();
     packets.sort_by_key(|p| p.target_start);
+    eprintln!("packets1 {}", packets.len());
 
     let mut start = Duration::from_nanos(100_000_000);
     schedules.iter().all(|sched| {
@@ -610,6 +627,7 @@ fn run_client(
             .position(|p| p.target_start >= start + sched.runtime)
             .unwrap_or(packets.len());
         let rest = packets.split_off(last_index);
+        eprintln!("Schedule: {} {} {}", start.as_millis(), (start + sched.runtime).as_millis(), sched.output);
         let res = process_result(&sched, packets.as_mut_slice(), start_unix);
         packets = rest;
         start += sched.runtime;
@@ -1005,6 +1023,8 @@ fn main() {
                 }
 
                 if dowarmup {
+                    println!("warm-up");
+
                     // Run at full pps 3 times for 20 seconds
                     let sched = gen_classic_packet_schedule(
                         Duration::from_secs(20),
@@ -1015,7 +1035,7 @@ fn main() {
                         nthreads,
                     );
 
-                    for _ in 0..3 {
+                    for _ in 0..1 {
                         run_client(
                             backend,
                             addr,
@@ -1032,6 +1052,7 @@ fn main() {
 
                 let step_size = (packets_per_second - start_packets_per_second) / samples;
                 for j in 1..=samples {
+                    eprintln!("starting sample {}. pps: {}", j, packets_per_second);
                     backend.sleep(Duration::from_secs(5));
                     let sched = gen_classic_packet_schedule(
                         runtime,
@@ -1041,6 +1062,7 @@ fn main() {
                         rampup,
                         nthreads,
                     );
+                    eprintln!("running client");
                     run_client(
                         backend,
                         addr,

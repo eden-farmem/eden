@@ -90,9 +90,10 @@ impl PacketHeader {
     }
 }
 
-pub static NVALUES: u64 = 1000000;
+pub static NVALUES: u64 = 10000000;
+// pub static NVALUES: u64 = 10000;
 static PCT_SET: u64 = 2; // out of 1000
-static VALUE_SIZE: usize = 2;
+static VALUE_SIZE: usize = 80;
 static KEY_SIZE: usize = 20;
 
 #[inline(always)]
