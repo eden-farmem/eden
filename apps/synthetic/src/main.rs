@@ -148,6 +148,12 @@ fn duration_to_ns(duration: Duration) -> u64 {
     duration.as_secs() * 1000_000_000 + duration.subsec_nanos() as u64
 }
 
+/* Emit a log line with current time to indicate a checkpoint */
+fn checkpoint(label: &str) {
+    let unix_time_now = SystemTime::now().duration_since(UNIX_EPOCH);
+    println!("Checkpoint {}:{}", label, unix_time_now.unwrap().as_secs());
+}
+
 fn run_linux_udp_server(backend: Backend, addr: SocketAddrV4, nthreads: usize, worker: FakeWorker) {
     let join_handles: Vec<_> = (0..nthreads)
         .map(|_| {
@@ -286,7 +292,6 @@ fn run_memcached_preload(
             })
         })
         .collect();
-        eprintln!("preloading done");
 
     return join_handles.into_iter().all(|j| j.join().unwrap());
 }
@@ -468,9 +473,6 @@ fn process_result(sched: &RequestSchedule, packets: &mut [Packet], wct_start: Sy
         }
         print!("Latencies: ");
         for k in buckets.keys() {
-            // if k > &1000 {
-            //     continue;           // TODO: UNDO!!
-            // }
             print!("{}:{} ", k, buckets[k]);
         }
         println!("");
@@ -526,7 +528,7 @@ fn run_client(
     if let Some(ref mut g) = *barrier_group {
         g.barrier();
     }
-    eprintln!("crossed barrier; starting the run");
+    checkpoint(format!("Sample{}Start", index).as_str());
     let start_unix = SystemTime::now();
     let start = Instant::now();
 
@@ -617,10 +619,10 @@ fn run_client(
             ..p
         })
         .collect();
-    packets.sort_by_key(|p| p.target_start);
-    eprintln!("packets1 {}", packets.len());
+    checkpoint(format!("Sample{}End", index).as_str());
 
     let mut start = Duration::from_nanos(100_000_000);
+    packets.sort_by_key(|p| p.target_start);
     schedules.iter().all(|sched| {
         let last_index = packets
             .iter()
@@ -957,6 +959,7 @@ fn main() {
             backend.init_and_run(config, move || {
                 println!("Distribution, Target, Actual, Dropped, Never Sent, Median, 90th, 99th, 99.9th, 99.99th, Start");
                 if dowarmup {
+                    checkpoint("WarmupStart");
                     for packets_per_second in (1..3).map(|i| i * 100000) {
                         let sched = gen_classic_packet_schedule(
                             Duration::from_secs(1),
@@ -973,6 +976,7 @@ fn main() {
                             &sched,
                         );
                     }
+                    checkpoint("WarmupEnd");
                 }
                 let step_size = (packets_per_second - start_packets_per_second) / samples;
                 for j in 1..=samples {
@@ -1000,9 +1004,12 @@ fn main() {
                 match (proto, &barrier_group) {
                     (_, Some(lockstep::Group::Client(ref _c))) => (),
                     (Protocol::Memcached, _) => {
+                        checkpoint("PreloadStart");
                         if !run_memcached_preload(backend, Transport::Tcp, addr, nthreads) {
                             panic!("Could not preload memcached");
                         }
+                        checkpoint("PreloadEnd");
+                        backend.sleep(Duration::from_secs(30));
                     },
                     _ => (),
                 };
@@ -1023,7 +1030,6 @@ fn main() {
                 }
 
                 if dowarmup {
-                    println!("warm-up");
 
                     // Run at full pps 3 times for 20 seconds
                     let sched = gen_classic_packet_schedule(
@@ -1035,6 +1041,7 @@ fn main() {
                         nthreads,
                     );
 
+                    checkpoint("WarmupStart");
                     for _ in 0..1 {
                         run_client(
                             backend,
@@ -1048,6 +1055,7 @@ fn main() {
                         );
                         backend.sleep(Duration::from_secs(5));
                     }
+                    checkpoint("WarmupEnd");
                 }
 
                 let step_size = (packets_per_second - start_packets_per_second) / samples;
