@@ -29,7 +29,12 @@ ifneq ($(EXCLUDE_CORES),)
 CFLAGS += -DEXCLUDE_CORES=$(EXCLUDE_CORES)
 endif
 
+ifneq ($(PAGE_FAULTS),)
+CFLAGS += -DPAGE_FAULTS_$(PAGE_FAULTS)
+endif
+
 ifneq ($(WITH_KONA),)
+INC += -I../kona/pbmem/
 CFLAGS += -DWITH_KONA
 endif
 
@@ -98,6 +103,9 @@ DPDK_LIBS = $(shell $(PKGCONF) --static --libs libdpdk)
 
 # must be first
 all: libbase.a libnet.a libruntime.a iokerneld iokerneld-noht $(test_targets)
+
+# ignore tests for kona (due to the external dependency on it while linking)
+all-but-tests: libbase.a libnet.a libruntime.a iokerneld iokerneld-noht
 
 libbase.a: $(base_obj)
 	$(AR) rcs $@ $^

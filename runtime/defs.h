@@ -261,6 +261,11 @@ enum {
 	STAT_RX_TCP_OUT_OF_ORDER,
 	STAT_RX_TCP_TEXT_CYCLES,
 
+	/* page fault counters */
+	STAT_PF_POSTED,
+	STAT_PF_RETURNED,
+	STAT_PF_POST_RETRIES,
+
 	/* total number of counters */
 	STAT_NR,
 };
@@ -269,13 +274,13 @@ struct timer_idx;
 
 struct kthread {
 	/* 1st cache-line */
-	spinlock_t		lock;
-	uint32_t		generation;
-	uint32_t		rq_head;
-	uint32_t		rq_tail;
+	spinlock_t			lock;
+	uint32_t			generation;
+	uint32_t			rq_head;
+	uint32_t			rq_tail;
 	struct list_head	rq_overflow;
 	struct lrpc_chan_in	rxq;
-	int			park_efd;
+	int					park_efd;
 	unsigned int		parked:1;
 	unsigned int		detached:1;
 
@@ -285,7 +290,7 @@ struct kthread {
 	struct mbufq		txcmdq_overflow;
 	unsigned int		rcu_gen;
 	unsigned int		curr_cpu;
-	uint64_t		park_us;
+	uint64_t			park_us;
 	unsigned long		pad1[1];
 
 	/* 3rd cache-line */
@@ -293,15 +298,22 @@ struct kthread {
 	struct lrpc_chan_out	txcmdq;
 
 	/* 4th-7th cache-line */
-	thread_t		*rq[RUNTIME_RQ_SIZE];
+	thread_t			*rq[RUNTIME_RQ_SIZE];
 
 	/* 8th cache-line */
-	spinlock_t		timer_lock;
+	spinlock_t			timer_lock;
 	unsigned int		timern;
 	struct timer_idx	*timers;
 	unsigned long		pad2[6];
 
-	/* 9th cache-line, statistics counters */
+	/* 9th cache-line */
+	spinlock_t 			pf_lock;
+	unsigned int 		pf_channel;
+	unsigned int 		pf_count;
+	struct list_head 	pf_waiters;
+	unsigned long		pad3[4];
+
+	/* 10th cache-line, statistics counters */
 	uint64_t		stats[STAT_NR];
 };
 
@@ -311,6 +323,7 @@ BUILD_ASSERT(offsetof(struct kthread, q_ptrs) % CACHE_LINE_SIZE == 0);
 BUILD_ASSERT(offsetof(struct kthread, txpktq) % CACHE_LINE_SIZE == 0);
 BUILD_ASSERT(offsetof(struct kthread, rq) % CACHE_LINE_SIZE == 0);
 BUILD_ASSERT(offsetof(struct kthread, timer_lock) % CACHE_LINE_SIZE == 0);
+BUILD_ASSERT(offsetof(struct kthread, pf_lock) % CACHE_LINE_SIZE == 0);
 BUILD_ASSERT(offsetof(struct kthread, stats) % CACHE_LINE_SIZE == 0);
 
 extern __thread struct kthread *mykthread;
@@ -456,6 +469,7 @@ extern int sched_init_thread(void);
 extern int stat_init_thread(void);
 extern int net_init_thread(void);
 extern int smalloc_init_thread(void);
+extern int pgfault_init_thread(void);
 
 /* global initialization */
 extern int ioqueues_init(unsigned int threads);
@@ -466,6 +480,7 @@ extern int net_init(void);
 extern int arp_init(void);
 extern int trans_init(void);
 extern int smalloc_init(void);
+extern int pgfault_init(void);
 
 /* late initialization */
 extern int ioqueues_register_iokernel(void);

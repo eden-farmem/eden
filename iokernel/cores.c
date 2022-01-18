@@ -779,14 +779,13 @@ void cores_adjust_assignments(void)
 int cores_init(void)
 {
 	int i, j;
-	char *token, *end;
 
 	/* note down excluded cores */
 	int macro[] = { EXCLUDE_CORES };
    	memset(cpu_excluded, 0, sizeof(cpu_excluded));
 	for (i = 0; i < sizeof(macro)/sizeof(int); i++) {
         if (macro[i] < 0 || macro[i] >= NCPU)
-            panic("bad core num %d in EXCLUDED_CORES macro: %s\n", macro[i]);
+            panic("bad core num %d in EXCLUDED_CORES macro\n", macro[i]);
 		cpu_excluded[macro[i]] = 1;
 		log_debug("cpu exlcuded with EXCLUDED_CORES macro: %d", macro[i]);
 	}

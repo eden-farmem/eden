@@ -193,7 +193,7 @@ int dpdk_init()
 
 	dp.port = 0;	/* default port is 0 unless specified */
 	if (strlen(dp.port_pci_name) > 0){
-		ret = rte_eth_dev_get_port_by_name(dp.port_pci_name, &(dp.port));
+		ret = rte_eth_dev_get_port_by_name(dp.port_pci_name, (uint16_t*)&(dp.port));
 		if (ret) {
 			log_err("dpdk: error getting port id from provided name %s", dp.port_pci_name);
 			return -1;

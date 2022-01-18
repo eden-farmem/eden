@@ -276,7 +276,10 @@ out:
 	close(fd);
 out2:
 #ifdef WITH_KONA
-	seteuid(euid);
+	if (seteuid(euid)) {
+		log_err("Seteuid back to user %d failed, errno: %d", euid, errno);
+		return -EIO;
+	}
 #endif
 	return ret;
 }

@@ -16,6 +16,7 @@
 #include <base/log.h>
 #include <runtime/sync.h>
 #include <runtime/thread.h>
+#include <runtime/pgfault.h>
 
 #include "defs.h"
 
@@ -223,6 +224,9 @@ static __noreturn __noinline void schedule(void)
 	unsigned int last_nrks;
 	unsigned int iters = 0;
 	int i, sibling;
+#ifdef PAGE_FAULTS_ASYNC
+	int ret;
+#endif
 
 	assert_spin_lock_held(&l->lock);
 	assert(l->parked == false);
@@ -261,6 +265,29 @@ static __noreturn __noinline void schedule(void)
 		drain_overflow(l);
 
 again:
+
+#ifdef PAGE_FAULTS_ASYNC
+	/* check for page fault responses */
+	ret = fault_backend.poll_response_async(l->pf_channel);
+	if (unlikely(ret)) {
+		pgfault_t fault = {0};
+		do {
+			ret = fault_backend.read_response_async(l->pf_channel, &fault);
+			if (ret == 0) {
+				/* hoping that the thread pointer is not corrupted! */
+				assert((thread_t*) fault.taginfo != NULL);
+				pgfault_release((thread_t*) fault.taginfo);
+				STAT(PF_RETURNED)++;
+				/* save the first thread */
+				if (th == NULL)	
+					th = (thread_t*) fault.taginfo;
+			}
+			/* read until the queue is empty (TODO: limit it?) */
+		}   while(ret == 0);
+		goto done;
+	}
+#endif
+
 	/* first try the local runqueue */
 	if (l->rq_head != l->rq_tail)
 		goto done;

@@ -41,6 +41,11 @@ static const char *stat_names[] = {
 	"rx_tcp_in_order",
 	"rx_tcp_out_of_order",
 	"rx_tcp_text_cycles",
+
+	/* page fault counters */
+	"pgfaults_posted",
+	"pgfaults_returned",
+	"pgfaults_post_retries",
 };
 
 /* must correspond exactly to STAT_* enum definitions in defs.h */
@@ -95,7 +100,7 @@ static ssize_t stat_write_buf(char *buf, size_t len)
 static void stat_worker(void *arg)
 {
 	char buf[UDP_MAX_PAYLOAD];
-	ssize_t ret, len;
+	ssize_t len;
 
 	while (true) {
 		timer_sleep(STAT_INTERVAL_SECS * 1000000);
