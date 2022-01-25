@@ -67,16 +67,13 @@ int pgfault_init()
  * pgfault_init_thread - initializes per-thread page fault support
  */
 int pgfault_init_thread()
-{
+{	
+	struct kthread *k = myk();
+	k->pf_pending = 0;
 #ifndef PAGE_FAULTS
 	log_debug("PAGE_FAULTS not set, skipping pgfault_init_thread");
 	return 0;
 #endif
-	struct kthread *k = myk();
-
-	k->pf_count = 0;
-	spin_lock_init(&k->pf_lock);
-	list_head_init(&k->pf_waiters);
 
 	k->pf_channel = fault_backend.get_available_channel();
 	if (k->pf_channel < 0) {
@@ -86,51 +83,18 @@ int pgfault_init_thread()
 	return 0;
 }
 
-/**
- * pgfault_wait - block current thread and place it 
- * on current kthread's page fault wait queue
- * (called after the fault event is succesfully 
- * sent to the fault handler)
- */
-void pgfault_wait()
-{
-	thread_t *myth;
-	struct kthread *k = myk();
-
-	spin_lock_np(&k->pf_lock);
-	myth = thread_self();
-	/* TODO: is link assured to be available? 
-	 * it could also be used with a mutex, condvar, barrier, etc. */
-	list_add_tail(&k->pf_waiters, &myth->link);
-	k->pf_count++;
-	thread_park_and_unlock_np(&k->pf_lock);
-}
-
-/**
- * pgfault_release -  release a thread from current 
- * kthread's page fault wait queue. the thread is 
- * expected to be in the queue (no checks done).
- * (called after the fault handler responds)
- */
-void pgfault_release(thread_t *th)
-{
-	struct kthread *k = myk();
-
-	spin_lock_np(&k->pf_lock);
-	assert(!list_empty(&k->pf_waiters));
-	list_del_from(&k->pf_waiters, &th->link);
-	k->pf_count--;
-	spin_unlock_np(&k->pf_lock);
-	thread_ready(th);
-}
 
 static inline void __possible_fault_on(void* address, int flags) 
 {
 #ifndef PAGE_FAULTS
 	return;
 #endif
-	int ret;
+	int ret, posted = 0;
 	unsigned long page_addr;
+	struct kthread *k;
+#ifdef PAGE_FAULTS_SYNC
+	struct kthread *l;
+#endif
 
 	/* check if page exists */
 	page_addr = (unsigned long)address & ~(PAGE_SIZE - 1);
@@ -138,55 +102,64 @@ static inline void __possible_fault_on(void* address, int flags)
 	if (ret == 0)
 		return;
 
-	/* prepare page fault */
-	struct kthread *k = myk();
 	thread_t* myth = thread_self();
 	pgfault_t fault = {
-		.channel = k->pf_channel,
+		.channel = -1,	/* to be filled */
 		.fault_addr = page_addr,
 		.flags = flags,
-		.taginfo = (void*) myth
-	};
-	
-	/* post */
-	ret = fault_backend.post_async(fault.channel, &fault);
-#ifdef PAGE_FAULTS_ASYNC
-	/* wait until a queue slot is available; if the queue
-	 * is often full, consider increasing queue size? */
-	int found;
-	while(ret != 0) {
-		/* NOTE: never block on the fault queue without monitoring 
-		 * the response queue, it might be blocked precisely because
-		 * we're not emptying the response queue and the backend could
-		 * not entertain any more faults */
-		found = fault_backend.poll_response_async(k->pf_channel);
-		if (unlikely(found)) {
-			/* yield to scheduler so it can free the response and 
-			 * hope that by the next time we get scheduled, the backend 
-			 * moved forward, allowing us to post more faults */
-			thread_yield_kthread();
-		}
-		cpu_relax();
-		ret = fault_backend.post_async(fault.channel, &fault);
-		STAT(PF_POST_RETRIES)++;
+		.tag = (void*) myth
 	};
 
-	/* place thread on wait queue; return control to scheduler */
+	do {
+		/* we may be running in a different kthread
+		 * in each loop due to preemption or stealing */
+		k = getk();
+		spin_lock(&k->pf_lock);
+		fault.channel = k->pf_channel;
+
+		/* post */
+		log_debug("thread %p posting fault on channel %d", 
+			myth, fault.channel);
+		ret = fault_backend.post_async(fault.channel, &fault);
+		posted = (ret == 0);
+		STAT(PF_POST_RETRIES)++;
+		if (posted) {
+			break;
+		}
+#ifdef PAGE_FAULTS_SYNC
+		BUG();	/* post shouldn't fail in sync case */
+#endif
+
+		/* nothing we can do except wait and try again later */
+		log_debug("thread %p could not post. yielding", myth);
+		spin_unlock(&k->pf_lock);
+		putk();
+		thread_yield();
+	} while (!posted);
+	k->pf_pending++;
 	STAT(PF_POSTED)++;
-	pgfault_wait();
-#else
-	assert(ret == 0);	/* post() shouldn't fail in synchronous case */
-	STAT(PF_POSTED)++;
+
+#ifdef PAGE_FAULTS_SYNC
+	spin_unlock(&k->pf_lock);
+	putk();
 
 	/* poll wait for the fault response */
 	pgfault_t response = {0};
 	do {
-		ret = fault_backend.read_response_async(k->pf_channel, &response);
+		l = getk();
+		/* make sure we're running on the same kernel thread */
+		assert(k->pf_channel == l->pf_channel);	
+		ret = fault_backend.read_response_async(l->pf_channel, &response);
+		putk();
 		cpu_relax();
 	} while(ret != 0);
 
-	assert((thread_t*) response.taginfo == myth);	/* sanity check */
+	assert(response.fault_addr == page_addr);	/* sanity checks */
+	assert((thread_t*) response.tag == myth);
 	STAT(PF_RETURNED)++;
+#else 
+	/* wait until woken up */
+	thread_park_and_unlock_np(&k->pf_lock);
 #endif
 
 	/* the page should exist at this point */	

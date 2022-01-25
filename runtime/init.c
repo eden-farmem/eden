@@ -3,12 +3,16 @@
  */
 
 #include <pthread.h>
+#include <string.h>
 
 #include <base/cpu.h>
 #include <base/init.h>
 #include <base/log.h>
 #include <base/limits.h>
 #include <runtime/thread.h>
+#ifdef WITH_KONA
+#include <klib.h>
+#endif
 
 #include "defs.h"
 
@@ -159,6 +163,14 @@ int runtime_init(const char *cfgpath, thread_fn_t main_fn, void *arg)
 	ret = cfg_load(cfgpath);
 	if (ret)
 		return ret;
+
+#ifdef WITH_KONA
+	/*initialize kona before scheduler */
+	char env_var[50];
+	sprintf(env_var, "APP_FAULT_CHANNELS=%d", maxks);
+	putenv(env_var);
+	rinit();
+#endif
 
 	pthread_barrier_init(&init_barrier, NULL, maxks);
 

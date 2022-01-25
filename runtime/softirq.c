@@ -5,16 +5,18 @@
 #include <base/stddef.h>
 #include <base/log.h>
 #include <runtime/thread.h>
+#include <runtime/pgfault.h>
 
 #include "defs.h"
 #include "net/defs.h"
 
 struct softirq_work {
-	unsigned int recv_cnt, compl_cnt, join_cnt, timer_budget;
+	unsigned int recv_cnt, compl_cnt, join_cnt, timer_budget, fault_cnt;
 	struct kthread *k;
 	struct rx_net_hdr *recv_reqs[SOFTIRQ_MAX_BUDGET];
 	struct mbuf *compl_reqs[SOFTIRQ_MAX_BUDGET];
 	struct kthread *join_reqs[SOFTIRQ_MAX_BUDGET];
+	struct thread *pgfault_served[SOFTIRQ_MAX_BUDGET];
 };
 
 static void softirq_fn(void *arg)
@@ -36,15 +38,45 @@ static void softirq_fn(void *arg)
 	/* join parked kthreads */
 	for (i = 0; i < w->join_cnt; i++)
 		join_kthread(w->join_reqs[i]);
+
+	/* release parked threads blocked on pgfaults */
+	/* TODO: should we take the pf_lock? */
+	for (i = 0; i < w->fault_cnt; i++) {
+		log_debug("softirq setting thread %p ready", w->pgfault_served[i]);
+		thread_ready(w->pgfault_served[i]);
+	}
 }
 
 static void softirq_gather_work(struct softirq_work *w, struct kthread *k,
 				unsigned int budget)
 {
-	unsigned int recv_cnt = 0, compl_cnt = 0, join_cnt = 0;
+	unsigned int recv_cnt = 0, compl_cnt = 0, join_cnt = 0, fault_cnt = 0;
 	int budget_left;
 
 	budget_left = min(budget, SOFTIRQ_MAX_BUDGET);
+
+#ifdef PAGE_FAULTS_ASYNC
+	/* prioritize pgfault-unblocked threads over new work */
+	int ret;
+	pgfault_t fault;
+	spin_lock(&k->pf_lock);
+	while(budget_left--) {
+		log_debug("softirq reading fault responses on channel %d", k->pf_channel);
+		ret = fault_backend.read_response_async(k->pf_channel, &fault);
+		if (ret != 0)
+			break;
+
+		log_debug("softirq read a fault response on channel %d", k->pf_channel);
+		/* hoping that the thread pointer is not corrupted! */
+		assert((thread_t*) fault.tag != NULL);
+		w->pgfault_served[fault_cnt++] = (thread_t*) fault.tag;
+		k->pf_pending--;
+		assert(k->pf_pending >= 0);
+		STAT(PF_RETURNED)++;
+	}
+	spin_unlock(&k->pf_lock);
+#endif
+
 	while (budget_left--) {
 		uint64_t cmd;
 		unsigned long payload;
@@ -79,6 +111,7 @@ static void softirq_gather_work(struct softirq_work *w, struct kthread *k,
 	w->compl_cnt = compl_cnt;
 	w->join_cnt = join_cnt;
 	w->timer_budget = budget_left;
+	w->fault_cnt = fault_cnt;
 }
 
 /**
@@ -93,11 +126,16 @@ thread_t *softirq_run_thread(struct kthread *k, unsigned int budget)
 {
 	thread_t *th;
 	struct softirq_work *w;
+	bool pgfault_work = false;
 
 	assert_spin_lock_held(&k->lock);
 
 	/* check if there's any work available */
-	if (lrpc_empty(&k->rxq) && !timer_needed(k))
+#ifdef PAGE_FAULTS_ASYNC
+	log_debug("softirq checking fault responses on channel %d", k->pf_channel);
+	pgfault_work = fault_backend.poll_response_async(k->pf_channel);
+#endif
+	if (lrpc_empty(&k->rxq) && !timer_needed(k) && !pgfault_work)
 		return NULL;
 
 	th = thread_create_with_buf(softirq_fn, (void **)&w, sizeof(*w));
@@ -117,10 +155,15 @@ void softirq_run(unsigned int budget)
 {
 	struct kthread *k;
 	struct softirq_work w;
+	bool pgfault_work = false;
 
 	k = getk();
 	/* check if there's any work available */
-	if (lrpc_empty(&k->rxq) && !timer_needed(k)) {
+#ifdef PAGE_FAULTS_ASYNC
+	log_debug("softirq checking fault responses on channel %d", k->pf_channel);
+	pgfault_work = fault_backend.poll_response_async(k->pf_channel);
+#endif
+	if (lrpc_empty(&k->rxq) && !timer_needed(k) && !pgfault_work) {
 		putk();
 		return;
 	}

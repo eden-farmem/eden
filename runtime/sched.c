@@ -224,9 +224,6 @@ static __noreturn __noinline void schedule(void)
 	unsigned int last_nrks;
 	unsigned int iters = 0;
 	int i, sibling;
-#ifdef PAGE_FAULTS_ASYNC
-	int ret;
-#endif
 
 	assert_spin_lock_held(&l->lock);
 	assert(l->parked == false);
@@ -266,27 +263,6 @@ static __noreturn __noinline void schedule(void)
 
 again:
 
-#ifdef PAGE_FAULTS_ASYNC
-	/* check for page fault responses */
-	ret = fault_backend.poll_response_async(l->pf_channel);
-	if (unlikely(ret)) {
-		pgfault_t fault = {0};
-		do {
-			ret = fault_backend.read_response_async(l->pf_channel, &fault);
-			if (ret == 0) {
-				/* hoping that the thread pointer is not corrupted! */
-				assert((thread_t*) fault.taginfo != NULL);
-				pgfault_release((thread_t*) fault.taginfo);
-				STAT(PF_RETURNED)++;
-				/* save the first thread */
-				if (th == NULL)	
-					th = (thread_t*) fault.taginfo;
-			}
-			/* read until the queue is empty (TODO: limit it?) */
-		}   while(ret == 0);
-		goto done;
-	}
-#endif
 
 	/* first try the local runqueue */
 	if (l->rq_head != l->rq_tail)
@@ -323,7 +299,8 @@ again:
 	/* keep trying to find work until the polling timeout expires */
 	if (!preempt_needed() &&
 	    (++iters < RUNTIME_SCHED_POLL_ITERS ||
-	     rdtsc() - start_tsc < cycles_per_us * RUNTIME_SCHED_MIN_POLL_US))
+	     rdtsc() - start_tsc < cycles_per_us * RUNTIME_SCHED_MIN_POLL_US ||
+		 l->pf_pending > 0))
 		goto again;
 
 	/* did not find anything to run, park this kthread */
@@ -497,6 +474,41 @@ void thread_yield(void)
 }
 
 /**
+ * __thread_ready_unsafe - marks a thread as a runnable
+ * @th: the thread to mark runnable
+ *
+ * This function can only be called internally when @th is 
+ * sleeping and preempt is disabled.
+ */
+static inline void __thread_ready_unsafe(thread_t *th)
+{
+	struct kthread *k;
+	uint32_t rq_tail;
+
+	assert_preempt_disabled();
+	assert(th->state == THREAD_STATE_SLEEPING);
+	th->state = THREAD_STATE_RUNNABLE;
+
+	k = myk();
+	rq_tail = load_acquire(&k->rq_tail);
+	if (unlikely(k->rq_head - rq_tail >= RUNTIME_RQ_SIZE)) {
+		assert(k->rq_head - rq_tail == RUNTIME_RQ_SIZE);
+		if (!spin_lock_held(&k->lock)) {
+			spin_lock(&k->lock);
+			list_add_tail(&k->rq_overflow, &th->link);
+			spin_unlock(&k->lock);
+		}
+		else
+			list_add_tail(&k->rq_overflow, &th->link);
+		return;
+	}
+
+	k->rq[k->rq_head % RUNTIME_RQ_SIZE] = th;
+	store_release(&k->rq_head, k->rq_head + 1);
+	k->q_ptrs->rq_head++;
+}
+
+/**
  * thread_ready - marks a thread as a runnable
  * @th: the thread to mark runnable
  *
@@ -504,27 +516,21 @@ void thread_yield(void)
  */
 void thread_ready(thread_t *th)
 {
-	struct kthread *k;
-	uint32_t rq_tail;
-
-	assert(th->state == THREAD_STATE_SLEEPING);
-	th->state = THREAD_STATE_RUNNABLE;
-
-	k = getk();
-	rq_tail = load_acquire(&k->rq_tail);
-	if (unlikely(k->rq_head - rq_tail >= RUNTIME_RQ_SIZE)) {
-		assert(k->rq_head - rq_tail == RUNTIME_RQ_SIZE);
-		spin_lock(&k->lock);
-		list_add_tail(&k->rq_overflow, &th->link);
-		spin_unlock(&k->lock);
-		putk();
-		return;
-	}
-
-	k->rq[k->rq_head % RUNTIME_RQ_SIZE] = th;
-	store_release(&k->rq_head, k->rq_head + 1);
-	k->q_ptrs->rq_head++;
+	getk();
+	__thread_ready_unsafe(th);
 	putk();
+}
+
+/**
+ * thread_ready_preempt_off - marks a thread as a runnable
+ * @th: the thread to mark runnable
+ *
+ * This function can only be called when @th is 
+ * sleeping and preempt is disabled.
+ */
+void thread_ready_preempt_off(thread_t *th)
+{
+	__thread_ready_unsafe(th);
 }
 
 static void thread_finish_yield_kthread(void)

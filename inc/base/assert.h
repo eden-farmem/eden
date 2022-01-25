@@ -40,17 +40,20 @@ extern void logk_bug(bool fatal, const char *expr,
 /**
  * BUG - a fatal code-path that doesn't compile out in release builds
  */
+#ifndef BUG
 #define BUG()							\
 	do {							\
 		logk_bug(true, "false",				\
 			 __FILE__, __LINE__, __func__);		\
 		__builtin_unreachable();			\
 	} while (0)
+#endif
 
 /**
  * BUG_ON - a fatal check that doesn't compile out in release builds
  * @condition: the condition to check (fails on true)
  */
+#ifndef BUG_ON
 #define BUG_ON(cond)						\
 	do {							\
 		__build_assert_if_constant(!(cond));		\
@@ -60,6 +63,7 @@ extern void logk_bug(bool fatal, const char *expr,
 			__builtin_unreachable();		\
 		}						\
 	} while (0)
+#endif
 
 /**
  * WARN - a non-fatal code-path that doesn't compile out in release builds

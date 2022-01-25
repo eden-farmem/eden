@@ -309,7 +309,7 @@ struct kthread {
 	/* 9th cache-line */
 	spinlock_t 			pf_lock;
 	unsigned int 		pf_channel;
-	unsigned int 		pf_count;
+	unsigned int 		pf_pending;
 	struct list_head 	pf_waiters;
 	unsigned long		pad3[4];
 

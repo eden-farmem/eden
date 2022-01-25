@@ -36,8 +36,8 @@
 	struct _pgfault {
 		uint16_t channel;
 		uint16_t flags;
-		/* note: it's essential that the backend returns taginfo unmodified */
-		void* taginfo;
+		/* note: it's essential that the backend returns tag unmodified */
+		void* tag;
 		unsigned long fault_addr;
 	};
 	typedef struct _pgfault pgfault_t;	
@@ -54,4 +54,5 @@ struct fault_backend_ops {
 extern struct fault_backend_ops fault_backend;
 
 /* functions */
-void pgfault_release(thread_t *th);
+void possible_read_fault_on(void* address);
+void possible_write_fault_on(void* address);
