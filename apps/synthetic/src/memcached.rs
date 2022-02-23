@@ -24,6 +24,7 @@ enum Opcode {
     Append = 0x0e,
     Prepend = 0x0f,
     Touch = 0x1c,
+    Stat = 0x10,
 }
 
 enum Magic {
@@ -91,7 +92,7 @@ impl PacketHeader {
 }
 
 pub static NVALUES: u64 = 10000000;
-// pub static NVALUES: u64 = 2000;
+// pub static NVALUES: u64 = 10000;
 static PCT_SET: u64 = 2; // out of 1000
 static VALUE_SIZE: usize = 80;
 static KEY_SIZE: usize = 20;
