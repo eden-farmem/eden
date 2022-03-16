@@ -21,6 +21,10 @@ else
 CFLAGS += -DNDEBUG -O3
 endif
 
+ifneq ($(GDB),)
+CFLAGS += -g -ggdb
+endif
+
 ifneq ($(NUMA_NODE),)
 CFLAGS += -DNUMA_NODE=$(NUMA_NODE)
 endif
@@ -106,6 +110,10 @@ all: libbase.a libnet.a libruntime.a iokerneld iokerneld-noht $(test_targets)
 
 # ignore tests for kona (due to the external dependency on it while linking)
 all-but-tests: libbase.a libnet.a libruntime.a iokerneld iokerneld-noht
+
+libs: libbase.a libnet.a libruntime.a 
+
+iok: iokerneld iokerneld-noht
 
 libbase.a: $(base_obj)
 	$(AR) rcs $@ $^

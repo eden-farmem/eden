@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 set -e
 
@@ -15,7 +15,7 @@ git submodule update --recursive
 #     patch -p 1 -d dpdk/ < mlx4_18_11.patch
 #     sed -i 's/CONFIG_RTE_LIBRTE_MLX4_PMD=n/CONFIG_RTE_LIBRTE_MLX4_PMD=y/g' dpdk/config/common_base
 # fi
-patch -p 1 -d dpdk/ < mlx_ixgbe_20_11.patch
+patch -p 1 -d dpdk/ < mlx5_20_11.patch
 
 # # Configure/compile dpdk
 # make -C dpdk/ config T=x86_64-native-linuxapp-gcc
@@ -24,5 +24,5 @@ pushd dpdk/
 meson build
 ninja -C build
 sudo ninja -C build install
-echo "make sure pkt-config --cflags libdpdk is working at this point!"
+echo "make sure pkg-config --cflags libdpdk is working at this point!"
 popd

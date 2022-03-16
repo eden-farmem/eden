@@ -265,6 +265,7 @@ enum {
 	STAT_PF_POSTED,
 	STAT_PF_RETURNED,
 	STAT_PF_POST_RETRIES,
+	STAT_PF_FAILED,
 
 	/* total number of counters */
 	STAT_NR,

@@ -566,6 +566,8 @@ int net_init(void)
 			     PGSIZE_2MB, MBUF_DEFAULT_LEN);
 	if (ret)
 		return ret;
+	log_info("tx mempool start: %p, size: %lu, entries: %lu", 
+		iok.tx_buf, iok.tx_len, iok.tx_len / MBUF_DEFAULT_LEN);
 
 	net_tx_buf_tcache = mempool_create_tcache(&net_tx_buf_mp,
 		"runtime_tx_bufs", TCACHE_DEFAULT_MAG_SIZE);

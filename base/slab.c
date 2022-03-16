@@ -299,8 +299,10 @@ static void *__slab_node_alloc(struct slab_node *n)
 		n->cur_pg = __slab_node_get_page(n);
 
 		/* ran out of memory */
-		if (unlikely(!n->cur_pg))
+		if (unlikely(!n->cur_pg)) {
+			log_info("out of memory for slabs!!");
 			return NULL;
+		}
 		n->nr_pages++;
 	}
 

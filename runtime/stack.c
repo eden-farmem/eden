@@ -25,8 +25,10 @@ static struct stack *stack_create(void *base)
 
 	stack_addr = mmap(base, sizeof(struct stack), PROT_READ | PROT_WRITE,
 			  MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-	if (stack_addr == MAP_FAILED)
+	if (stack_addr == MAP_FAILED) {
+		log_info("stack create failed: out of memory");
 		return NULL;
+	}
 
 	s = (struct stack *)stack_addr;
 	if (mprotect(s->guard, RUNTIME_GUARD_SIZE, PROT_NONE) == - 1) {

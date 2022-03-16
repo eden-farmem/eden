@@ -118,8 +118,8 @@ static inline void __possible_fault_on(void* address, int flags)
 		fault.channel = k->pf_channel;
 
 		/* post */
-		log_debug("thread %p posting fault on channel %d", 
-			myth, fault.channel);
+		log_debug("thread %p posting fault %lx on channel %d", 
+			myth, page_addr, fault.channel);
 		ret = fault_backend.post_async(fault.channel, &fault);
 		posted = (ret == 0);
 		STAT(PF_POST_RETRIES)++;
@@ -163,7 +163,13 @@ static inline void __possible_fault_on(void* address, int flags)
 #endif
 
 	/* the page should exist at this point */	
-	assert(prefetch_page((void*) page_addr) == 0);
+// #ifdef DEBUG	// UNDO
+	log_debug("thread %p released after servicing %lx", myth, page_addr);
+	if (prefetch_page((void*) page_addr) != 0) {
+		STAT(PF_FAILED)++;
+		log_debug("thread %p pagefault serviced but can't find page %lx", myth, page_addr);
+	}
+// #endif
 }
 
 void possible_read_fault_on(void* address) {

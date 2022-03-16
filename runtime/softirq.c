@@ -60,7 +60,8 @@ static void softirq_gather_work(struct softirq_work *w, struct kthread *k,
 	int ret;
 	pgfault_t fault;
 	spin_lock(&k->pf_lock);
-	while(budget_left--) {
+	while(budget_left) {
+		budget_left--;
 		log_debug("softirq reading fault responses on channel %d", k->pf_channel);
 		ret = fault_backend.read_response_async(k->pf_channel, &fault);
 		if (ret != 0)
@@ -77,7 +78,10 @@ static void softirq_gather_work(struct softirq_work *w, struct kthread *k,
 	spin_unlock(&k->pf_lock);
 #endif
 
-	while (budget_left--) {
+	// log_info_ratelimited("softirq budget %d left", budget_left);
+
+	while (budget_left) {
+		budget_left--;
 		uint64_t cmd;
 		unsigned long payload;
 

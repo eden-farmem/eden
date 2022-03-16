@@ -262,8 +262,6 @@ static __noreturn __noinline void schedule(void)
 		drain_overflow(l);
 
 again:
-
-
 	/* first try the local runqueue */
 	if (l->rq_head != l->rq_tail)
 		goto done;

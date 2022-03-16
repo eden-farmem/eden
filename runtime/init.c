@@ -168,6 +168,7 @@ int runtime_init(const char *cfgpath, thread_fn_t main_fn, void *arg)
 	/*initialize kona before scheduler */
 	char env_var[50];
 	sprintf(env_var, "APP_FAULT_CHANNELS=%d", maxks);
+	log_info("initing kona from shenango runtime with %d queues", maxks);
 	putenv(env_var);
 	rinit();
 #endif
