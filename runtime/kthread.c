@@ -51,6 +51,7 @@ static struct kthread *allock(void)
 	memset(k, 0, sizeof(*k));
 	spin_lock_init(&k->lock);
 	list_head_init(&k->rq_overflow);
+	k->rq_overflow_len = 0;
 	mbufq_init(&k->txpktq_overflow);
 	mbufq_init(&k->txcmdq_overflow);
 	spin_lock_init(&k->timer_lock);
@@ -153,6 +154,7 @@ found:
 	/* verify the kthread is correctly detached */
 	assert(r->rq_head == r->rq_tail);
 	assert(list_empty(&r->rq_overflow));
+	assert(k->rq_overflow_len == 0);
 	assert(mbufq_empty(&r->txpktq_overflow));
 	assert(mbufq_empty(&r->txcmdq_overflow));
 	assert(r->timern == 0);

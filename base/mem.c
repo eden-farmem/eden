@@ -88,16 +88,16 @@ __mem_map_anom(void *base, size_t len, size_t pgsize,
 		return MAP_FAILED;
 	}
 
-	log_info("mmap");
+	log_info("mmap page %lu", pgsize);
 	addr = mmap(base, len, PROT_READ | PROT_WRITE, flags, -1, 0);
 	if (addr == MAP_FAILED)
 		return MAP_FAILED;
 
 	BUILD_ASSERT(sizeof(unsigned long) * 8 >= NNUMA);
-	log_info("mbind");
+	log_debug("mbind");
 	ret = mbind(addr, len, numa_policy, mask ? mask : NULL,
 		  mask ? NNUMA : 0, MPOL_MF_STRICT | MPOL_MF_MOVE);
-	log_info("mbind ret: %d, errno: %d", ret, errno);
+	log_debug("mbind ret: %d, errno: %d", ret, errno);
 	if (ret)
 		goto fail;
 

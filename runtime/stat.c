@@ -4,6 +4,7 @@
 
 #include <string.h>
 #include <stdio.h>
+#include <pthread.h>
 
 #include <base/stddef.h>
 #include <base/log.h>
@@ -16,7 +17,9 @@
 
 /* port 40 is permanently reserved, so should be fine for now */
 #define STAT_PORT			40
-#define STAT_REPORT_LOCAL 	1
+#ifdef STATS_CORE
+#define STAT_REPORT_LOCAL
+#endif
 #define STAT_INTERVAL_SECS 	1
 
 static const char *stat_names[] = {
@@ -97,14 +100,64 @@ static ssize_t stat_write_buf(char *buf, size_t len)
 	return pos - buf;
 }
 
-#ifdef STAT_REPORT_LOCAL 
-static void stat_worker(void *arg)
+/* pin this thread to a particular core */
+static int pin_thread(int core) {
+  cpu_set_t cpuset;
+  CPU_ZERO(&cpuset);
+  CPU_SET(core, &cpuset);
+  int retcode = pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
+  if (retcode) { 
+      errno = retcode;
+      perror("pthread_setaffinitity_np");
+  }
+  return retcode;
+}
+
+static ssize_t thread_state_buf(char *buf, size_t len) {
+	char *pos = buf, *end = buf + len;
+	int i, ret;
+	char name[100];
+	char* field;
+
+	/* gather stats from each kthread */
+	/* FIXME: not correct when parked kthreads removed from @ks */
+	field = "pf_pending";
+	for (i = 0; i < maxks; i++) {
+		sprintf(name, "%s_%d", field, i);
+		ret = append_stat(pos, end - pos, name, allks[i]->pf_pending);
+		if (ret < 0)	return -EINVAL;
+		else if (ret >= end - pos)	return -E2BIG;
+		pos += ret;
+	}
+
+	field = "rq_overflow";
+	for (i = 0; i < maxks; i++) {
+		sprintf(name, "%s_%d", field, i);
+		ret = append_stat(pos, end - pos, name, allks[i]->rq_overflow_len);
+		if (ret < 0)	return -EINVAL;
+		else if (ret >= end - pos)	return -E2BIG;
+		pos += ret;
+	}
+
+	pos[-1] = '\0'; /* clip off last ',' */
+	return pos - buf;
+}
+
+#ifdef STAT_REPORT_LOCAL
+static void* stat_worker_local(void *arg)
 {
+	log_info("pinning stats worker to core %d", STATS_CORE);
+	int ret = pin_thread(STATS_CORE);
+	if (ret) {
+		log_err("stat: couldn't pin thread to core %d", STATS_CORE);
+		return NULL;
+	}
+
 	char buf[UDP_MAX_PAYLOAD];
 	ssize_t len;
 
 	while (true) {
-		timer_sleep(STAT_INTERVAL_SECS * 1000000);
+		sleep(STAT_INTERVAL_SECS);
 
 		len = stat_write_buf(buf, UDP_MAX_PAYLOAD);
 		if (len < 0) {
@@ -112,11 +165,19 @@ static void stat_worker(void *arg)
 			continue;
 		}
 		log_info("STATS>%s\n", buf);
-	}
-}
 
-#else
-static void stat_worker(void *arg)
+		len = thread_state_buf(buf, UDP_MAX_PAYLOAD);
+		if (len < 0) {
+			log_err("stat: couldn't generate thread state buffer");
+			continue;
+		}
+		log_info("STATE>%s\n", buf);
+	}
+	return NULL;
+}
+#endif
+
+static void stat_worker_udp(void *arg)
 {
 	const size_t cmd_len = strlen("stat");
 	char buf[UDP_MAX_PAYLOAD];
@@ -151,7 +212,6 @@ static void stat_worker(void *arg)
 		WARN_ON(ret != len);
 	}
 }
-#endif
 
 /**
  * stat_init_late - starts the stat responder thread
@@ -160,5 +220,13 @@ static void stat_worker(void *arg)
  */
 int stat_init_late(void)
 {
-	return thread_spawn(stat_worker, NULL);
+#ifdef STAT_REPORT_LOCAL
+	pthread_t stats_thread;		/* TODO: should we save this somewhere? */
+	int ret = pthread_create(&stats_thread, NULL, stat_worker_local, NULL);
+	if (ret) {
+		log_err("pthread_create for stat worker failed: %d", errno);
+		return ret;
+	}
+#endif
+	return thread_spawn(stat_worker_udp, NULL);
 }

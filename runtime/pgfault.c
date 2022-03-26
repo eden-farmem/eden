@@ -28,8 +28,14 @@ static prefetch_page_t prefetch_page;
 int pgfault_init()
 {
 #ifndef PAGE_FAULTS
-	log_debug("PAGE_FAULTS not set, skipping pgfault_init");
+	log_info("PAGE_FAULTS not set, skipping pgfault_init");
 	return 0;
+#endif
+
+#ifdef PAGE_FAULTS_ASYNC
+	log_info("initializing ASYNC pagefaults");
+#else
+	log_info("initializing SYNC pagefaults");
 #endif
 
 	unsigned long sysinfo_ehdr;
@@ -99,7 +105,11 @@ static inline void __possible_fault_on(void* address, int flags)
 	/* check if page exists */
 	page_addr = (unsigned long)address & ~(PAGE_SIZE - 1);
 	ret = prefetch_page((void*) page_addr);
-	if (ret == 0)
+	if (ret == 0 && (flags & FAULT_FLAG_READ))
+		/* NOTE: Only return if its a read fault. With a write fault, the page 
+		 * might still be write-protected and we wouldn't know that using 
+		 * prefetch page, so no option but to send the fault to Kona 
+		 * everytime... */
 		return;
 
 	thread_t* myth = thread_self();
@@ -122,7 +132,6 @@ static inline void __possible_fault_on(void* address, int flags)
 			myth, page_addr, fault.channel);
 		ret = fault_backend.post_async(fault.channel, &fault);
 		posted = (ret == 0);
-		STAT(PF_POST_RETRIES)++;
 		if (posted) {
 			break;
 		}
@@ -131,9 +140,11 @@ static inline void __possible_fault_on(void* address, int flags)
 #endif
 
 		/* nothing we can do except wait and try again later */
+		STAT(PF_POST_RETRIES)++;
 		log_debug("thread %p could not post. yielding", myth);
 		spin_unlock(&k->pf_lock);
 		putk();
+
 		thread_yield();
 	} while (!posted);
 	k->pf_pending++;
@@ -150,6 +161,7 @@ static inline void __possible_fault_on(void* address, int flags)
 		/* make sure we're running on the same kernel thread */
 		assert(k->pf_channel == l->pf_channel);	
 		ret = fault_backend.read_response_async(l->pf_channel, &response);
+		l->pf_pending--;
 		putk();
 		cpu_relax();
 	} while(ret != 0);

@@ -281,9 +281,8 @@ struct kthread {
 	uint32_t			rq_tail;
 	struct list_head	rq_overflow;
 	struct lrpc_chan_in	rxq;
-	int					park_efd;
-	unsigned int		parked:1;
-	unsigned int		detached:1;
+	unsigned int 		rq_overflow_len;
+	unsigned int		pad1[1];
 
 	/* 2nd cache-line */
 	struct q_ptrs		*q_ptrs;
@@ -292,7 +291,9 @@ struct kthread {
 	unsigned int		rcu_gen;
 	unsigned int		curr_cpu;
 	uint64_t			park_us;
-	unsigned long		pad1[1];
+	unsigned int		parked:1;
+	unsigned int		detached:1;
+	int					park_efd;
 
 	/* 3rd cache-line */
 	struct lrpc_chan_out	txpktq;
@@ -312,7 +313,7 @@ struct kthread {
 	unsigned int 		pf_channel;
 	unsigned int 		pf_pending;
 	struct list_head 	pf_waiters;
-	unsigned long		pad3[4];
+	unsigned int		pad3[7];
 
 	/* 10th cache-line, statistics counters */
 	uint64_t		stats[STAT_NR];
@@ -395,7 +396,12 @@ extern struct cpu_record cpu_map[NCPU];
  */
 
 /* the maximum number of events to handle in a softirq invocation */
-#define SOFTIRQ_MAX_BUDGET	128
+#define SOFTIRQ_MAX_BUDGET		128
+/* amount of active threads that signal congestion before we start 
+ * pushing back on new work */
+#ifndef CONGESTION_THRESHOLD
+#define CONGESTION_THRESHOLD	128
+#endif
 
 extern bool disable_watchdog;
 

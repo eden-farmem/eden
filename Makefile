@@ -42,6 +42,14 @@ INC += -I../kona/pbmem/
 CFLAGS += -DWITH_KONA
 endif
 
+ifneq ($(STATS_CORE),)
+CFLAGS += -DSTATS_CORE=$(STATS_CORE)
+endif
+
+ifneq ($(PROVIDED_CFLAGS),)
+CFLAGS += $(PROVIDED_CFLAGS)
+endif
+
 ifneq ($(TCP_RX_STATS),)
 CFLAGS += -DTCP_RX_STATS
 endif

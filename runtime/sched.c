@@ -134,6 +134,7 @@ static void drain_overflow(struct kthread *l)
 			break;
 		l->rq[l->rq_head++ % RUNTIME_RQ_SIZE] = th;
 		l->q_ptrs->rq_head++;
+		l->rq_overflow_len--;
 	}
 }
 
@@ -175,8 +176,10 @@ static bool steal_work(struct kthread *l, struct kthread *r)
 
 	/* check for overflow tasks */
 	th = list_pop(&r->rq_overflow, thread_t, link);
-	if (th)
+	if (th) {
+		r->rq_overflow_len--;
 		goto done;
+	}
 
 	/* check for softirqs */
 	th = softirq_run_thread(r, RUNTIME_SOFTIRQ_BUDGET);
@@ -370,6 +373,7 @@ void join_kthread(struct kthread *k)
 
 	/* drain the overflow runqueue */
 	list_append_list(&tmp, &k->rq_overflow);
+	k->rq_overflow_len = 0;
 
 	/* detach the kthread */
 	kthread_detach(k);
@@ -494,10 +498,13 @@ static inline void __thread_ready_unsafe(thread_t *th)
 		if (!spin_lock_held(&k->lock)) {
 			spin_lock(&k->lock);
 			list_add_tail(&k->rq_overflow, &th->link);
+			k->rq_overflow_len++;
 			spin_unlock(&k->lock);
 		}
-		else
+		else {
 			list_add_tail(&k->rq_overflow, &th->link);
+			k->rq_overflow_len++;
+		}
 		return;
 	}
 

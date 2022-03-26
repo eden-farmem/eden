@@ -51,16 +51,16 @@ static void softirq_gather_work(struct softirq_work *w, struct kthread *k,
 				unsigned int budget)
 {
 	unsigned int recv_cnt = 0, compl_cnt = 0, join_cnt = 0, fault_cnt = 0;
-	int budget_left;
+	int budget_left, local_budget_left;
 
 	budget_left = min(budget, SOFTIRQ_MAX_BUDGET);
 
 #ifdef PAGE_FAULTS_ASYNC
 	/* prioritize pgfault-unblocked threads over new work */
-	int ret;
+	int ret, active_threads;
 	pgfault_t fault;
 	spin_lock(&k->pf_lock);
-	while(budget_left) {
+	while(budget_left > 0) {
 		budget_left--;
 		log_debug("softirq reading fault responses on channel %d", k->pf_channel);
 		ret = fault_backend.read_response_async(k->pf_channel, &fault);
@@ -76,12 +76,21 @@ static void softirq_gather_work(struct softirq_work *w, struct kthread *k,
 		STAT(PF_RETURNED)++;
 	}
 	spin_unlock(&k->pf_lock);
+
+	/* supress new work when it gets congested */
+	/* NOTE(FIXME): we assume that supressing RX means supressing new work, which 
+	 * is not always true. Also, we're supressing other events for IO core 
+	 * like TX completions due to the shared events queue - might cause 
+	 * trouble later. */
+	active_threads = (k->rq_head - k->rq_tail) + k->rq_overflow_len; 
+	local_budget_left = CONGESTION_THRESHOLD - active_threads;
+#else 
+	local_budget_left = SOFTIRQ_MAX_BUDGET;
 #endif
 
-	// log_info_ratelimited("softirq budget %d left", budget_left);
+	while (budget_left > 0 && local_budget_left > 0) {
+		budget_left--; local_budget_left--;
 
-	while (budget_left) {
-		budget_left--;
 		uint64_t cmd;
 		unsigned long payload;
 
