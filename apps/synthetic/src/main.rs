@@ -1,6 +1,7 @@
 #![feature(integer_atomics)]
 #![feature(nll)]
 #![feature(test)]
+#![feature(const_if_match)]
 #[macro_use]
 extern crate clap;
 
@@ -61,7 +62,7 @@ enum Distribution {
     Constant(u64),
     Exponential(f64),
     Bimodal1(f64),
-    Bimodal2(f64),
+    Bimodal2(f64)
 }
 impl Distribution {
     fn name(&self) -> &'static str {
@@ -145,6 +146,12 @@ enum OutputMode {
 
 fn duration_to_ns(duration: Duration) -> u64 {
     duration.as_secs() * 1000_000_000 + duration.subsec_nanos() as u64
+}
+
+/* Emit a log line with current time to indicate a checkpoint */
+fn checkpoint(label: &str) {
+    let unix_time_now = SystemTime::now().duration_since(UNIX_EPOCH);
+    println!("Checkpoint {}:{}", label, unix_time_now.unwrap().as_secs());
 }
 
 fn run_linux_udp_server(backend: Backend, addr: SocketAddrV4, nthreads: usize, worker: FakeWorker) {
@@ -238,10 +245,12 @@ fn run_memcached_preload(
     addr: SocketAddrV4,
     nthreads: usize,
 ) -> bool {
+    eprintln!("preloading {} kv pairs", memcached::NVALUES);
     let perthread = (memcached::NVALUES as usize + nthreads - 1) / nthreads;
     let join_handles: Vec<JoinHandle<_>> = (0..nthreads)
         .map(|i| {
             backend.spawn_thread(move || {
+                // eprintln!("starting preload");
                 let sock1 = Arc::new(match tport {
                     Transport::Tcp => backend.create_tcp_connection(None, addr).unwrap(),
                     Transport::Udp => backend
@@ -250,13 +259,13 @@ fn run_memcached_preload(
                 });
                 let socket = sock1.clone();
                 backend.spawn_thread(move || {
-                    backend.sleep(Duration::from_secs(20));
+                    backend.sleep(Duration::from_secs(60));
                     if Arc::strong_count(&socket) > 1 {
-                        println!("Timing out socket");
                         socket.shutdown();
                     }
                 });
 
+                // eprintln!("preloading {} kv pairs", perthread);
                 let mut vec_s: Vec<u8> = Vec::with_capacity(4096);
                 let mut vec_r: Vec<u8> = vec![0; 4096];
                 for n in 0..perthread {
@@ -264,7 +273,7 @@ fn run_memcached_preload(
                     MemcachedProtocol::set_request(
                         (i * perthread + n) as u64,
                         0,
-                        &mut vec_s,
+                        &mut vec_s, 
                         tport,
                     );
 
@@ -325,7 +334,8 @@ fn gen_classic_packet_schedule(
         service: distribution,
         output: output,
         runtime: runtime,
-        discard_pct: 10,
+        // discard_pct: 10,     // UNDO?
+        discard_pct: 0,
     });
 
     sched
@@ -354,10 +364,13 @@ fn gen_loadshift_experiment(
 }
 
 fn process_result(sched: &RequestSchedule, packets: &mut [Packet], wct_start: SystemTime) -> bool {
+    let plen = packets.len();
+    if plen == 0 {
+        return true
+    }
     let start_unix = wct_start + packets[0].target_start;
 
     // Discard the first X% of the packets.
-    let plen = packets.len();
     let packets = &mut packets[plen * sched.discard_pct / 100..];
 
     let never_sent = packets.iter().filter(|p| p.actual_start.is_none()).count();
@@ -367,7 +380,8 @@ fn process_result(sched: &RequestSchedule, packets: &mut [Packet], wct_start: Sy
         .count()
         - never_sent;
 
-    if packets.len() - dropped - never_sent <= 1 {
+    eprintln!("{}, {}, {}, {}", packets.len(), packets.len() - (dropped + never_sent), dropped, never_sent);
+    if packets.len() - dropped - never_sent < 1 {
         match sched.output {
             OutputMode::Silent => {}
             _ => {
@@ -509,12 +523,16 @@ fn run_client(
             (thread_packets, vec![None; packets_per_thread], socket)
         })
         .collect();
-
+    
+    eprintln!("reached barrier");
     if let Some(ref mut g) = *barrier_group {
         g.barrier();
     }
+    checkpoint(format!("Sample{}Start", index).as_str());
     let start_unix = SystemTime::now();
     let start = Instant::now();
+
+    eprintln!("{}, {}", packet_schedules.len(), packet_schedules[0].0.len());
 
     let mut send_threads = Vec::new();
     let mut receive_threads = Vec::new();
@@ -533,7 +551,7 @@ fn run_client(
                             _ => (),
                         }
                         if e.kind() != ErrorKind::UnexpectedEof {
-                            println!("Receive thread: {}", e);
+                            eprintln!("Receive thread: {}", e);
                         }
                         break;
                     }
@@ -601,15 +619,17 @@ fn run_client(
             ..p
         })
         .collect();
-    packets.sort_by_key(|p| p.target_start);
+    checkpoint(format!("Sample{}End", index).as_str());
 
     let mut start = Duration::from_nanos(100_000_000);
+    packets.sort_by_key(|p| p.target_start);
     schedules.iter().all(|sched| {
         let last_index = packets
             .iter()
             .position(|p| p.target_start >= start + sched.runtime)
             .unwrap_or(packets.len());
         let rest = packets.split_off(last_index);
+        eprintln!("Schedule: {} {} {}", start.as_millis(), (start + sched.runtime).as_millis(), sched.output);
         let res = process_result(&sched, packets.as_mut_slice(), start_unix);
         packets = rest;
         start += sched.runtime;
@@ -939,6 +959,7 @@ fn main() {
             backend.init_and_run(config, move || {
                 println!("Distribution, Target, Actual, Dropped, Never Sent, Median, 90th, 99th, 99.9th, 99.99th, Start");
                 if dowarmup {
+                    checkpoint("WarmupStart");
                     for packets_per_second in (1..3).map(|i| i * 100000) {
                         let sched = gen_classic_packet_schedule(
                             Duration::from_secs(1),
@@ -955,6 +976,7 @@ fn main() {
                             &sched,
                         );
                     }
+                    checkpoint("WarmupEnd");
                 }
                 let step_size = (packets_per_second - start_packets_per_second) / samples;
                 for j in 1..=samples {
@@ -982,9 +1004,12 @@ fn main() {
                 match (proto, &barrier_group) {
                     (_, Some(lockstep::Group::Client(ref _c))) => (),
                     (Protocol::Memcached, _) => {
+                        checkpoint("PreloadStart");
                         if !run_memcached_preload(backend, Transport::Tcp, addr, nthreads) {
                             panic!("Could not preload memcached");
                         }
+                        checkpoint("PreloadEnd");
+                        backend.sleep(Duration::from_secs(30));
                     },
                     _ => (),
                 };
@@ -1005,6 +1030,7 @@ fn main() {
                 }
 
                 if dowarmup {
+
                     // Run at full pps 3 times for 20 seconds
                     let sched = gen_classic_packet_schedule(
                         Duration::from_secs(20),
@@ -1015,7 +1041,8 @@ fn main() {
                         nthreads,
                     );
 
-                    for _ in 0..3 {
+                    checkpoint("WarmupStart");
+                    for _ in 0..1 {
                         run_client(
                             backend,
                             addr,
@@ -1028,10 +1055,12 @@ fn main() {
                         );
                         backend.sleep(Duration::from_secs(5));
                     }
+                    checkpoint("WarmupEnd");
                 }
 
                 let step_size = (packets_per_second - start_packets_per_second) / samples;
                 for j in 1..=samples {
+                    eprintln!("starting sample {}. pps: {}", j, packets_per_second);
                     backend.sleep(Duration::from_secs(5));
                     let sched = gen_classic_packet_schedule(
                         runtime,
@@ -1041,6 +1070,7 @@ fn main() {
                         rampup,
                         nthreads,
                     );
+                    eprintln!("running client");
                     run_client(
                         backend,
                         addr,

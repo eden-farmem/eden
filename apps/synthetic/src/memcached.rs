@@ -90,9 +90,10 @@ impl PacketHeader {
     }
 }
 
-pub static NVALUES: u64 = 1000000;
+pub static NVALUES: u64 = 10000000;
+// pub static NVALUES: u64 = 2000;
 static PCT_SET: u64 = 2; // out of 1000
-static VALUE_SIZE: usize = 2;
+static VALUE_SIZE: usize = 80;
 static KEY_SIZE: usize = 20;
 
 #[inline(always)]
@@ -108,7 +109,8 @@ fn write_key(buf: &mut Vec<u8>, key: u64) {
         }
     }
     for _ in pushed..KEY_SIZE {
-        buf.push('A' as u8);
+        // buf.push('A' as u8);
+        buf.push('K' as u8);
     }
 }
 
@@ -139,8 +141,9 @@ impl MemcachedProtocol {
 
         write_key(buf, key);
 
-        for i in 0..VALUE_SIZE {
-            buf.push((((key * i as u64) >> (i % 4)) & 0xff) as u8);
+        for _ in 0..VALUE_SIZE {
+            // buf.push((((key * i as u64) >> (i % 4)) & 0xff) as u8);
+            buf.push('V' as u8);
         }
     }
 
