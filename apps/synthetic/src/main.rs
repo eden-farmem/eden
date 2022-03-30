@@ -489,6 +489,7 @@ fn run_client(
     barrier_group: &mut Option<lockstep::Group>,
     schedules: &Vec<RequestSchedule>,
     index: usize,
+    ignore_result: Option<bool>
 ) -> bool {
     let mut rng = rand::thread_rng();
 
@@ -529,6 +530,7 @@ fn run_client(
         g.barrier();
     }
     checkpoint(format!("Sample{}Start", index).as_str());
+
     let start_unix = SystemTime::now();
     let start = Instant::now();
 
@@ -605,36 +607,46 @@ fn run_client(
         }))
     }
 
-    let mut packets: Vec<_> = send_threads
+    let send_packets: Vec<Vec<Packet>> = send_threads
+        .into_iter()
+        .map(|s| {
+            s.join().unwrap()
+        })
+        .collect();
+
+    checkpoint(format!("Sample{}End", index).as_str());
+
+    let mut packets: Vec<_> = send_packets
         .into_iter()
         .zip(receive_threads.into_iter())
         .flat_map(|(s, r)| {
-            s.join()
-                .unwrap()
-                .into_iter()
-                .zip(r.join().unwrap().into_iter())
+            s.into_iter()
+            .zip(r.join().unwrap().into_iter())
         })
         .map(|(p, r)| Packet {
             completion_time: r,
             ..p
         })
         .collect();
-    checkpoint(format!("Sample{}End", index).as_str());
 
-    let mut start = Duration::from_nanos(100_000_000);
-    packets.sort_by_key(|p| p.target_start);
-    schedules.iter().all(|sched| {
-        let last_index = packets
-            .iter()
-            .position(|p| p.target_start >= start + sched.runtime)
-            .unwrap_or(packets.len());
-        let rest = packets.split_off(last_index);
-        eprintln!("Schedule: {} {} {}", start.as_millis(), (start + sched.runtime).as_millis(), sched.output);
-        let res = process_result(&sched, packets.as_mut_slice(), start_unix);
-        packets = rest;
-        start += sched.runtime;
-        res
-    })
+    if ignore_result.unwrap_or(false) {
+    } else {
+        let mut start = Duration::from_nanos(100_000_000);
+        packets.sort_by_key(|p| p.target_start);
+        schedules.iter().all(|sched| {
+            let last_index = packets
+                .iter()
+                .position(|p| p.target_start >= start + sched.runtime)
+                .unwrap_or(packets.len());
+            let rest = packets.split_off(last_index);
+            eprintln!("Schedule: {} {} {}", start.as_millis(), (start + sched.runtime).as_millis(), sched.output);
+            let res = process_result(&sched, packets.as_mut_slice(), start_unix);
+            packets = rest;
+            start += sched.runtime;
+            res
+        });
+    };
+    true
 }
 
 fn run_local(
@@ -1025,6 +1037,7 @@ fn main() {
                         &mut barrier_group,
                         &sched,
                         0,
+                        None
                     );
                     return;
                 }
@@ -1041,7 +1054,6 @@ fn main() {
                         nthreads,
                     );
 
-                    checkpoint("WarmupStart");
                     for _ in 0..1 {
                         run_client(
                             backend,
@@ -1052,10 +1064,10 @@ fn main() {
                             &mut barrier_group,
                             &sched,
                             0,
+                            Some(true)
                         );
                         backend.sleep(Duration::from_secs(5));
                     }
-                    checkpoint("WarmupEnd");
                 }
 
                 let step_size = (packets_per_second - start_packets_per_second) / samples;
@@ -1080,6 +1092,7 @@ fn main() {
                         &mut barrier_group,
                         &sched,
                         j,
+                        None
                     );
                 }
                 if let Some(ref mut g) = barrier_group {
