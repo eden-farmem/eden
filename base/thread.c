@@ -76,8 +76,7 @@ int thread_init_perthread(void)
 	thread_id = thread_count++;
 	spin_unlock(&thread_lock);
 
-	/* TODO: figure out how to support NUMA */
-	thread_numa_node = 0;
+	thread_numa_node = NUMA_NODE;
 
 	ret = thread_alloc_perthread();
 	if (ret)
