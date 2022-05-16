@@ -5,6 +5,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <pthread.h>
+#include <time.h>
 
 #include <base/stddef.h>
 #include <base/log.h>
@@ -19,9 +20,10 @@
 #define STAT_PORT			40
 #ifdef STATS_CORE
 #define STAT_REPORT_LOCAL
-#endif
 #define STAT_INTERVAL_SECS 	1
+#endif
 
+static const char statsfile[] = "runtime.out";
 static const char *stat_names[] = {
 	/* scheduler counters */
 	"reschedules",
@@ -155,24 +157,30 @@ static void* stat_worker_local(void *arg)
 
 	char buf[UDP_MAX_PAYLOAD];
 	ssize_t len;
+	unsigned long now;
+	FILE* fp = fopen(statsfile, "w");
 
 	while (true) {
 		sleep(STAT_INTERVAL_SECS);
 
+		now = time(NULL);
 		len = stat_write_buf(buf, UDP_MAX_PAYLOAD);
 		if (len < 0) {
 			log_err("stat: couldn't generate stat buffer");
 			continue;
 		}
-		log_info("STATS>%s\n", buf);
+		fprintf(fp, "%lu %s\n", now, buf);
+		fflush(fp);
 
-		len = thread_state_buf(buf, UDP_MAX_PAYLOAD);
-		if (len < 0) {
-			log_err("stat: couldn't generate thread state buffer");
-			continue;
-		}
-		log_info("STATE>%s\n", buf);
+		// len = thread_state_buf(buf, UDP_MAX_PAYLOAD);
+		// if (len < 0) {
+		// 	log_err("stat: couldn't generate thread state buffer");
+		// 	continue;
+		// }
+		// fprintf("%s\n", buf);
 	}
+
+	fclose(fp);
 	return NULL;
 }
 #endif

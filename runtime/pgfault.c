@@ -98,6 +98,7 @@ static inline void __possible_fault_on(void* address, int flags)
 	int ret, posted = 0;
 	unsigned long page_addr;
 	struct kthread *k;
+	bool yield;
 #ifdef PAGE_FAULTS_SYNC
 	struct kthread *l;
 #endif
@@ -141,11 +142,22 @@ static inline void __possible_fault_on(void* address, int flags)
 
 		/* nothing we can do except wait and try again later */
 		STAT(PF_POST_RETRIES)++;
-		log_debug("thread %p could not post. yielding", myth);
+		log_debug("thread %p could not post", myth);
 		spin_unlock(&k->pf_lock);
+
+		/* check if we should yield; its important that we yield 
+		 * to resolve page fault responses to avoid livelocks. 
+		 * currently we do not yield for external irqs like network 
+		 * events */
+		yield = timer_needed(k) || pgfault_response_ready(k);
 		putk();
 
-		thread_yield();
+		if (yield) {
+			log_debug("thread %p yielding", myth);
+			thread_yield();
+		}
+
+		cpu_relax();
 	} while (!posted);
 	k->pf_pending++;
 	STAT(PF_POSTED)++;

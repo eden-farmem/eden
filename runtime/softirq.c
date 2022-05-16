@@ -123,8 +123,20 @@ static void softirq_gather_work(struct softirq_work *w, struct kthread *k,
 	w->recv_cnt = recv_cnt;
 	w->compl_cnt = compl_cnt;
 	w->join_cnt = join_cnt;
-	w->timer_budget = budget_left;
+
+	/* TODO: we need non-zero min budget for timer events to avoid starving
+	 * and losing sense of time. how much is enough though? */
+	w->timer_budget = budget_left > 1 ? budget_left: 1;
 	w->fault_cnt = fault_cnt;
+}
+
+
+/**
+ * softirq_ready - checks if there are any softirqs ready to be handled
+ * @k: the kthread from which to take RX queue commands
+ */
+static inline bool softirq_ready(struct kthread* k) {
+	return pgfault_response_ready(k) || timer_needed(k) || !lrpc_empty(&k->rxq);
 }
 
 /**
@@ -139,16 +151,11 @@ thread_t *softirq_run_thread(struct kthread *k, unsigned int budget)
 {
 	thread_t *th;
 	struct softirq_work *w;
-	bool pgfault_work = false;
 
 	assert_spin_lock_held(&k->lock);
 
 	/* check if there's any work available */
-#ifdef PAGE_FAULTS_ASYNC
-	log_debug("softirq checking fault responses on channel %d", k->pf_channel);
-	pgfault_work = fault_backend.poll_response_async(k->pf_channel);
-#endif
-	if (lrpc_empty(&k->rxq) && !timer_needed(k) && !pgfault_work)
+	if (!softirq_ready(k))
 		return NULL;
 
 	th = thread_create_with_buf(softirq_fn, (void **)&w, sizeof(*w));
@@ -168,15 +175,10 @@ void softirq_run(unsigned int budget)
 {
 	struct kthread *k;
 	struct softirq_work w;
-	bool pgfault_work = false;
 
-	k = getk();
 	/* check if there's any work available */
-#ifdef PAGE_FAULTS_ASYNC
-	log_debug("softirq checking fault responses on channel %d", k->pf_channel);
-	pgfault_work = fault_backend.poll_response_async(k->pf_channel);
-#endif
-	if (lrpc_empty(&k->rxq) && !timer_needed(k) && !pgfault_work) {
+	k = getk();
+	if (!softirq_ready(k)){
 		putk();
 		return;
 	}

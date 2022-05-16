@@ -462,6 +462,16 @@ static inline bool timer_needed(struct kthread *k)
 	return k->timern > 0 && k->timers[0].deadline_us <= microtime();
 }
 
+/*
+ * Page fault support
+ */
+static inline bool pgfault_response_ready(struct kthread* k) {
+	bool ready = false;
+#ifdef PAGE_FAULTS
+	ready = fault_backend.poll_response_async(k->pf_channel);
+#endif
+	return ready;
+}
 
 /*
  * Init

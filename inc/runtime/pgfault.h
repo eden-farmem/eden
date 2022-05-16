@@ -4,11 +4,6 @@
 
 #pragma once
 
-#include <base/stddef.h>
-#include <base/list.h>
-#include <base/lock.h>
-#include <runtime/thread.h>
-#include <runtime/preempt.h>
 #ifdef WITH_KONA
 #include <klib.h>
 #endif
