@@ -38,7 +38,7 @@ CFLAGS += -DPAGE_FAULTS_$(PAGE_FAULTS)
 endif
 
 ifneq ($(WITH_KONA),)
-INC += -I../kona/pbmem/
+INC += -I../backends/kona/pbmem/
 CFLAGS += -DWITH_KONA
 endif
 

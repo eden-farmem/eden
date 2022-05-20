@@ -123,10 +123,7 @@ static void softirq_gather_work(struct softirq_work *w, struct kthread *k,
 	w->recv_cnt = recv_cnt;
 	w->compl_cnt = compl_cnt;
 	w->join_cnt = join_cnt;
-
-	/* TODO: we need non-zero min budget for timer events to avoid starving
-	 * and losing sense of time. how much is enough though? */
-	w->timer_budget = budget_left > 1 ? budget_left: 1;
+	w->timer_budget = budget_left;
 	w->fault_cnt = fault_cnt;
 }
 
