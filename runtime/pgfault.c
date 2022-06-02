@@ -18,9 +18,11 @@
  */
 
 const char *version = "LINUX_2.6";
-const char *name = "__vdso_prefetch_page";
-typedef long (*prefetch_page_t)(const void *p);
-static prefetch_page_t prefetch_page;
+const char *name_mapped = "__vdso_is_page_mapped";
+const char *name_wp = "__vdso_is_page_mapped_and_wrprotected";
+typedef long (*vdso_check_page_t)(const void *p);
+static vdso_check_page_t is_page_mapped;
+static vdso_check_page_t is_page_mapped_and_wrprotected;
 
 /**
  * pgfault_init - initializes page fault support 
@@ -40,19 +42,22 @@ int pgfault_init()
 
 	unsigned long sysinfo_ehdr;
 
-	/* find prefetch_page vDSO symbol */
+	/* find vDSO symbols */
 	sysinfo_ehdr = getauxval(AT_SYSINFO_EHDR);
 	if (!sysinfo_ehdr) {
 		log_err("AT_SYSINFO_EHDR is not present");
 		return -ENOENT;
 	}
 
-	/* this requires a kernel with the prefetch_page vDSO patch:
-	 * https://patchwork.kernel.org/project/linux-mm/cover/20210225072910.2811795-1-namit@vmware.com/ */
 	vdso_init_from_sysinfo_ehdr(getauxval(AT_SYSINFO_EHDR));
-	prefetch_page = (prefetch_page_t)vdso_sym(version, name);
-	if (!prefetch_page) {
-		log_err("Could not find %s in vdso", name);
+	is_page_mapped = (vdso_check_page_t)vdso_sym(version, name_mapped);
+	if (!is_page_mapped) {
+		log_err("Could not find %s in vdso", name_mapped);
+		return -ENOENT;
+	}
+	is_page_mapped_and_wrprotected = (vdso_check_page_t)vdso_sym(version, name_wp);
+	if (!is_page_mapped_and_wrprotected) {
+		log_err("Could not find %s in vdso", name_wp);
 		return -ENOENT;
 	}
 
@@ -98,19 +103,18 @@ static inline void __possible_fault_on(void* address, int flags)
 	int ret, posted = 0;
 	unsigned long page_addr;
 	struct kthread *k;
-	bool yield;
+	bool yield, nofault;
 #ifdef PAGE_FAULTS_SYNC
 	struct kthread *l;
 #endif
 
 	/* check if page exists */
 	page_addr = (unsigned long)address & ~(PAGE_SIZE - 1);
-	ret = prefetch_page((void*) page_addr);
-	if (ret == 0 && (flags & FAULT_FLAG_READ))
-		/* NOTE: Only return if its a read fault. With a write fault, the page 
-		 * might still be write-protected and we wouldn't know that using 
-		 * prefetch page, so no option but to send the fault to Kona 
-		 * everytime... */
+	nofault = (flags & FAULT_FLAG_READ) 
+		? is_page_mapped((void*) page_addr) 
+		: is_page_mapped_and_wrprotected((void*) page_addr);
+
+	if (nofault)
 		return;
 
 	thread_t* myth = thread_self();
@@ -186,14 +190,18 @@ static inline void __possible_fault_on(void* address, int flags)
 	thread_park_and_unlock_np(&k->pf_lock);
 #endif
 
-	/* the page should exist at this point */	
-// #ifdef DEBUG	// UNDO
+#ifdef DEBUG
+	/* there should be no fault at this point */	
 	log_debug("thread %p released after servicing %lx", myth, page_addr);
-	if (prefetch_page((void*) page_addr) != 0) {
+	nofault = (flags & FAULT_FLAG_READ) 
+		? is_page_mapped((void*) page_addr) 
+		: is_page_mapped_and_wrprotected((void*) page_addr);
+	if (!nofault) {
 		STAT(PF_FAILED)++;
-		log_debug("thread %p pagefault serviced but can't find page %lx", myth, page_addr);
+		log_debug("thread %p pagefault serviced but still faults at %lx", 
+			myth, page_addr);
 	}
-// #endif
+#endif
 }
 
 void possible_read_fault_on(void* address) {
