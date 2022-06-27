@@ -264,7 +264,7 @@ enum {
 	/* page fault counters */
 	STAT_PF_POSTED,
 	STAT_PF_RETURNED,
-	STAT_PF_POST_RETRIES,
+	STAT_PF_SERVICE_TIME,
 	STAT_PF_FAILED,
 
 	/* total number of counters */

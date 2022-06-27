@@ -6,6 +6,7 @@
 
 #include <base/lock.h>
 #include <base/log.h>
+#include <base/time.h>
 #include <runtime/thread.h>
 #include <runtime/pgfault.h>
 #include <runtime/sync.h>
@@ -20,9 +21,9 @@
 const char *version = "LINUX_2.6";
 const char *name_mapped = "__vdso_is_page_mapped";
 const char *name_wp = "__vdso_is_page_mapped_and_wrprotected";
-typedef long (*vdso_check_page_t)(const void *p);
-static vdso_check_page_t is_page_mapped;
-static vdso_check_page_t is_page_mapped_and_wrprotected;
+// typedef long (*vdso_check_page_t)(const void *p);
+vdso_check_page_t is_page_mapped;
+vdso_check_page_t is_page_mapped_and_wrprotected;
 
 /**
  * pgfault_init - initializes page fault support 
@@ -100,27 +101,32 @@ static inline void __possible_fault_on(void* address, int flags)
 #ifndef PAGE_FAULTS
 	return;
 #endif
-	int ret, posted = 0;
-	unsigned long page_addr;
-	struct kthread *k;
-	bool yield, nofault;
-#ifdef PAGE_FAULTS_SYNC
-	struct kthread *l;
-#endif
-
-	/* check if page exists */
-	page_addr = (unsigned long)address & ~(PAGE_SIZE - 1);
-	nofault = (flags & FAULT_FLAG_READ) 
-		? is_page_mapped((void*) page_addr) 
-		: is_page_mapped_and_wrprotected((void*) page_addr);
+	/* fast path */
+	bool nofault = (flags & FAULT_FLAG_READ)
+		? is_page_mapped(address) 
+		: is_page_mapped_and_wrprotected(address);
 
 	if (nofault)
 		return;
 
+
+#ifdef PROFILING
+	unsigned long start_time;
+	start_time = rdtsc();
+#endif
+
+	/* fault path */
+	int ret, posted = 0;
+	struct kthread *k;
+	bool yield;
+#ifdef PAGE_FAULTS_SYNC
+	struct kthread *l;
+#endif
+
 	thread_t* myth = thread_self();
 	pgfault_t fault = {
 		.channel = -1,	/* to be filled */
-		.fault_addr = page_addr,
+		.fault_addr = (unsigned long) address,
 		.flags = flags,
 		.tag = (void*) myth
 	};
@@ -133,8 +139,8 @@ static inline void __possible_fault_on(void* address, int flags)
 		fault.channel = k->pf_channel;
 
 		/* post */
-		log_debug("thread %p posting fault %lx on channel %d", 
-			myth, page_addr, fault.channel);
+		log_debug("thread %p posting fault %p on channel %d", 
+			myth, address, fault.channel);
 		ret = fault_backend.post_async(fault.channel, &fault);
 		posted = (ret == 0);
 		if (posted) {
@@ -145,7 +151,6 @@ static inline void __possible_fault_on(void* address, int flags)
 #endif
 
 		/* nothing we can do except wait and try again later */
-		STAT(PF_POST_RETRIES)++;
 		log_debug("thread %p could not post", myth);
 		spin_unlock(&k->pf_lock);
 
@@ -182,7 +187,8 @@ static inline void __possible_fault_on(void* address, int flags)
 		cpu_relax();
 	} while(ret != 0);
 
-	assert(response.fault_addr == page_addr);	/* sanity checks */
+	/* sanity checks */
+	assert((response.fault_addr & PAGE_MASK) == ((unsigned long) address & PAGE_MASK));
 	assert((thread_t*) response.tag == myth);
 	STAT(PF_RETURNED)++;
 #else 
@@ -192,15 +198,19 @@ static inline void __possible_fault_on(void* address, int flags)
 
 #ifdef DEBUG
 	/* there should be no fault at this point */	
-	log_debug("thread %p released after servicing %lx", myth, page_addr);
+	log_debug("thread %p released after servicing %p", myth, address);
 	nofault = (flags & FAULT_FLAG_READ) 
-		? is_page_mapped((void*) page_addr) 
-		: is_page_mapped_and_wrprotected((void*) page_addr);
+		? is_page_mapped((void*) address) 
+		: is_page_mapped_and_wrprotected((void*) address);
 	if (!nofault) {
 		STAT(PF_FAILED)++;
-		log_debug("thread %p pagefault serviced but still faults at %lx", 
-			myth, page_addr);
+		log_debug("thread %p pagefault serviced but still faults at %p", 
+			myth, address);
 	}
+#endif
+
+#ifdef PROFILING
+	STAT(PF_SERVICE_TIME) += (rdtscp(NULL) - start_time) / cycles_per_us;
 #endif
 }
 

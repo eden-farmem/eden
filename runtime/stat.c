@@ -50,7 +50,7 @@ static const char *stat_names[] = {
 	/* page fault counters */
 	"pf_posted",
 	"pf_returned",
-	"pf_retries",
+	"pf_time_spent_mus",
 	"pf_failed",
 };
 

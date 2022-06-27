@@ -18,3 +18,8 @@ echo 4096 > /sys/devices/system/node/node1/hugepages/hugepages-2048kB/nr_hugepag
 # Disable turbo: This is temporary and only works with intel pstate driver
 # https://askubuntu.com/questions/619875/disabling-intel-turbo-boost-in-ubuntu
 echo "1" | sudo tee /sys/devices/system/cpu/intel_pstate/no_turbo
+
+# Diasble automatic NUMA load balancing. This feature raises spurious page 
+# faults to determine NUMA node access patterns which interfere with 
+# the annotations
+echo 0 | sudo tee /proc/sys/kernel/numa_balancing
