@@ -242,6 +242,7 @@ enum {
 	/* scheduler counters */
 	STAT_RESCHEDULES = 0,
 	STAT_SCHED_CYCLES,
+	STAT_SCHED_CYCLES_IDLE,
 	STAT_PROGRAM_CYCLES,
 	STAT_THREADS_STOLEN,
 	STAT_SOFTIRQS_STOLEN,
@@ -264,8 +265,8 @@ enum {
 	/* page fault counters */
 	STAT_PF_POSTED,
 	STAT_PF_RETURNED,
-	STAT_PF_SERVICE_TIME,
 	STAT_PF_FAILED,
+	STAT_PF_ANNOT_HITS,
 
 	/* total number of counters */
 	STAT_NR,

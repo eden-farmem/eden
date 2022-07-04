@@ -19,12 +19,6 @@
 	#define PAGE_FAULTS
 #endif
 
-#define PROFILING
-
-#define PAGE_SHIFT (12)
-#define PAGE_SIZE (1ull << PAGE_SHIFT)
-#define PAGE_MASK (~(PAGE_SIZE - 1))
-
 #ifdef WITH_KONA		/*kona backend*/
 	#define FAULT_FLAG_READ             APP_FAULT_FLAG_READ
 	#define FAULT_FLAG_WRITE            APP_FAULT_FLAG_WRITE
@@ -52,12 +46,10 @@ struct fault_backend_ops {
 };
 extern struct fault_backend_ops fault_backend;
 
-/* UNDO */
-typedef long (*vdso_check_page_t)(const void *p);
-extern vdso_check_page_t is_page_mapped;
-extern vdso_check_page_t is_page_mapped_and_wrprotected;
-
-
 /* functions */
 void possible_read_fault_on(void* address);
 void possible_write_fault_on(void* address);
+
+/* other names for the hints */
+#define HINT_READ_FAULT_AT	possible_read_fault_on
+#define HINT_WRITE_FAULT_AT	possible_write_fault_on

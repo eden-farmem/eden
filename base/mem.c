@@ -88,7 +88,7 @@ __mem_map_anom(void *base, size_t len, size_t pgsize,
 		return MAP_FAILED;
 	}
 
-	log_info("mmap page %lu", pgsize);
+	log_debug("mmap page %lu", pgsize);
 	addr = mmap(base, len, PROT_READ | PROT_WRITE, flags, -1, 0);
 	if (addr == MAP_FAILED)
 		return MAP_FAILED;

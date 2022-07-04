@@ -21,7 +21,7 @@
 const char *version = "LINUX_2.6";
 const char *name_mapped = "__vdso_is_page_mapped";
 const char *name_wp = "__vdso_is_page_mapped_and_wrprotected";
-// typedef long (*vdso_check_page_t)(const void *p);
+typedef long (*vdso_check_page_t)(const void *p);
 vdso_check_page_t is_page_mapped;
 vdso_check_page_t is_page_mapped_and_wrprotected;
 
@@ -106,14 +106,13 @@ static inline void __possible_fault_on(void* address, int flags)
 		? is_page_mapped(address) 
 		: is_page_mapped_and_wrprotected(address);
 
-	if (nofault)
+	if (nofault) {
+		/* TODO: Only uncomment this for debugging, this 
+		 * will affect performance when running with 
+		 * multiple cores */
+		// STAT(PF_ANNOT_HITS)++;
 		return;
-
-
-#ifdef PROFILING
-	unsigned long start_time;
-	start_time = rdtsc();
-#endif
+	}
 
 	/* fault path */
 	int ret, posted = 0;
@@ -121,6 +120,7 @@ static inline void __possible_fault_on(void* address, int flags)
 	bool yield;
 #ifdef PAGE_FAULTS_SYNC
 	struct kthread *l;
+	unsigned long start_tsc;
 #endif
 
 	thread_t* myth = thread_self();
@@ -176,6 +176,7 @@ static inline void __possible_fault_on(void* address, int flags)
 	putk();
 
 	/* poll wait for the fault response */
+	start_tsc = rdtsc();
 	pgfault_t response = {0};
 	do {
 		l = getk();
@@ -188,9 +189,12 @@ static inline void __possible_fault_on(void* address, int flags)
 	} while(ret != 0);
 
 	/* sanity checks */
-	assert((response.fault_addr & PAGE_MASK) == ((unsigned long) address & PAGE_MASK));
+	// assert((response.fault_addr & PAGE_MASK) == ((unsigned long) address & PAGE_MASK));
 	assert((thread_t*) response.tag == myth);
 	STAT(PF_RETURNED)++;
+
+	/* count the wait as idle time */
+	STAT(SCHED_CYCLES_IDLE) += (rdtscp(NULL) - start_tsc);
 #else 
 	/* wait until woken up */
 	thread_park_and_unlock_np(&k->pf_lock);
@@ -209,9 +213,6 @@ static inline void __possible_fault_on(void* address, int flags)
 	}
 #endif
 
-#ifdef PROFILING
-	STAT(PF_SERVICE_TIME) += (rdtscp(NULL) - start_time) / cycles_per_us;
-#endif
 }
 
 void possible_read_fault_on(void* address) {

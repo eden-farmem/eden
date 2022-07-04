@@ -28,6 +28,7 @@ static const char *stat_names[] = {
 	/* scheduler counters */
 	"reschedules",
 	"sched_cycles",
+	"sched_cycles_idle",
 	"program_cycles",
 	"threads_stolen",
 	"softirqs_stolen",
@@ -50,8 +51,8 @@ static const char *stat_names[] = {
 	/* page fault counters */
 	"pf_posted",
 	"pf_returned",
-	"pf_time_spent_mus",
 	"pf_failed",
+	"pf_annot_hits"
 };
 
 /* must correspond exactly to STAT_* enum definitions in defs.h */

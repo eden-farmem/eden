@@ -222,11 +222,12 @@ static __noinline struct thread *do_watchdog(struct kthread *l)
 static __noreturn __noinline void schedule(void)
 {
 	struct kthread *r = NULL, *l = myk();
-	uint64_t start_tsc, end_tsc;
+	uint64_t start_tsc, end_tsc, duration;
 	thread_t *th = NULL;
 	unsigned int last_nrks;
 	unsigned int iters = 0;
 	int i, sibling;
+	bool first_try = true;
 
 	assert_spin_lock_held(&l->lock);
 	assert(l->parked == false);
@@ -297,6 +298,9 @@ again:
 		if (ks[i] != l && steal_work(l, ks[i]))
 			goto done;
 
+	/* need to retry */
+	first_try = false;
+
 	/* keep trying to find work until the polling timeout expires */
 	if (!preempt_needed() &&
 	    (++iters < RUNTIME_SCHED_POLL_ITERS ||
@@ -305,7 +309,9 @@ again:
 		goto again;
 
 	/* did not find anything to run, park this kthread */
-	STAT(SCHED_CYCLES) += rdtsc() - start_tsc;
+	duration = rdtsc() - start_tsc;
+	STAT(SCHED_CYCLES_IDLE) += duration;
+	STAT(SCHED_CYCLES) += duration;
 	/* we may have got a preempt signal before voluntarily yielding */
 	kthread_park(!preempt_needed());
 	start_tsc = rdtsc();
@@ -328,7 +334,12 @@ done:
 
 	/* update exit stat counters */
 	end_tsc = rdtsc();
-	STAT(SCHED_CYCLES) += end_tsc - start_tsc;
+	duration = end_tsc - start_tsc;
+	STAT(SCHED_CYCLES) += duration;
+	if (!first_try)
+		/* if we didn't get here in the first try, count 
+		 * all the time towards idling */
+		STAT(SCHED_CYCLES_IDLE) += duration;
 	last_tsc = end_tsc;
 
 	/* increment the RCU generation number (odd is in thread) */
