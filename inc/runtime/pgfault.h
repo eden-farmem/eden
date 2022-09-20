@@ -49,7 +49,3 @@ extern struct fault_backend_ops fault_backend;
 /* functions */
 void possible_read_fault_on(void* address);
 void possible_write_fault_on(void* address);
-
-/* other names for the hints */
-#define HINT_READ_FAULT_AT	possible_read_fault_on
-#define HINT_WRITE_FAULT_AT	possible_write_fault_on

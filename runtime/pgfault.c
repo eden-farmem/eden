@@ -114,10 +114,9 @@ static inline void __possible_fault_on(void* address, int flags)
 #endif
 
 	if (nofault) {
-		/* TODO: Only uncomment this for debugging, this 
-		 * will affect performance when running with 
-		 * multiple cores */
-		// STAT(PF_ANNOT_HITS)++;
+		/* Only do this for debugging, this will affect performance 
+		 * of fastpath when running with multiple cores */
+		STAT(PF_ANNOT_HITS)++;
 		return;
 	}
 
@@ -125,9 +124,9 @@ static inline void __possible_fault_on(void* address, int flags)
 	int ret, posted = 0;
 	struct kthread *k;
 	bool yield;
+	unsigned long start_tsc = 0;
 #ifdef PAGE_FAULTS_SYNC
 	struct kthread *l;
-	unsigned long start_tsc;
 #endif
 
 	thread_t* myth = thread_self();
@@ -151,6 +150,8 @@ static inline void __possible_fault_on(void* address, int flags)
 		ret = fault_backend.post_async(fault.channel, &fault);
 		posted = (ret == 0);
 		if (posted) {
+			if (start_tsc != 0)
+				STAT(SCHED_CYCLES_IDLE) += (rdtscp(NULL) - start_tsc);
 			break;
 		}
 #ifdef PAGE_FAULTS_SYNC
@@ -161,6 +162,10 @@ static inline void __possible_fault_on(void* address, int flags)
 		log_debug("thread %p could not post", myth);
 		spin_unlock(&k->pf_lock);
 
+		/* count towards idle time as long as the we're waiting to post */
+		if (start_tsc == 0)
+			start_tsc = rdtsc();
+
 		/* check if we should yield; its important that we yield 
 		 * to resolve page fault responses to avoid livelocks. 
 		 * currently we do not yield for external irqs like network 
@@ -170,7 +175,10 @@ static inline void __possible_fault_on(void* address, int flags)
 
 		if (yield) {
 			log_debug("thread %p yielding", myth);
+			/* record idle time before yielding */
+			STAT(SCHED_CYCLES_IDLE) += (rdtscp(NULL) - start_tsc);
 			thread_yield();
+			start_tsc = rdtsc();	/* start idle time again */
 		}
 
 		cpu_relax();
@@ -210,9 +218,15 @@ static inline void __possible_fault_on(void* address, int flags)
 #ifdef DEBUG
 	/* there should be no fault at this point */	
 	log_debug("thread %p released after servicing %p", myth, address);
-	nofault = (flags & FAULT_FLAG_READ) 
-		? is_page_mapped((void*) address) 
-		: is_page_mapped_and_readonly((void*) address);
+#ifdef KONA_PAGE_CHECKS
+	bool nofault = (flags & FAULT_FLAG_READ)
+		? kapi_is_page_mapped((unsigned long)address)
+		: kapi_is_page_mapped_and_readonly((unsigned long)address);
+#else
+	bool nofault = (flags & FAULT_FLAG_READ)
+		? is_page_mapped_vdso(address)
+		: is_page_mapped_and_readonly_vdso(address);
+#endif
 	if (!nofault) {
 		STAT(PF_FAILED)++;
 		log_debug("thread %p pagefault serviced but still faults at %p", 
