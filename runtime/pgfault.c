@@ -22,8 +22,8 @@ const char *version = "LINUX_2.6";
 const char *name_mapped = "__vdso_is_page_mapped";
 const char *name_wp = "__vdso_is_page_mapped_and_wrprotected";
 typedef long (*vdso_check_page_t)(const void *p);
-vdso_check_page_t is_page_mapped;
-vdso_check_page_t is_page_mapped_and_wrprotected;
+vdso_check_page_t is_page_mapped_vdso;
+vdso_check_page_t is_page_mapped_and_readonly_vdso;
 
 /**
  * pgfault_init - initializes page fault support 
@@ -51,13 +51,13 @@ int pgfault_init()
 	}
 
 	vdso_init_from_sysinfo_ehdr(getauxval(AT_SYSINFO_EHDR));
-	is_page_mapped = (vdso_check_page_t)vdso_sym(version, name_mapped);
-	if (!is_page_mapped) {
+	is_page_mapped_vdso = (vdso_check_page_t)vdso_sym(version, name_mapped);
+	if (!is_page_mapped_vdso) {
 		log_err("Could not find %s in vdso", name_mapped);
 		return -ENOENT;
 	}
-	is_page_mapped_and_wrprotected = (vdso_check_page_t)vdso_sym(version, name_wp);
-	if (!is_page_mapped_and_wrprotected) {
+	is_page_mapped_and_readonly_vdso = (vdso_check_page_t)vdso_sym(version, name_wp);
+	if (!is_page_mapped_and_readonly_vdso) {
 		log_err("Could not find %s in vdso", name_wp);
 		return -ENOENT;
 	}
@@ -101,10 +101,17 @@ static inline void __possible_fault_on(void* address, int flags)
 #ifndef PAGE_FAULTS
 	return;
 #endif
+
 	/* fast path */
+#ifdef KONA_PAGE_CHECKS
 	bool nofault = (flags & FAULT_FLAG_READ)
-		? is_page_mapped(address) 
-		: is_page_mapped_and_wrprotected(address);
+		? kapi_is_page_mapped((unsigned long)address)
+		: kapi_is_page_mapped_and_readonly((unsigned long)address);
+#else
+	bool nofault = (flags & FAULT_FLAG_READ)
+		? is_page_mapped_vdso(address)
+		: is_page_mapped_and_readonly_vdso(address);
+#endif
 
 	if (nofault) {
 		/* TODO: Only uncomment this for debugging, this 
@@ -205,7 +212,7 @@ static inline void __possible_fault_on(void* address, int flags)
 	log_debug("thread %p released after servicing %p", myth, address);
 	nofault = (flags & FAULT_FLAG_READ) 
 		? is_page_mapped((void*) address) 
-		: is_page_mapped_and_wrprotected((void*) address);
+		: is_page_mapped_and_readonly((void*) address);
 	if (!nofault) {
 		STAT(PF_FAILED)++;
 		log_debug("thread %p pagefault serviced but still faults at %p", 

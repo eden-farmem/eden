@@ -42,6 +42,10 @@ INC += -I../backends/kona/pbmem/
 CFLAGS += -DWITH_KONA
 endif
 
+ifneq ($(WITH_KONA_PAGE_CHECKS),)
+CFLAGS += -DKONA_PAGE_CHECKS
+endif
+
 ifneq ($(STATS_CORE),)
 CFLAGS += -DSTATS_CORE=$(STATS_CORE)
 endif
