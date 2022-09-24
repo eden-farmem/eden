@@ -19,6 +19,7 @@
 #include <runtime/thread.h>
 #include <runtime/rcu.h>
 #include <runtime/preempt.h>
+#include <runtime/rmem.h>
 
 
 /*
@@ -488,6 +489,7 @@ extern int stat_init_thread(void);
 extern int net_init_thread(void);
 extern int smalloc_init_thread(void);
 extern int pgfault_init_thread(void);
+extern int rmem_init_thread(void);
 
 /* global initialization */
 extern int ioqueues_init(unsigned int threads);
@@ -499,6 +501,7 @@ extern int arp_init(void);
 extern int trans_init(void);
 extern int smalloc_init(void);
 extern int pgfault_init(void);
+extern int rmem_init(void);
 
 /* late initialization */
 extern int ioqueues_register_iokernel(void);
@@ -506,6 +509,7 @@ extern int arp_init_late(void);
 extern int stat_init_late(void);
 extern int tcp_init_late(void);
 extern int rcu_init_late(void);
+extern int rmem_init_late(void);
 
 /* configuration loading */
 extern int cfg_load(const char *path);

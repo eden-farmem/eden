@@ -1,5 +1,6 @@
-// Copyright © 2018-2021 VMware, Inc. All Rights Reserved.
-// SPDX-License-Identifier: BSD-2-Clause
+/*
+ * uffd.h - uffd helper methods
+ */
 
 #ifndef __UFFD_H__
 #define __UFFD_H__

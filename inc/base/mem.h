@@ -57,3 +57,13 @@ mem_lookup_page_phys_addr(void *addr, size_t pgsize, physaddr_t *paddr)
 {
 	return mem_lookup_page_phys_addrs(addr, pgsize, pgsize, paddr);
 }
+
+extern __thread bool __from_runtime;
+#define RUNTIME_BEGIN()             \
+  do {                              \
+    __from_runtime = true;          \
+  } while (0)
+#define RUNTIME_END()               \
+  do {                              \
+    __from_runtime = false;         \
+  } while (0)

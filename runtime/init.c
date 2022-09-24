@@ -44,6 +44,9 @@ static const struct init_entry global_init_handlers[] = {
 	GLOBAL_INITIALIZER(net),
 	GLOBAL_INITIALIZER(arp),
 	GLOBAL_INITIALIZER(trans),
+
+	/* remote memory */
+	GLOBAL_INITIALIZER(rmem),
 };
 
 #define THREAD_INITIALIZER(name) \
@@ -62,6 +65,9 @@ static const struct init_entry thread_init_handlers[] = {
 
 	/* network stack */
 	THREAD_INITIALIZER(net),
+
+	/* remote memory */
+	THREAD_INITIALIZER(rmem),
 };
 
 #define LATE_INITIALIZER(name) \
@@ -73,6 +79,7 @@ static const struct init_entry late_init_handlers[] = {
 	LATE_INITIALIZER(stat),
 	LATE_INITIALIZER(tcp),
 	LATE_INITIALIZER(rcu),
+	LATE_INITIALIZER(rmem),
 };
 
 static int run_init_handlers(const char *phase,

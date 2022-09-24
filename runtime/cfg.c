@@ -170,6 +170,12 @@ static int parse_watchdog_flag(const char *name, const char *val)
 	return 0;
 }
 
+static int parse_remote_memory_flag(const char *name, const char *val)
+{
+	rmem_enabled = true;
+	return 0;
+}
+
 static int parse_static_arp_entry(const char *name, const char *val)
 {
 	int ret;
@@ -236,6 +242,7 @@ static const struct cfg_handler cfg_handlers[] = {
 	{ "static_arp", parse_static_arp_entry, false },
 	{ "log_level", parse_log_level, false },
 	{ "disable_watchdog", parse_watchdog_flag, false },
+	{ "remote_memory", parse_remote_memory_flag, false },
 };
 
 /**

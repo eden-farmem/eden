@@ -1,5 +1,6 @@
-// Copyright © 2018-2021 VMware, Inc. All Rights Reserved.
-// SPDX-License-Identifier: BSD-2-Clause
+/*
+ * uffd.c - uffd helper methods
+ */
 
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE
