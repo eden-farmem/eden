@@ -120,7 +120,7 @@ static inline bool core_available(unsigned int core)
 }
 
 /* a list of procs that currently require more cores */
-static LIST_HEAD(overloaded_procs);
+static LIST2_HEAD(overloaded_procs);
 
 /**
  * proc_set_overloaded - marks a process as overloaded
@@ -175,7 +175,7 @@ static inline struct proc *get_overloaded_proc()
 }
 
 /* a list of procs that are using more cores than they have reserved */
-static LIST_HEAD(bursting_procs);
+static LIST2_HEAD(bursting_procs);
 
 /**
  * proc_set_bursting - marks a process as bursting

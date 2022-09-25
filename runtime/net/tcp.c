@@ -17,7 +17,7 @@
 /* protects @tcp_conns */
 static DEFINE_SPINLOCK(tcp_lock);
 /* a list of all TCP connections */
-static LIST_HEAD(tcp_conns);
+static LIST2_HEAD(tcp_conns);
 
 static void tcp_retransmit(void *arg);
 
@@ -259,7 +259,7 @@ int tcp_conn_attach(tcpconn_t *c, struct netaddr laddr, struct netaddr raddr)
 	else if (laddr.ip != netcfg.addr)
 		return -EINVAL;
 
-	trans_init_5tuple(&c->e, IPPROTO_TCP, &tcp_conn_ops, laddr, raddr);
+	trans_init_5tuple(&c->e, IPPROTO2_TCP, &tcp_conn_ops, laddr, raddr);
 	if (laddr.port == 0)
 		ret = trans_table_add_with_ephemeral_port(&c->e);
 	else
@@ -398,7 +398,7 @@ int tcp_listen(struct netaddr laddr, int backlog, tcpqueue_t **q_out)
 	if (!q)
 		return -ENOMEM;
 
-	trans_init_3tuple(&q->e, IPPROTO_TCP, &tcp_queue_ops, laddr);
+	trans_init_3tuple(&q->e, IPPROTO2_TCP, &tcp_queue_ops, laddr);
 	spin_lock_init(&q->l);
 	waitq_init(&q->wq);
 	list_head_init(&q->conns);

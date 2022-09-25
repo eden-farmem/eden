@@ -268,7 +268,7 @@ static bool check_ip_hdr(struct rte_mbuf *buf)
 	ipv4_hdr = rte_pktmbuf_mtod_offset(buf, struct rte_ipv4_hdr *,
 			RTE_ETHER_HDR_LEN);
 	if (ipv4_hdr->dst_addr != rte_cpu_to_be_32(my_ip)
-			|| ipv4_hdr->next_proto_id != IPPROTO_UDP)
+			|| ipv4_hdr->next_proto_id != IPPROTO2_UDP)
 		return false;
 
 	return true;
@@ -380,7 +380,7 @@ got_mac:
 		ipv4_hdr->packet_id = 0;
 		ipv4_hdr->fragment_offset = 0;
 		ipv4_hdr->time_to_live = 64;
-		ipv4_hdr->next_proto_id = IPPROTO_UDP;
+		ipv4_hdr->next_proto_id = IPPROTO2_UDP;
 		ipv4_hdr->hdr_checksum = 0;
 		ipv4_hdr->src_addr = rte_cpu_to_be_32(my_ip);
 		ipv4_hdr->dst_addr = rte_cpu_to_be_32(server_ip);

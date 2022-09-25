@@ -15,7 +15,7 @@
 
 /* a list and count of registered stats */
 static DEFINE_SPINLOCK(stat_lock);
-static LIST_HEAD(stat_list);
+static LIST2_HEAD(stat_list);
 static int stat_count;
 
 /**

@@ -107,34 +107,34 @@ struct list_node *list_check_node(const struct list_node *n,
 #endif
 
 /**
- * LIST_HEAD_INIT - initializer for an empty list_head
+ * LIST2_HEAD_INIT - initializer for an empty list_head
  * @name: the name of the list.
  *
  * Explicit initializer for an empty list.
  *
  * See also:
- *	LIST_HEAD, list_head_init()
+ *	LIST2_HEAD, list_head_init()
  *
  * Example:
- *	static struct list_head my_list = LIST_HEAD_INIT(my_list);
+ *	static struct list_head my_list = LIST2_HEAD_INIT(my_list);
  */
-#define LIST_HEAD_INIT(name) { { &name.n, &name.n } }
+#define LIST2_HEAD_INIT(name) { { &name.n, &name.n } }
 
 /**
- * LIST_HEAD - define and initialize an empty list_head
+ * LIST2_HEAD - define and initialize an empty list_head
  * @name: the name of the list.
  *
- * The LIST_HEAD macro defines a list_head and initializes it to an empty
+ * The LIST2_HEAD macro defines a list_head and initializes it to an empty
  * list.  It can be prepended by "static" to define a static list_head.
  *
  * See also:
- *	LIST_HEAD_INIT, list_head_init()
+ *	LIST2_HEAD_INIT, list_head_init()
  *
  * Example:
- *	static LIST_HEAD(my_global_list);
+ *	static LIST2_HEAD(my_global_list);
  */
-#define LIST_HEAD(name) \
-	struct list_head name = LIST_HEAD_INIT(name)
+#define LIST2_HEAD(name) \
+	struct list_head name = LIST2_HEAD_INIT(name)
 
 /**
  * list_head_init - initialize a list_head

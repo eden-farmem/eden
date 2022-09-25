@@ -19,7 +19,7 @@
 #include <base/tcache.h>
 
 static DEFINE_SPINLOCK(tcache_lock);
-static LIST_HEAD(tcache_list);
+static LIST2_HEAD(tcache_list);
 
 static struct tcache_hdr *tcache_alloc_mag(struct tcache *tc)
 {

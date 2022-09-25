@@ -122,7 +122,7 @@ void net_error(struct mbuf *m, int err)
 	/* don't check length because ICMP may not provide the full payload */
 
 	/* so far we only support error handling in UDP and TCP */
-	if (iphdr->proto == IPPROTO_UDP || iphdr->proto == IPPROTO_TCP)
+	if (iphdr->proto == IPPROTO2_UDP || iphdr->proto == IPPROTO2_TCP)
 		trans_error(m, err);
 }
 
@@ -188,12 +188,12 @@ static struct mbuf *net_rx_one(struct rx_net_hdr *hdr)
 		mbuf_trim(m, mbuf_length(m) - len);
 
 	switch(iphdr->proto) {
-	case IPPROTO_ICMP:
+	case IPPROTO2_ICMP:
 		net_rx_icmp(m, iphdr, len);
 		break;
 
-	case IPPROTO_UDP:
-	case IPPROTO_TCP:
+	case IPPROTO2_UDP:
+	case IPPROTO2_TCP:
 		return m;
 
 	default:

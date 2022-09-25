@@ -7,7 +7,7 @@
 #include <base/gen.h>
 #include <base/lrpc.h>
 #include <base/mem.h>
-#undef LIST_HEAD /* hack to deal with DPDK being annoying */
+#undef LIST2_HEAD /* hack to deal with DPDK being annoying */
 #include <base/list.h>
 #include <iokernel/control.h>
 #include <net/ethernet.h>

@@ -40,7 +40,7 @@ BUILD_ASSERT(sizeof(struct slab_hdr) <= SLAB_MIN_SIZE);
 #define SLAB_2MB_LIMIT \
 	(align_down(PGSIZE_2MB / (SLAB_PARTIAL_THRESH * 2), __WORD_SIZE))
 
-static LIST_HEAD(slab_list);
+static LIST2_HEAD(slab_list);
 static DEFINE_SPINLOCK(slab_lock);
 static struct slab node_slab;
 
