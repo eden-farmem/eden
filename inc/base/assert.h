@@ -32,10 +32,11 @@ extern void logk_bug(bool fatal, const char *expr,
 #else /* DEBUG */
 #define assert(cond)						\
 	do {							\
-		__build_assert_if_constant(cond);		\
+		__build_assert_if_constant(1);	/*UNDO*/		\
 		(void)sizeof(cond);				\
 	} while (0)
 #endif /* DEBUG */
+#define assertz(x) assert(x==0)
 
 /**
  * BUG - a fatal code-path that doesn't compile out in release builds

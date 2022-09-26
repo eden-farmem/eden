@@ -176,6 +176,12 @@ static int parse_remote_memory_flag(const char *name, const char *val)
 	return 0;
 }
 
+static int parse_rmem_local_memory_flag(const char *name, const char *val)
+{
+	int ret = str_to_long(val, (long int *)&local_memory);
+	return ret;
+}
+
 static int parse_static_arp_entry(const char *name, const char *val)
 {
 	int ret;
@@ -237,12 +243,12 @@ static const struct cfg_handler cfg_handlers[] = {
 	{ "host_mac", parse_mac_address, false },
 	{ "runtime_kthreads", parse_runtime_kthreads, true },
 	{ "runtime_spinning_kthreads", parse_runtime_spinning_kthreads, false },
-	{ "runtime_guaranteed_kthreads", parse_runtime_guaranteed_kthreads,
-			false },
+	{ "runtime_guaranteed_kthreads", parse_runtime_guaranteed_kthreads, false },
 	{ "static_arp", parse_static_arp_entry, false },
 	{ "log_level", parse_log_level, false },
 	{ "disable_watchdog", parse_watchdog_flag, false },
 	{ "remote_memory", parse_remote_memory_flag, false },
+	{ "rmem_local_memory", parse_rmem_local_memory_flag, false },
 };
 
 /**

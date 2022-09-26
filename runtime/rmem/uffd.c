@@ -280,21 +280,3 @@ int uffd_wake(int fd, unsigned long addr, size_t size) {
     if (r < 0) log_err("UFFDIO_WAKE");
     return r;
 }
-
-// void init_evt_fd(void) {
-//     mr_mgr.evt = xmalloc(MAX_EVENT_FD * sizeof(struct pollfd));
-//     for (int i = 0; i < MAX_EVENT_FD; i++) {
-//         mr_mgr.evt[i] = (struct pollfd){.fd = -1, .events = POLLIN};
-//     }
-
-//     mr_mgr.evt_count = 2;
-//     mr_mgr.evt[0].fd = mr_mgr.abort_fd[0];
-//     mr_mgr.evt[1].fd = mr_mgr.userfault_fd;
-// }
-
-// void add_evt_fd(int fd) {
-// #ifdef FORK_SUPPORT
-//     mr_mgr.evt[mr_mgr.evt_count++].fd = fd;
-//     log_info("added fd:%d at position %d", fd, mr_mgr.evt_count - 1);
-// #endif
-// }

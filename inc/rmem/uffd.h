@@ -18,7 +18,7 @@ int uffd_wp_remove(int fd, unsigned long fault_addr, size_t size, bool retry, in
 int uffd_zero(int fd, unsigned long addr, size_t size, bool retry, int *n_retries);
 int uffd_wake(int fd, unsigned long addr, size_t size);
 
-// void init_evt_fd(void);
-// void add_evt_fd(int fd);
+/* uffd state */
+extern int userfault_fd;
 
 #endif  // __UFFD_H__
