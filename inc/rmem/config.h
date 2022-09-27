@@ -43,14 +43,40 @@ typedef enum {
 #define RDMA_SERVER_SLAB_SIZE   RMEM_SLAB_SIZE
 #define NUM_POLL_CQ             16
 
-/* Max remote memory available on each server. Currently we only work with one 
-server so this setting dictates max remote memory as well. */
+/* settings for different machines */
 #ifdef CLOUDLAB_R320
-#define RDMA_SERVER_MEMORY_GB   12      /*cloudLab R320s have 16 GB*/
-#elif defined(CLOUDLAB_C6220) || defined(CLOUDLAB_XL170) || defined(CLOUDLAB_D6515)
-#define RDMA_SERVER_MEMORY_GB   32      /*these have 64GB max*/
+/* Single NUMA nodes for both machines.
+ * R320: CPU(s): 16 
+ * 16Gb Memory */
+#define PIN_POLLER_CORE         13
+#define PIN_SERVER_CORE         12
+#define PIN_SERVER_POLLER_CORE  11
+#define PIN_RACK_CNTRL_CORE     10
+#define PIN_RACK_CNTRL_POLLER_CORE 9
+#define RDMA_SERVER_MEMORY_GB   12
+
+#elif defined(CLOUDLAB_C6220)
+/* NUMA node0 CPU(s):   0-7,16-23
+ * NUMA node1 CPU(s):   8-15,24-31
+ * RNIC NUMA node = 1
+ * 64 GB Memory */
+#define PIN_SERVER_CORE         28
+#define PIN_SERVER_POLLER_CORE  27
+#define PIN_RACK_CNTRL_CORE 2   6
+#define PIN_RACK_CNTRL_POLLER_CORE 25
+#define RDMA_SERVER_MEMORY_GB   32
+
 #elif defined(VRG_SC2)
-#define RDMA_SERVER_MEMORY_GB   64      /*VRG SC2 has 176 GB each*/
+/* NUMA node0 CPU(s):   0-13,28-41
+ * NUMA node1 CPU(s):   14-27,42-55
+ * RNIC NUMA node = 1
+ * 176 GB Memory */
+#define RDMA_SERVER_MEMORY_GB   64
+#define PIN_SERVER_CORE         52
+#define PIN_SERVER_POLLER_CORE  51
+#define PIN_RACK_CNTRL_CORE     50
+#define PIN_RACK_CNTRL_POLLER_CORE 49
+
 #else
 #pragma GCC error "Specify memory size for selected machine"
 #endif

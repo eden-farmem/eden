@@ -219,11 +219,11 @@ static inline void __possible_fault_on(void* address, int flags)
 	/* there should be no fault at this point */	
 	log_debug("thread %p released after servicing %p", myth, address);
 #ifdef KONA_PAGE_CHECKS
-	bool nofault = (flags & FAULT_FLAG_READ)
+	nofault = (flags & FAULT_FLAG_READ)
 		? kapi_is_page_mapped((unsigned long)address)
 		: kapi_is_page_mapped_and_readonly((unsigned long)address);
 #else
-	bool nofault = (flags & FAULT_FLAG_READ)
+	nofault = (flags & FAULT_FLAG_READ)
 		? is_page_mapped_vdso(address)
 		: is_page_mapped_and_readonly_vdso(address);
 #endif

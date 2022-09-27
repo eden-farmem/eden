@@ -23,7 +23,7 @@
 static const int RDMA_BUFFER_SIZE = CHUNK_SIZE;
 
 /* global state */
-struct server_conn_t *servers[MAX_SERVERS + 1];
+struct server_conn_t* servers[MAX_SERVERS + 1];
 SLIST_HEAD(servers_listhead, server_conn_t);
 struct servers_listhead servers_list;
 static struct context *s_ctx = NULL;
@@ -49,9 +49,11 @@ static void wait_one_completion(struct region_t *reg, enum ibv_wc_opcode opcode,
     assert(msgtype < NUM_MSG_TYPE);
 
     // struct context ctx;
-    // assertz(ibv_get_cq_event(s_ctx->comp_channel, &cq, (void **) &ctx));
+    // ret = ibv_get_cq_event(s_ctx->comp_channel, &cq, (void **) &ctx));
+    // assertz(ret);
     // ibv_ack_cq_events(cq, 1);
-    // assertz(ibv_req_notify_cq(cq, 0));
+    // ret = ibv_req_notify_cq(cq, 0);
+    // assertz(ret);
 
     cq = s_ctx->cq_recv;
     while (1) {
@@ -212,15 +214,18 @@ void build_context(struct ibv_context *verbs) {
     assert(s_ctx);
     s_ctx->ctx = verbs;
 
-    assert(s_ctx->pd = ibv_alloc_pd(s_ctx->ctx));
-    assert(s_ctx->comp_channel = ibv_create_comp_channel(s_ctx->ctx));
-    assert(s_ctx->cq_send = ibv_create_cq(s_ctx->ctx, CQ_SEND_SIZE, NULL, 
-        s_ctx->comp_channel, 0));
-    assert(s_ctx->cq_recv = ibv_create_cq(s_ctx->ctx, CQ_RECV_SIZE, NULL, 
-        s_ctx->comp_channel, 0));
+    s_ctx->pd = ibv_alloc_pd(s_ctx->ctx);
+	assert(s_ctx->pd);
+   	s_ctx->comp_channel = ibv_create_comp_channel(s_ctx->ctx);
+	assert(s_ctx->comp_channel);
+    s_ctx->cq_send = ibv_create_cq(s_ctx->ctx, CQ_SEND_SIZE, NULL, s_ctx->comp_channel, 0);
+    assert(s_ctx->cq_send);
+    s_ctx->cq_recv = ibv_create_cq(s_ctx->ctx, CQ_RECV_SIZE, NULL, s_ctx->comp_channel, 0);
+    assert(s_ctx->cq_recv);
 
     // polling, so we don't need the notification
-    //	assertz(ibv_req_notify_cq(s_ctx->cq, 0));
+    // int ret = ibv_req_notify_cq(s_ctx->cq, 0));
+    // assertz(ret);
 
     mb();
     ready_for_poll = 1;
@@ -242,11 +247,13 @@ void build_qp_attr(struct ibv_qp_init_attr *qp_attr) {
 void build_connection(struct rdma_cm_id *id) {
     struct connection *conn;
     struct ibv_qp_init_attr qp_attr;
+    int ret;
 
     build_context(id->verbs);
     build_qp_attr(&qp_attr);
 
-    assertz(rdma_create_qp(id, s_ctx->pd, &qp_attr));
+    ret = rdma_create_qp(id, s_ctx->pd, &qp_attr);
+    assertz(ret);
     id->context = conn = (struct connection *)malloc(sizeof(struct connection));
     assert(conn);
     conn->id = id;
@@ -259,9 +266,11 @@ void build_connection(struct rdma_cm_id *id) {
 }
 
 int on_addr_resolved(struct rdma_cm_id *id) {
+    int ret;
     log_debug("address resolved.");
     build_connection(id);
-    assertz(rdma_resolve_route(id, TIMEOUT_IN_MS));
+    ret = rdma_resolve_route(id, TIMEOUT_IN_MS);
+    assertz(ret);
     return 0;
 }
 
@@ -291,16 +300,19 @@ int on_event(struct rdma_cm_event *event) {
         r = on_disconnect(event->id);
     else {
         log_err("on_event: %d status: %d\n", event->event, event->status);
-        assert(0 && "Unknown event: is RDMA server running?");
+        log_err("Unknown event: is RDMA server running?");
+        BUG();
     }
     return r;
 }
 
 int on_route_resolved(struct rdma_cm_id *id) {
     struct rdma_conn_param cm_params;
+    int ret;
     log_debug("route resolved.\n");
     build_params(&cm_params);
-    assertz(rdma_connect(id, &cm_params));
+    ret = rdma_connect(id, &cm_params);
+    assertz(ret);
     return 0;
 }
 
@@ -331,14 +343,18 @@ static void send_msg_slab_rem(struct connection *conn, struct region_t *reg) {
 void remote_client_create(struct server_conn_t *rrc) {
     char portstr[10];
     struct addrinfo *addr = NULL;
+    int ret;
 
     sprintf(portstr, "%d", rrc->port);
     log_info("client connection to server %s on port %s", rrc->ip, portstr);
-    assertz(getaddrinfo(rrc->ip, portstr, NULL, &addr));
-
-    assert(rrc->rchannel = rdma_create_event_channel());
-    assertz(rdma_create_id(rrc->rchannel, &(rrc->rid), NULL, RDMA_PS_TCP));
-    assertz(rdma_resolve_addr(rrc->rid, NULL, addr->ai_addr, TIMEOUT_IN_MS));
+    ret = getaddrinfo(rrc->ip, portstr, NULL, &addr);
+    assertz(ret);
+    rrc->rchannel = rdma_create_event_channel();
+    assert(rrc->rchannel);
+    ret = rdma_create_id(rrc->rchannel, &(rrc->rid), NULL, RDMA_PS_TCP);
+    assertz(ret);
+    ret = rdma_resolve_addr(rrc->rid, NULL, addr->ai_addr, TIMEOUT_IN_MS);
+    assertz(ret);
 
     assert(addr != NULL);
     freeaddrinfo(addr);
@@ -813,9 +829,8 @@ int rdma_init() {
         local_memory, eviction_threshold, eviction_done_threshold);        
     log_info("rcntrl_ip=%s, rcntrl_port=%d", rcntrl_ip, rcntrl_port);
 
-    for (i = 0; i < MAX_SERVERS; i++) {
-        servers[i] = (struct server_conn_t *) malloc(
-            sizeof(struct server_conn_t));
+    for (i = 0; i <= MAX_SERVERS; i++) {
+        servers[i] = (struct server_conn_t *) malloc(sizeof(struct server_conn_t));
         assert(servers[i] != NULL);
     }
 

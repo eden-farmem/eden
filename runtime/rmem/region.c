@@ -78,7 +78,9 @@ error:
 }
 
 void remove_memory_region(struct region_t *mr) {
+    int ret;
     log_debug("deleting region %p", mr);
+    
     spin_lock(&regions_lock);
     SLIST_REMOVE(&region_list, mr, region_t, link);
     spin_unlock(&regions_lock);
@@ -88,6 +90,8 @@ void remove_memory_region(struct region_t *mr) {
 
     /* notify backed memory */
     assert(rmbackend != NULL);
-    assertz(rmbackend->remove_region(mr));
+    ret = rmbackend->remove_region(mr);
+    assertz(ret);
+    
     munmap(mr, sizeof(struct region_t));
 }

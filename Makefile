@@ -87,6 +87,14 @@ runtime_src = $(wildcard runtime/*.c) $(wildcard runtime/net/*.c) $(wildcard run
 runtime_asm = $(wildcard runtime/*.S)
 runtime_obj = $(runtime_src:.c=.o) $(runtime_asm:.S=.o)
 
+# controller - remote memory controller
+rcntrl_src = rmem/rcntrl.c runtime/rmem/rdma.c
+rcntrl_obj = $(rcntrl_src:.c=.o)
+
+# memserver - remote memory server
+memserver_src = rmem/memserver.c runtime/rmem/rdma.c
+memserver_obj = $(memserver_src:.c=.o)
+
 # test cases
 test_src = $(wildcard tests/*.c)
 test_obj = $(test_src:.c=.o)
@@ -118,10 +126,10 @@ DPDK_LIBS = $(shell $(PKGCONF) --static --libs libdpdk)
 
 
 # must be first
-all: libbase.a libnet.a libruntime.a iokerneld iokerneld-noht $(test_targets)
+all: all-but-tests $(test_targets)
 
 # ignore tests for kona (due to the external dependency on it while linking)
-all-but-tests: libbase.a libnet.a libruntime.a iokerneld iokerneld-noht
+all-but-tests: libbase.a libnet.a libruntime.a iokerneld iokerneld-noht rcntrl memserver
 
 libs: libbase.a libnet.a libruntime.a 
 
@@ -144,13 +152,19 @@ iokerneld-noht: $(iokernel_noht_obj) libbase.a libnet.a base/base.ld
 	$(LD) $(LDFLAGS) -o $@ $(iokernel_noht_obj) libbase.a libnet.a $(DPDK_LIBS) \
 	 -lpthread -lnuma -ldl
 
+rcntrl: $(rcntrl_obj) libbase.a 
+	$(LD) $(LDFLAGS) -o $@ $(rcntrl_obj) libbase.a -lpthread -lrdmacm -libverbs
+
+memserver: $(memserver_obj) libbase.a 
+	$(LD) $(LDFLAGS) -o $@ $(memserver_obj) libbase.a -lpthread -lrdmacm -libverbs
+
 $(test_targets): $(test_obj) libbase.a libruntime.a libnet.a base/base.ld
 	$(LD) $(LDFLAGS) -o $@ $@.o libruntime.a libnet.a libbase.a -lpthread -lrdmacm -libverbs
 
 # general build rules for all targets
-src = $(base_src) $(net_src) $(runtime_src) $(iokernel_src) $(test_src)
+src = $(base_src) $(net_src) $(runtime_src) $(iokernel_src) $(test_src) $(rcntrl_src) $(memserver_src)
 asm = $(runtime_asm)
-obj = $(src:.c=.o) $(asm:.S=.o) $(iokernel_src:.c=-noht.o)
+obj = $(src:.c=.o) $(asm:.S=.o) $(iokernel_src:.c=-noht.o) $(rcntrl_src:.c=.o) $(memserver_src:.c=.o)
 dep = $(obj:.o=.d)
 
 ifneq ($(MAKECMDGOALS),clean)
@@ -179,4 +193,4 @@ sparse: $(src)
 .PHONY: clean
 clean:
 	rm -f $(obj) $(dep) libbase.a libnet.a libruntime.a \
-	iokerneld iokerneld-noht $(test_targets)
+	iokerneld iokerneld-noht rcntrl memserver $(test_targets)

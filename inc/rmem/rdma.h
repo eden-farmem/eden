@@ -59,6 +59,7 @@ struct context {
     struct ibv_cq *cq_send;
     struct ibv_cq *cq;
     struct ibv_comp_channel *comp_channel;
+    pthread_t cq_poller_thread;
 };
 
 struct server_conn_t {
