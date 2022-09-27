@@ -10,13 +10,13 @@
 #include <base/time.h>
 #include <base/init.h>
 
-extern void logk(int level, const char *fmt, ...)
-	__attribute__((__format__ (__printf__, 2, 3)));
+extern void logk(int level, const char* filename, const char *fmt, ...)
+	__attribute__((__format__ (__printf__, 3, 4)));
 extern void logk_backtrace(void);
 
 /* forces format checking */
 #define no_logk(level, fmt, ...) \
-	do {if (0) logk(level, fmt, ##__VA_ARGS__);} while (0)
+	do {if (0) logk(level, __FILE__, fmt, ##__VA_ARGS__);} while (0)
 
 extern int max_loglevel;
 
@@ -30,16 +30,16 @@ enum {
 	LOG_DEBUG	= 6, /* debug */
 };
 
-#define log_emerg(fmt, ...) logk(LOG_EMERG, fmt, ##__VA_ARGS__)
-#define log_crit(fmt, ...) logk(LOG_CRIT, fmt, ##__VA_ARGS__)
-#define log_err(fmt, ...) logk(LOG_ERR, fmt, ##__VA_ARGS__)
-#define log_warn(fmt, ...) logk(LOG_WARN, fmt, ##__VA_ARGS__)
-#define log_notice(fmt, ...) logk(LOG_NOTICE, fmt, ##__VA_ARGS__)
-#define log_info(fmt, ...) logk(LOG_INFO, fmt, ##__VA_ARGS__)
+#define log_emerg(fmt, ...) logk(LOG_EMERG, __FILE__, fmt, ##__VA_ARGS__)
+#define log_crit(fmt, ...) logk(LOG_CRIT, __FILE__, fmt, ##__VA_ARGS__)
+#define log_err(fmt, ...) logk(LOG_ERR, __FILE__, fmt, ##__VA_ARGS__)
+#define log_warn(fmt, ...) logk(LOG_WARN, __FILE__, fmt, ##__VA_ARGS__)
+#define log_notice(fmt, ...) logk(LOG_NOTICE, __FILE__, fmt, ##__VA_ARGS__)
+#define log_info(fmt, ...) logk(LOG_INFO, __FILE__, fmt, ##__VA_ARGS__)
 #ifdef DEBUG
-#define log_debug(fmt, ...) logk(LOG_DEBUG, fmt, ##__VA_ARGS__)
+#define log_debug(fmt, ...) logk(LOG_DEBUG, __FILE__, fmt, ##__VA_ARGS__)
 #else /* DEBUG */
-#define log_debug(fmt, ...) no_logk(LOG_DEBUG, fmt, ##__VA_ARGS__)
+#define log_debug(fmt, ...) no_logk(LOG_DEBUG, __FILE__, fmt, ##__VA_ARGS__)
 #endif /* DEBUG */
 
 #define log_once(level, fmt, ...)			\
@@ -47,7 +47,7 @@ enum {
 	static bool __once;				\
 	if (unlikely(!__once)) {			\
 		__once = true;				\
-		logk(level, fmt, ##__VA_ARGS__);	\
+		logk(level, __FILE__, fmt, ##__VA_ARGS__);	\
 	}						\
 })
 
@@ -68,7 +68,7 @@ enum {
 	static int __n = (num);					\
 	if (__n > 0) {							\
 		__n--;								\
-		logk(level, fmt, ##__VA_ARGS__);	\
+		logk(level, __FILE__, fmt, ##__VA_ARGS__);	\
 	}										\
 })
 
@@ -99,11 +99,11 @@ enum {
 	uint64_t __cur_us = microtime();		\
 	if (__cur_us - __last_us >= ONE_SECOND) {	\
 		if (__suppressed) {			\
-			logk(level, "%s:%d %s() suppressed %ld times", \
+			logk(level, __FILE__, "%s:%d %s() suppressed %ld times", \
 			     __FILE__, __LINE__, __func__, __suppressed); \
 			__suppressed = 0;		\
 		}					\
-		logk(level, fmt, ##__VA_ARGS__);	\
+		logk(level, __FILE__, fmt, ##__VA_ARGS__);	\
 		__last_us = __cur_us;			\
 	} else						\
 		__suppressed++;				\
@@ -130,5 +130,5 @@ enum {
 #endif /* DEBUG */
 
 #define panic(fmt, ...)					\
-	do {logk(LOG_EMERG, fmt, ##__VA_ARGS__);	\
+	do {logk(LOG_EMERG, __FILE__, fmt, ##__VA_ARGS__);	\
 	    init_shutdown(EXIT_FAILURE);} while (0)

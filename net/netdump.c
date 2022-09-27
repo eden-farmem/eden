@@ -25,14 +25,14 @@ void dump_eth_pkt(int loglvl, struct eth_hdr *hdr)
         struct eth_addr *dmac = &hdr->dhost;
         struct eth_addr *smac = &hdr->shost;
 
-	logk(loglvl, "ETHERNET packet dump\n");
-        logk(loglvl, "\tdst MAC: %02X:%02X:%02X:%02X:%02X:%02X\n",
+	logk(loglvl, __FILE__, "ETHERNET packet dump\n");
+        logk(loglvl, __FILE__, "\tdst MAC: %02X:%02X:%02X:%02X:%02X:%02X\n",
              dmac->addr[0], dmac->addr[1], dmac->addr[2],
              dmac->addr[3], dmac->addr[4], dmac->addr[5]);
-        logk(loglvl, "\tsrc MAC: %02X:%02X:%02X:%02X:%02X:%02X\n",
+        logk(loglvl, __FILE__, "\tsrc MAC: %02X:%02X:%02X:%02X:%02X:%02X\n",
              smac->addr[0], smac->addr[1], smac->addr[2],
              smac->addr[3], smac->addr[4], smac->addr[5]);
-        logk(loglvl, "\tframe type: %x\n", ntoh16(hdr->type));
+        logk(loglvl, __FILE__, "\tframe type: %x\n", ntoh16(hdr->type));
 }
 
 /**
@@ -56,25 +56,25 @@ void dump_arp_pkt(int loglvl,
         sip = ntoh32(ethip->sender_ip);
         tip = ntoh32(ethip->target_ip);
 
-        logk(loglvl, "ARP packet dump: op %s\n",
+        logk(loglvl, __FILE__, "ARP packet dump: op %s\n",
              (op == ARP_OP_REQUEST) ? "request" : "response");
 
 	if (!ethip) {
-		logk(loglvl, "\tunsupported htype %d, ptype %d\n",
+		logk(loglvl, __FILE__, "\tunsupported htype %d, ptype %d\n",
 		     ntoh16(arphdr->htype), ntoh16(arphdr->ptype));
 		return;
 	}
 
-        logk(loglvl, "\tsender MAC:\t%02X:%02X:%02X:%02X:%02X:%02X\n",
+        logk(loglvl, __FILE__, "\tsender MAC:\t%02X:%02X:%02X:%02X:%02X:%02X\n",
              smac->addr[0], smac->addr[1], smac->addr[2],
              smac->addr[3], smac->addr[4], smac->addr[5]);
-        logk(loglvl, "\tsender IP:\t%d.%d.%d.%d\n",
+        logk(loglvl, __FILE__, "\tsender IP:\t%d.%d.%d.%d\n",
              ((sip >> 24) & 0xff), ((sip >> 16) & 0xff),
              ((sip >> 8) & 0xff), (sip & 0xff));
-        logk(loglvl, "\ttarget MAC:\t%02X:%02X:%02X:%02X:%02X:%02X\n",
+        logk(loglvl, __FILE__, "\ttarget MAC:\t%02X:%02X:%02X:%02X:%02X:%02X\n",
              tmac->addr[0], tmac->addr[1], tmac->addr[2],
              tmac->addr[3], tmac->addr[4], tmac->addr[5]);
-        logk(loglvl, "\ttarget IP:\t%d.%d.%d.%d\n",
+        logk(loglvl, __FILE__, "\ttarget IP:\t%d.%d.%d.%d\n",
              ((tip >> 24) & 0xff), ((tip >> 16) & 0xff),
              ((tip >> 8) & 0xff), (tip & 0xff));
 }
@@ -93,7 +93,7 @@ void dump_udp_pkt(int loglvl, uint32_t saddr, struct udp_hdr *udp_hdr,
     dport = ntoh16(udp_hdr->dst_port);
     len = ntoh16(udp_hdr->len) - sizeof(*udp_hdr);
 
-    logk(loglvl, "UDP packet received from %s:%d on port %d", sip, sport,
+    logk(loglvl, __FILE__, "UDP packet received from %s:%d on port %d", sip, sport,
          dport);
     for (c = 0; c < len;) {
         d = snprintf(line, 256, "%016lx: ", c);
@@ -105,7 +105,7 @@ void dump_udp_pkt(int loglvl, uint32_t saddr, struct udp_hdr *udp_hdr,
             d += snprintf(line + d, 256 - d, " ");
         }
         line[d] = 0;
-        logk(loglvl, "%s", line);
+        logk(loglvl, __FILE__, "%s", line);
     }
 }
 

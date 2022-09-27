@@ -20,7 +20,7 @@ int max_loglevel = LOG_DEBUG;
 /* stored here to avoid pushing too much on the stack */
 static __thread char buf[MAX_LOG_LEN];
 
-void logk(int level, const char *fmt, ...)
+void logk(int level, const char* filename, const char *fmt, ...)
 {
 	va_list ptr;
 	off_t off;
@@ -33,11 +33,11 @@ void logk(int level, const char *fmt, ...)
 
 	if (likely(base_init_done)) {
 		uint64_t us = microtime();
-		sprintf(buf, "[%3d.%06d] CPU %02d| <%d> ",
+		sprintf(buf, "[%3d.%06d] CPU %02d| <%d> [%20s] ",
 			(int)(us / ONE_SECOND), (int)(us % ONE_SECOND),
-			cpu, level);
+			cpu, level, filename);
 	} else {
-		sprintf(buf, "CPU %02d| <%d> ", cpu, level);
+		sprintf(buf, "CPU %02d| <%d> [%10s] ", cpu, level, filename);
 	}
 
 	off = strlen(buf);
@@ -61,7 +61,7 @@ void logk_backtrace(void)
 void logk_bug(bool fatal, const char *expr,
 	      const char *file, int line, const char *func)
 {
-	logk(LOG_EMERG, "%s: %s:%d ASSERTION '%s' FAILED IN '%s'",
+	logk(LOG_EMERG, file, "%s: %s:%d ASSERTION '%s' FAILED IN '%s'",
 	     fatal ? "FATAL" : "WARN", file, line, expr, func);
 	logk_backtrace();
 
