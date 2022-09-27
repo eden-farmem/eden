@@ -648,13 +648,13 @@ void register_memory(struct connection *conn) {
     conn->send_msg = xmalloc(sizeof(struct message));
     conn->recv_msg = xmalloc(sizeof(struct message));
 
-    assert(conn->send_mr =
-                         ibv_reg_mr(s_ctx->pd, conn->send_msg, sizeof(struct message),
-                                                IBV_ACCESS_LOCAL_WRITE));
+    conn->send_mr = ibv_reg_mr(s_ctx->pd, conn->send_msg, sizeof(struct message),
+        IBV_ACCESS_LOCAL_WRITE);
+    assert(conn->send_mr);
 
-    assert(conn->recv_mr =
-                         ibv_reg_mr(s_ctx->pd, conn->recv_msg, sizeof(struct message),
-                                                IBV_ACCESS_LOCAL_WRITE));
+    conn->recv_mr = ibv_reg_mr(s_ctx->pd, conn->recv_msg, sizeof(struct message),
+        IBV_ACCESS_LOCAL_WRITE);
+    assert(conn->recv_mr);
 }
 
 static void build_context(struct ibv_context *verbs) {

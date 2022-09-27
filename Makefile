@@ -21,6 +21,10 @@ else
 CFLAGS += -DNDEBUG -O3
 endif
 
+ifneq ($(SAFEMODE),)
+CFLAGS += -DSAFEMODE
+endif
+
 ifneq ($(GDB),)
 CFLAGS += -g -ggdb
 endif

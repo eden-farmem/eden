@@ -303,7 +303,7 @@ void build_context_client(struct ibv_context *verbs) {
        s_ctx->cq = ibv_create_cq(s_ctx->ctx, 10, NULL, s_ctx->comp_channel, 0); /* cqe=10 is arbitrary*/
     assert(s_ctx->cq);
 
-      //int ret = pthread_create(&s_ctx->cq_poller_thread, NULL, poll_cq, NULL);
+    //int ret = pthread_create(&s_ctx->cq_poller_thread, NULL, poll_cq, NULL);
     //assertz(ret);
 }
 
@@ -625,13 +625,12 @@ static void build_context(struct ibv_context *verbs) {
     }
 
     s_ctx = (struct context *)xmalloc(sizeof(struct context));
-    assert(s_ctx);
     s_ctx->ctx = verbs;
-    // assert(s_ctx->ctx);
+    assert(s_ctx->ctx);
 
     s_ctx->pd = ibv_alloc_pd(s_ctx->ctx);
     assert(s_ctx->pd);
-       s_ctx->comp_channel = ibv_create_comp_channel(s_ctx->ctx);
+    s_ctx->comp_channel = ibv_create_comp_channel(s_ctx->ctx);
     assert(s_ctx->comp_channel);
     s_ctx->cq = ibv_create_cq(s_ctx->ctx, 10, NULL, s_ctx->comp_channel, 0); /* cqe=10 is arbitrary */
     assert(s_ctx->cq);

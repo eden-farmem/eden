@@ -39,7 +39,7 @@ enum {
 #ifdef DEBUG
 #define log_debug(fmt, ...) logk(LOG_DEBUG, __FILE__, fmt, ##__VA_ARGS__)
 #else /* DEBUG */
-#define log_debug(fmt, ...) no_logk(LOG_DEBUG, __FILE__, fmt, ##__VA_ARGS__)
+#define log_debug(fmt, ...) no_logk(LOG_DEBUG, fmt, ##__VA_ARGS__)
 #endif /* DEBUG */
 
 #define log_once(level, fmt, ...)			\
