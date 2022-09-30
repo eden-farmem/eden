@@ -21,7 +21,6 @@
 #include <runtime/preempt.h>
 #include <runtime/rmem.h>
 
-
 /*
  * constant limits
  * TODO: make these configurable?
@@ -319,6 +318,7 @@ struct kthread {
 
 	/* 10th cache-line, statistics counters */
 	uint64_t		stats[STAT_NR];
+	uint64_t		rstats[RSTAT_NR];
 };
 
 /* compile-time verification of cache-line alignment */
@@ -391,7 +391,16 @@ extern struct cpu_record cpu_map[NCPU];
  */
 #define STAT(counter) (myk()->stats[STAT_ ## counter])
 
-
+/**
+ * RSTAT - gets an remote memory stat counter
+ * (this can be used from both shenango & handler threads)
+ */
+static inline uint64_t* my_rstats() {
+   	if (my_hthr != NULL)   	return my_hthr->rstats;
+    else if (myk() != NULL)	return myk()->rstats;
+    else                   	BUG();
+} 
+#define RSTAT(counter) (my_rstats()[RSTAT_ ## counter])
 
 /*
  * Softirq support

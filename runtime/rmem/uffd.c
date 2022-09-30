@@ -221,7 +221,7 @@ int uffd_wp_add(int fd, unsigned long fault_addr, size_t size, bool retry,
 }
 
 /* NOTE: make sure that page exists before issuing this */
-int uffd_wp_remove(int fd,unsigned long fault_addr, size_t size, bool retry, 
+int uffd_wp_remove(int fd, unsigned long fault_addr, size_t size, bool retry, 
         int *n_retries) {
     return uffd_wp(fd, fault_addr, size, false, retry, n_retries);
 }

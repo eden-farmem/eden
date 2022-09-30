@@ -12,6 +12,7 @@
 #include <base/hash.h>
 #include <base/log.h>
 #include <iokernel/queue.h>
+#include <rmem/config.h>
 
 #include "defs.h"
 
@@ -613,29 +614,6 @@ struct thread *cores_add_core(struct proc *p)
 }
 
 /*
- * Pins thread tid to core. Returns 0 on success and < 0 on error. Note that
- * this function can always fail with error ESRCH, because threads can be
- * killed at any time.
- */
-int cores_pin_thread(pid_t tid, int core)
-{
-	cpu_set_t cpuset;
-	int ret;
-
-	CPU_ZERO(&cpuset);
-	CPU_SET(core, &cpuset);
-
-	ret = sched_setaffinity(tid, sizeof(cpu_set_t), &cpuset);
-	if (ret < 0) {
-		log_warn("cores: failed to set affinity for thread %d with err %d",
-				tid, errno);
-		return -errno;
-	}
-
-	return 0;
-}
-
-/*
  * Initialize proc state for managing cores.
  */
 void cores_init_proc(struct proc *p)
@@ -790,7 +768,8 @@ int cores_init(void)
 		log_debug("cpu exlcuded with EXCLUDED_CORES macro: %d", macro[i]);
 	}
 
-	/* assign first non-zero non-excluded core on socket 0 to the dataplane thread */
+	/* assign first non-zero non-excluded core on the preferred socket 
+	 * to the dataplane thread */
 	for (i = 1; i < cpu_count; i++) {
 		if (cpu_info_tbl[i].package == NUMA_NODE && !cpu_excluded[i])
 			break;
@@ -823,18 +802,24 @@ int cores_init(void)
 	core_assign.linux_core = cpu_to_sibling_cpu(core_assign.dp_core);
 	core_assign.ctrl_core = cpu_to_sibling_cpu(core_assign.dp_core);
 
+	/* note down the rmem handler core. TODO: In future, we should pick an 
+	 * available core here (e.g., the last one on preferred socket) and assign 
+	 * it rather than reading from config */
+	assert(PIN_RMEM_HANDLER_CORE > 0 && PIN_RMEM_HANDLER_CORE < cpu_count);
+	core_assign.rmem_core = PIN_RMEM_HANDLER_CORE;
+
 	/* mark all cores as unavailable */
 	bitmap_init(avail_cores, cpu_count, false);
 
 	/* mark all cores as offline */
 	bitmap_init(online_cores, cpu_count, false);
 
-
 	/* find cores on socket 0 that are not already in use */
 	for (i = 0; i < cpu_count; i++) {
 		if (i == core_assign.linux_core ||
 		    i == core_assign.ctrl_core ||
-		    i == core_assign.dp_core) {
+		    i == core_assign.dp_core || 
+			i == core_assign.rmem_core) {
 			continue;
 		}
 
@@ -850,9 +835,9 @@ int cores_init(void)
 			core_init(i);
 	}
 
-	log_info("cores: linux on core %d, control on %d, dataplane on %d",
-		core_assign.linux_core, core_assign.ctrl_core,
-		core_assign.dp_core);
+	log_info("cores: linux on core %d, control on %d, dataplane on %d, "
+	 	"rmem on %d", core_assign.linux_core, core_assign.ctrl_core,
+		core_assign.dp_core, core_assign.rmem_core);
 
 	return 0;
 }

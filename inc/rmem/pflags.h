@@ -9,171 +9,114 @@
 #include "rmem/region.h"
 
 enum {
-    PAGE_FLAG_P_SHIFT,
-    PAGE_FLAG_D_SHIFT,
-    PAGE_FLAG_E_SHIFT,
-    PAGE_FLAG_Z_SHIFT,
-    PAGE_FLAG_F_SHIFT,
-    PAGE_FLAG_H_SHIFT,
-    UNUSED_2,
+    PSHIFT_REGISTERED = 0,
+    PSHIFT_PRESENT,
+    PSHIFT_DIRTY,
+    PSHIFT_NOEVICT,
+    PSHIFT_ZEROPAGE,
+    PSHIFT_WORK_ONGOING,
+    PSHIFT_READ_ONGOING,
+    PSHIFT_MAP_ONGOING,
+    PSHIFT_EVICT_ONGOING,
+    PSHIFT_AWAITED,
+    PSHIFT_HOT_MARKER,
+    UNUSED_5,
+    UNUSED_4,
     UNUSED_3,
+    UNUSED_2,
+    UNUSED_1,
     PAGE_FLAGS_NUM
 };
 BUILD_ASSERT(!(PAGE_FLAGS_NUM & (PAGE_FLAGS_NUM - 1))); /*power of 2*/
+BUILD_ASSERT(sizeof(pflags_t) * 8 == PAGE_FLAGS_NUM);
 
-#define PAGE_FLAG_P (1u << PAGE_FLAG_P_SHIFT)    // Page is present
-#define PAGE_FLAG_D (1u << PAGE_FLAG_D_SHIFT)    // Page is dirty
-#define PAGE_FLAG_E (1u << PAGE_FLAG_E_SHIFT)    // Do not evict page
-#define PAGE_FLAG_Z (1u << PAGE_FLAG_Z_SHIFT)    // Zeropage done
-#define PAGE_FLAG_F (1u << PAGE_FLAG_F_SHIFT)    // Page fault in progress
-#define PAGE_FLAG_H (1u << PAGE_FLAG_H_SHIFT)    // Page marked hot
-#define PAGE_FLAGS_MASK ((1u << PAGE_FLAGS_NUM) - 1)
+#define PFLAG_REGISTERED    (1u << PSHIFT_REGISTERED)
+#define PFLAG_PRESENT       (1u << PSHIFT_PRESENT)
+#define PFLAG_DIRTY         (1u << PSHIFT_DIRTY)
+#define PFLAG_NOEVICT       (1u << PSHIFT_NOEVICT)
+#define PFLAG_ZEROPAGE      (1u << PSHIFT_ZEROPAGE)
+#define PFLAG_WORK_ONGOING  (1u << PSHIFT_WORK_ONGOING)
+#define PFLAG_READ_ONGOING  (1u << PSHIFT_READ_ONGOING)
+#define PFLAG_MAP_ONGOING   (1u << PSHIFT_MAP_ONGOING)
+#define PFLAG_EVICT_ONGOING (1u << PSHIFT_EVICT_ONGOING)
+#define PFLAG_AWAITED       (1u << PSHIFT_AWAITED)
+#define PFLAG_HOT_MARKER    (1u << PSHIFT_HOT_MARKER)
+#define PAGE_FLAGS_MASK     ((1u << PAGE_FLAGS_NUM) - 1)
 
-inline atomic_char *page_flags_ptr(struct region_t *mr, unsigned long addr,
+inline atomic_pflags_t *page_flags_ptr(struct region_t *mr, unsigned long addr,
         int *bits_offset) {
-    int b = ((addr - mr->addr) >> CHUNK_SHIFT) * PAGE_FLAGS_NUM;
-    *bits_offset = b % 8;
-    return &mr->page_flags[b / 8];
+    int offset = ((addr - mr->addr) >> CHUNK_SHIFT);
+    *bits_offset = 0;   /* TODO: remove */
+    return &mr->page_flags[offset];
 }
 
-#define RET_BOOL static inline bool 
-#define RET_UCHAR static inline unsigned char
-
-inline unsigned char get_page_flags(struct region_t *mr, unsigned long addr) {
+inline pflags_t get_page_flags(struct region_t *mr, unsigned long addr) {
     int bit_offset;
-    atomic_char *ptr = page_flags_ptr(mr, addr, &bit_offset);
+    atomic_pflags_t *ptr = page_flags_ptr(mr, addr, &bit_offset);
     return (*ptr >> bit_offset) & PAGE_FLAGS_MASK;
 }
 
-RET_BOOL is_page_dirty(struct region_t *mr, unsigned long addr) {
-    return !!(get_page_flags(mr, addr) & PAGE_FLAG_D);
+static inline bool is_page_flags_set(struct region_t *mr, 
+        unsigned long addr, pflags_t flags) {
+    return !!(get_page_flags(mr, addr) & flags);
 }
 
-RET_BOOL is_page_present(struct region_t *mr, unsigned long addr) {
-    return !!(get_page_flags(mr, addr) & PAGE_FLAG_P);
+static inline bool is_pflags_set_in(pflags_t original, pflags_t expected) {
+    return !!(original & expected);
 }
 
-RET_BOOL is_page_fault_in_progress(struct region_t *mr, unsigned long addr) {
-    return !!(get_page_flags(mr, addr) & PAGE_FLAG_F);
-}
-
-RET_BOOL is_page_marked_hot(struct region_t *mr, unsigned long addr) {
-    return !!(get_page_flags(mr, addr) & PAGE_FLAG_H);
-}
-
-inline bool is_page_do_not_evict(struct region_t *mr, unsigned long addr) {
-    return !!(get_page_flags(mr, addr) & PAGE_FLAG_E);
-}
-
-RET_BOOL is_page_zeropage_done(struct region_t *mr, unsigned long addr) {
-    return !!(get_page_flags(mr, addr) & PAGE_FLAG_Z);
-}
-
-RET_BOOL is_page_dirty_flags(unsigned char flags) {
-    return !!(flags & PAGE_FLAG_D);
-}
-
-RET_BOOL is_page_present_flags(unsigned char flags) {
-    return !!(flags & PAGE_FLAG_P);
-}
-
-RET_BOOL is_page_do_not_evict_flags(unsigned char flags) {
-    return !!(flags & PAGE_FLAG_E);
-}
-
-RET_BOOL is_page_zeropage_done_flags(unsigned char flags) {
-    return !!(flags & PAGE_FLAG_Z);
-}
-
-RET_BOOL is_page_marked_hot_flags(unsigned char flags) {
-    return !!(flags & PAGE_FLAG_H);
-}
-
-RET_UCHAR set_page_flags(struct region_t *mr, unsigned long addr, 
-        unsigned char flags) {
+static inline pflags_t set_page_flags(struct region_t *mr, 
+        unsigned long addr, pflags_t flags) {
     int bit_offset;
-    unsigned char old_flags;
-    atomic_char *ptr = page_flags_ptr(mr, addr, &bit_offset);
+    pflags_t old_flags;
+    atomic_pflags_t *ptr = page_flags_ptr(mr, addr, &bit_offset);
 
     old_flags = atomic_fetch_or(ptr, flags << bit_offset);
     return (old_flags >> bit_offset) & PAGE_FLAGS_MASK;
 }
 
-RET_UCHAR set_page_present(struct region_t *mr, unsigned long addr) {
-    return set_page_flags(mr, addr, PAGE_FLAG_P);
-}
-
-RET_UCHAR set_page_dirty(struct region_t *mr, unsigned long addr) {
-    return set_page_flags(mr, addr, PAGE_FLAG_D | PAGE_FLAG_P);
-}
-
-RET_UCHAR set_page_do_not_evict(struct region_t *mr, unsigned long addr) {
-    return set_page_flags(mr, addr, PAGE_FLAG_E);
-}
-
-RET_UCHAR set_page_zeropage_done(struct region_t *mr, unsigned long addr) {
-    return set_page_flags(mr, addr, PAGE_FLAG_Z);
-}
-
-RET_UCHAR set_page_fault_in_progress(struct region_t *mr, unsigned long addr) {
-    return set_page_flags(mr, addr, PAGE_FLAG_F);
-}
-
-RET_UCHAR set_page_hot(struct region_t *mr, unsigned long addr) {
-    return set_page_flags(mr, addr, PAGE_FLAG_H);
-}
-
-RET_UCHAR clear_page_flags(struct region_t *mr, unsigned long addr,
-        unsigned char flags) {
+static inline pflags_t clear_page_flags(struct region_t *mr, 
+        unsigned long addr, pflags_t flags) {
     int bit_offset;
-    unsigned char old_flags;
-    atomic_char *ptr = page_flags_ptr(mr, addr, &bit_offset);
+    pflags_t old_flags;
+    atomic_pflags_t *ptr = page_flags_ptr(mr, addr, &bit_offset);
 
     old_flags = atomic_fetch_and(ptr, ~(flags << bit_offset));
     return (old_flags >> bit_offset) & PAGE_FLAGS_MASK;
 }
 
-RET_UCHAR clear_page_present(struct region_t *mr, unsigned long addr) {
-    return clear_page_flags(mr, addr, PAGE_FLAG_P | PAGE_FLAG_D | PAGE_FLAG_E);
+static int set_page_flags_range(struct region_t *mr, unsigned long addr,
+        size_t size, pflags_t flags) {
+    unsigned long offset;
+    int old_flags, chunks = 0;
+
+    for (offset = 0; offset < size; offset += CHUNK_SIZE) {
+        old_flags = set_page_flags(mr, addr + offset, flags);
+        if (!(old_flags & flags)) {
+            log_debug("[%s] page flags set (clear earlier) for page: %lx", 
+                __func__, addr + offset);
+            chunks++;
+        }
+    }
+    /* return number of pages were actually set */
+    return chunks;
 }
 
-RET_UCHAR clear_page_dirty(struct region_t *mr, unsigned long addr) {
-    return clear_page_flags(mr, addr, PAGE_FLAG_D);
+static int clear_page_flags_range(struct region_t *mr, unsigned long addr,
+        size_t size, pflags_t flags) {
+    unsigned long offset;
+    int old_flags, chunks = 0;
+
+    for (offset = 0; offset < size; offset += CHUNK_SIZE) {
+        old_flags = clear_page_flags(mr, addr + offset, flags);
+        if (!!(old_flags & flags)) {
+            log_debug("[%s] page flags cleared (set earlier) for page: %lx", 
+                __func__, addr + offset);
+            chunks++;
+        }
+    }
+    /* return number of pages that were actually reset */
+    return chunks;
 }
 
-RET_UCHAR clear_page_do_not_evict(struct region_t *mr, unsigned long addr) {
-    return clear_page_flags(mr, addr, PAGE_FLAG_E);
-}
-
-RET_UCHAR clear_page_zeropage_done(struct region_t *mr, unsigned long addr) {
-    return clear_page_flags(mr, addr, PAGE_FLAG_Z);
-}
-
-RET_UCHAR clear_page_fault_in_progress(struct region_t *mr, unsigned long addr) {
-    return clear_page_flags(mr, addr, PAGE_FLAG_F);
-}
-
-RET_UCHAR clear_page_hot(struct region_t *mr, unsigned long addr) {
-    return clear_page_flags(mr, addr, PAGE_FLAG_H);
-}
-
-// static int mark_chunks_nonpresent(struct region_t *mr, unsigned long addr,
-//         size_t size) {
-//     unsigned long offset;
-//     int old_flags, chunks = 0;
-
-//     for (offset = 0; offset < size; offset += CHUNK_SIZE) {
-//         old_flags = clear_page_present(mr, addr + offset);
-
-//         if (!!(old_flags & PAGE_FLAG_P)) {
-//             // pr_debug("Clear page present for: %lx", addr + offset); UNDO
-//             chunks++;
-//         }
-//     }
-//     // Return how many pages were marked as not present
-//     return chunks;
-// }
-
-#undef RET_BOOL
-#undef RET_UCHAR
 #endif    // __PFLAGS_H_

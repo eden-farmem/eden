@@ -4,6 +4,8 @@
 
 #pragma once
 
+#include <unistd.h>
+
 #include <base/stddef.h>
 #include <base/limits.h>
 #include <base/bitmap.h>
@@ -26,3 +28,4 @@ struct cpu_info {
 };
 
 extern struct cpu_info cpu_info_tbl[NCPU];
+int cores_pin_thread(pid_t tid, int core);

@@ -220,6 +220,7 @@ struct core_assignments {
 	uint8_t linux_core;
 	uint8_t ctrl_core;
 	uint8_t dp_core;
+	uint8_t rmem_core;
 };
 
 extern struct core_assignments core_assign;

@@ -4,6 +4,8 @@
 
 #pragma once
 
+#include <base/types.h>
+
 extern void logk_bug(bool fatal, const char *expr,
 		     const char *file, int line, const char *func);
 

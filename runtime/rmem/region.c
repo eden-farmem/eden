@@ -15,7 +15,8 @@
 
 /* region data */
 struct region_listhead region_list;
-spinlock_t regions_lock;
+struct region_t* last_evicted = NULL;
+DEFINE_SPINLOCK(regions_lock);
 
 void deregister_memory_region(struct region_t *mr) {
     int r = 0;
@@ -59,7 +60,7 @@ int register_memory_region(struct region_t *mr, int writeable) {
 
     /* initalize metadata */
     page_flags_size = align_up((mr->size >> CHUNK_SHIFT), 8) * PAGE_FLAGS_NUM / 8;
-     mr->page_flags = (atomic_char *)mmap(NULL, page_flags_size, 
+     mr->page_flags = (atomic_pflags_t *)mmap(NULL, page_flags_size, 
         PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
     if (mr->page_flags == NULL) 
         goto error;
@@ -69,7 +70,7 @@ int register_memory_region(struct region_t *mr, int writeable) {
     /* add it to the list. TODO: this should be done in rmem.c after adding 
      * a region */
     spin_lock(&regions_lock);
-    SLIST_INSERT_HEAD(&region_list, mr, link);
+    CIRCLEQ_INSERT_HEAD(&region_list, mr, link);
     spin_unlock(&regions_lock);
     return 0;
 error:
@@ -80,9 +81,11 @@ error:
 void remove_memory_region(struct region_t *mr) {
     int ret;
     log_debug("deleting region %p", mr);
+    BUG_ON(atomic_load(&mr->ref_cnt) > 0);
     
     spin_lock(&regions_lock);
-    SLIST_REMOVE(&region_list, mr, region_t, link);
+    CIRCLEQ_REMOVE(&region_list, mr, link);
+    last_evicted = CIRCLEQ_FIRST(&region_list); /* reset */
     spin_unlock(&regions_lock);
 
     /* deregister */

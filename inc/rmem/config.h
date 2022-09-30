@@ -5,9 +5,9 @@
 #ifndef __CONFIG_H__
 #define __CONFIG_H__
 
-#include "base/log.h"  /* FIXME: this must be on top or errors out */
 #include "asm/atomic.h"
 #include "base/assert.h"
+#include "base/log.h"
 #include "base/mem.h"
 
 /* memory backend */
@@ -48,23 +48,24 @@ typedef enum {
 /* Single NUMA nodes for both machines.
  * R320: CPU(s): 16 
  * 16Gb Memory */
-#define PIN_POLLER_CORE         13
-#define PIN_SERVER_CORE         12
-#define PIN_SERVER_POLLER_CORE  11
-#define PIN_RACK_CNTRL_CORE     10
-#define PIN_RACK_CNTRL_POLLER_CORE 9
 #define RDMA_SERVER_MEMORY_GB   12
+#define PIN_RMEM_HANDLER_CORE   15
+#define PIN_SERVER_CORE         14
+#define PIN_SERVER_POLLER_CORE  13
+#define PIN_RACK_CNTRL_CORE     12
+#define PIN_RACK_CNTRL_POLLER_CORE 11
 
 #elif defined(CLOUDLAB_C6220)
 /* NUMA node0 CPU(s):   0-7,16-23
  * NUMA node1 CPU(s):   8-15,24-31
  * RNIC NUMA node = 1
  * 64 GB Memory */
-#define PIN_SERVER_CORE         28
-#define PIN_SERVER_POLLER_CORE  27
-#define PIN_RACK_CNTRL_CORE 2   6
-#define PIN_RACK_CNTRL_POLLER_CORE 25
 #define RDMA_SERVER_MEMORY_GB   32
+#define PIN_RMEM_HANDLER_CORE   31
+#define PIN_SERVER_CORE         30
+#define PIN_SERVER_POLLER_CORE  29
+#define PIN_RACK_CNTRL_CORE     28
+#define PIN_RACK_CNTRL_POLLER_CORE 27
 
 #elif defined(VRG_SC2)
 /* NUMA node0 CPU(s):   0-13,28-41
@@ -72,10 +73,11 @@ typedef enum {
  * RNIC NUMA node = 1
  * 176 GB Memory */
 #define RDMA_SERVER_MEMORY_GB   64
-#define PIN_SERVER_CORE         52
-#define PIN_SERVER_POLLER_CORE  51
-#define PIN_RACK_CNTRL_CORE     50
-#define PIN_RACK_CNTRL_POLLER_CORE 49
+#define PIN_RMEM_HANDLER_CORE   55
+#define PIN_SERVER_CORE         54
+#define PIN_SERVER_POLLER_CORE  53
+#define PIN_RACK_CNTRL_CORE     52
+#define PIN_RACK_CNTRL_POLLER_CORE 51
 
 #else
 #pragma GCC error "Specify memory size for selected machine"
@@ -94,6 +96,12 @@ BUILD_ASSERT(CHUNK_SIZE >= PGSIZE_4KB);
 #define LOCAL_MEMORY_SIZE           (4 * 1024 * 1024 * 1024L)
 #define EVICTION_THRESHOLD          0.99
 #define EVICTION_DONE_THRESHOLD     0.99
-#define EVICTION_BATCH_SIZE         1
+#define EVICTION_MAX_BATCH_SIZE     1
+#define EVICTION_REGION_SWITCH_THR  1000
+
+/* Fault handling */
+#define RUNTIME_MAX_FAULTS          1000
+#define FAULT_TCACHE_MAG_SIZE       50
+#define OS_MEM_PROBE_INTERVAL       1e6
 
 #endif  // __CONFIG_H__
