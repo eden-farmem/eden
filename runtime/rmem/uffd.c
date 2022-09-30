@@ -108,18 +108,26 @@ int uffd_unregister(int fd, unsigned long addr, size_t size) {
     return r;
 }
 
-int uffd_copy(int fd, unsigned long dst, unsigned long src, int wpmode,
-        bool retry, int *n_retries, bool wake_on_exist) {
+int uffd_copy(int fd, unsigned long dst, unsigned long src, size_t size, 
+    bool wrprotect, bool no_wake, bool retry, int *n_retries) 
+{
     int r;
+    int mode = 0;
+
+    if (wrprotect)  
+        mode |= UFFDIO_COPY_MODE_WP;
+    if (no_wake)    
+        mode |= UFFDIO_COPY_MODE_DONTWAKE;
     struct uffdio_copy copy = {
         .dst = dst, 
         .src = src, 
         .len = CHUNK_SIZE, 
-        .mode = wpmode
+        .mode = mode
     };
 
     do {
-        log_debug("uffd_copy from src %lx to dst %lx mode %d", src, dst, wpmode);
+        log_debug("uffd_copy from src %lx, size %lu to dst %lx wpmode %d nowake %d", 
+            src, size, dst, wrprotect, no_wake);
         errno = 0;
 
         /* TODO: Use UFFD_USE_PWRITE (see kona)? */
@@ -135,16 +143,9 @@ int uffd_copy(int fd, unsigned long dst, unsigned long src, int wpmode,
                 break;
 
             } else if (errno == EEXIST) {
-                wake_on_exist = true;
-                if (wake_on_exist) {
-                    /* We will assert in uffd_wake if we fail */
-                    r = uffd_wake(fd, dst, CHUNK_SIZE);
-                } else {
-                    log_info("uffd_copy err EEXIST but wake_on_exist=false: %lx", 
-                        dst);
-                    BUG();
-                }
-                break;
+                /* something wrong with our page locking */
+                log_err("uffd_copy err EEXIST on %lx", dst);
+                BUG();
             } else if (errno == EAGAIN) {
                 /* layout change in progress; try again */
                 if (retry == false) {
@@ -162,33 +163,24 @@ int uffd_copy(int fd, unsigned long dst, unsigned long src, int wpmode,
     return r;
 }
 
-/* for bigger chunks but does not handle wake */
-int uffd_copy_size(int fd, unsigned long dst, unsigned long src, size_t size,
-        int wpmode) {
+int uffd_wp(int fd, unsigned long addr, size_t size, bool wrprotect, 
+    bool no_wake, bool retry, int *n_retries) 
+{
     int r;
-    struct uffdio_copy copy = {
-        .dst = dst, 
-        .src = (long)src, 
-        .len = size, 
-        .mode = wpmode
-    };
+    int mode = 0;
 
-    assert(size >= CHUNK_SIZE);
-    r = ioctl(fd, UFFDIO_COPY, &copy);
-    if (r < 0) log_err("UFFDIO_COPY");
-    return r;
-}
-
-int uffd_wp(int fd, unsigned long addr, size_t size, int wpmode, bool retry,
-        int *n_retries) {
-    int r;
+    if (wrprotect)  
+        mode |= UFFDIO_WRITEPROTECT_MODE_WP;
+    if (no_wake)    
+        mode |= UFFDIO_WRITEPROTECT_MODE_DONTWAKE;
     struct uffdio_writeprotect wp = {
-        .mode = wpmode,
+        .mode = mode,
         .range = {.start = addr, .len = size}
     };
 
     do {
-        log_debug("uffd_wp start %p size %lx mode %d", (void *)addr, size, wpmode);
+        log_debug("uffd_wp start %p size %lx mode %d nowake %d", 
+            (void *)addr, size, wrprotect, no_wake);
         errno = 0;
         r = ioctl(fd, UFFDIO_WRITEPROTECT, &wp);
         if (r < 0) {
@@ -215,26 +207,34 @@ int uffd_wp(int fd, unsigned long addr, size_t size, int wpmode, bool retry,
     return r;
 }
 
-int uffd_wp_add(int fd, unsigned long fault_addr, size_t size, bool retry, 
-        int *n_retries) {
-    return uffd_wp(fd, fault_addr, size, true, retry, n_retries);
+int uffd_wp_add(int fd, unsigned long fault_addr, size_t size, bool nowake, 
+    bool retry, int *n_retries) 
+{
+    return uffd_wp(fd, fault_addr, size, true, nowake, retry, n_retries);
 }
 
 /* NOTE: make sure that page exists before issuing this */
-int uffd_wp_remove(int fd, unsigned long fault_addr, size_t size, bool retry, 
-        int *n_retries) {
-    return uffd_wp(fd, fault_addr, size, false, retry, n_retries);
+int uffd_wp_remove(int fd, unsigned long fault_addr, size_t size, bool nowake, 
+    bool retry, int *n_retries) 
+{
+    return uffd_wp(fd, fault_addr, size, false, nowake, retry, n_retries);
 }
 
-int uffd_zero(int fd, unsigned long addr, size_t size, bool retry, int *n_retries) {
+int uffd_zero(int fd, unsigned long addr, size_t size, bool no_wake, 
+    bool retry, int *n_retries) 
+{
     int r;
+    int mode = 0;
+
+    if (no_wake)    
+        mode |= UFFDIO_WRITEPROTECT_MODE_DONTWAKE;
     struct uffdio_zeropage zero = {
-        .mode = 0,
+        .mode = mode,
         .range = {.start = addr, .len = size}
     };
 
     do {
-        log_debug("uffd_zero to addr %lx size=%lu", addr, size);
+        log_debug("uffd_zero to addr %lx size=%lu nowake=%d", addr, size, no_wake);
         errno = 0;
         r = ioctl(fd, UFFDIO_ZEROPAGE, &zero);
         if (r < 0) {

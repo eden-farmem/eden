@@ -60,12 +60,12 @@ int fault_tcache_init_thread();
 
 /* fault_alloc - allocates a fault object */
 static inline fault_t *fault_alloc(void) {
-	return tcache_alloc(&perthread_get(fault_pt));
+    return tcache_alloc(&perthread_get(fault_pt));
 }
 
 /* fault_free - frees a fault */
 static inline void fault_free(struct fault *f) {
-	tcache_free(&perthread_get(fault_pt), (void *)f);
+    tcache_free(&perthread_get(fault_pt), (void *)f);
 }
 
 /*
@@ -77,20 +77,28 @@ static inline void fault_upgrade_to_write(fault_t* f) {
     log_debug("%s - upgraded to WRITE as no WP_ON_READ", FSTR(f));
 }
 
-/*
+/**
  * Per-thread zero page support
  */
 extern __thread void* zero_page;
+void zero_page_init_thread();
+void zero_page_free_thread();
 
-static inline void zero_page_init_thread() {
-  zero_page = aligned_alloc(CHUNK_SIZE, CHUNK_SIZE);
-  assert(zero_page);
-  memset(zero_page, 0, CHUNK_SIZE);
-}
+/**
+ * Do-not-evict Queue Support
+ */
+#ifndef DNE_QUEUE_SIZE
+#define DNE_QUEUE_SIZE 64
+#endif
 
-static inline void zero_page_free_thread() {
-  assert(zero_page);
-  free(zero_page);
-}
+typedef struct dne_q_item {
+    unsigned long addr;
+    struct region_t *mr;
+    TAILQ_ENTRY(dne_q_item) link;
+} dne_q_item_t;
+TAILQ_HEAD(dne_fifo_head, dne_q_item);
+void dne_q_init_thread();
+void dne_q_free_thread();
+void dne_on_new_fault(struct region_t *mr, unsigned long addr, bool mark);
 
-#endif  // __FAULT_H__
+#endif    // __FAULT_H__

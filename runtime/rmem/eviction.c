@@ -194,9 +194,9 @@ static unsigned int write_pages_to_backend(struct region_t *mr,
 
     /* protect the region first */
     n_retries = 0;
-    r = uffd_wp_add(userfault_fd, addr, nchunks * CHUNK_SIZE, true, &n_retries);
+    r = uffd_wp_add(userfault_fd, addr, nchunks * CHUNK_SIZE, false, true, &n_retries);
     assertz(r);
-    RSTAT(EVICT_WP_FAIL) += n_retries;
+    RSTAT(EVICT_WP_RETRIES) += n_retries;
     RSTAT(EVICT_WBACK)++;
 
     /* post the write-back */

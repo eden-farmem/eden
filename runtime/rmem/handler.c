@@ -27,64 +27,6 @@ __thread struct hthread *my_hthr = NULL;
 __thread struct region_t *eviction_region_safe = NULL;
 __thread uint64_t last_evict_try_count = 0;
 
-
-// void dne_on_new_fault(struct region_t *mr, unsigned long addr, bool mark) {
-//     if (using_kapi) {
-//         pthread_mutex_lock(&dne_q_mtx);
-//     }
-//     dne_q_item_t *q_item = NULL;
-
-//     if (!mark) {
-//         // Find page and remove it, because we will add it again at the head
-//         dne_q_item_t *cur_item;
-//         TAILQ_FOREACH(cur_item, &_dne_q, link) {
-//             if (cur_item->addr == addr) {
-//                 TAILQ_REMOVE(&_dne_q, cur_item, link);
-
-//                 // Use this object for insertion later on.
-//                 q_item = cur_item;
-//                 break;
-//             }
-//         }
-
-//         if (q_item != NULL) {
-//             // We found the entry in queue
-//             log_debug("DNE FIFO reinserting at tail: %lx", addr);
-//         }
-//     }
-
-//     if (mark || q_item == NULL) {
-//         // This is a new entry.
-//         if (n_dne_fifo >= DNE_QUEUE_SIZE) {
-//             // Queue is full. Remove oldest entry from head
-//             q_item = TAILQ_FIRST(&_dne_q);
-//             TAILQ_REMOVE(&_dne_q, q_item, link);
-
-//             log_debug("DNE FIFO pop and clearing DNE flag: %lx", q_item->addr);
-//             clear_page_do_not_evict(q_item->mr, q_item->addr);
-
-//         } else {
-//             // Queue is not full yet, just use the next item.
-//             q_item = &dne_q_items[n_dne_fifo];
-//             n_dne_fifo++;
-//             log_debug("Increaing DNE FIFO size: %u", n_dne_fifo);
-//         }
-
-//         // Prepare the q_item for new insertion.
-//         q_item->addr = addr;
-//         q_item->mr = mr;
-//     }
-
-//     log_debug("DNE FIFO push: %lx", q_item->addr);
-//     // Actually add q_item to tail of queue
-//     TAILQ_INSERT_TAIL(&_dne_q, q_item, link);
-
-//     if (using_kapi) {
-//         pthread_mutex_unlock(&dne_q_mtx);
-//     }
-//     return;
-// }
-
 /* poll for faults/other notifications coming from UFFD */
 static inline fault_t* read_uffd_fault() {
     ssize_t read_size;
@@ -199,7 +141,7 @@ static void* rmem_handler(void *arg) {
     pflags_t pflags, oldflags;
     struct region_t* mr;
     bool page_present, page_dirty, noaction, ongoing;
-    bool need_eviction;
+    bool need_eviction, no_wake, wrprotect;
     int ret, n_retries;
     unsigned long long pressure;
     fault_t* fault;
@@ -210,6 +152,7 @@ static void* rmem_handler(void *arg) {
     /* init */
     fault_tcache_init_thread();
     zero_page_init_thread();
+    dne_q_init_thread();
 
     /* do work */
     while(!my_hthr->stop) {
@@ -257,18 +200,21 @@ check_uffd:
                 log_debug("%s - no ongoing work, start handling", FSTR(fault));
 
                 /* set do-not-evict */
-                pflags = set_page_flags(mr, fault->page, PFLAG_NOEVICT);
-                // bool mark = !(pflags & PAGE_FLAG_E);
+                oldflags = set_page_flags(mr, fault->page, PFLAG_NOEVICT);
+                pflags = oldflags | PFLAG_NOEVICT;
 
-                /* TODO: refresh DNE */
-                // dne_on_new_fault(mr, fault_addr, mark);
+                /* add to the local DNE queue if I'm the first to set NOEVICT */
+                /* TODO: How useful is this? */
+                if (!(oldflags & PFLAG_NOEVICT))
+                    dne_on_new_fault(mr, fault->page, (pflags & PFLAG_NOEVICT));
 
                 /* we can handle write-protect right away */
                 page_present = !!(pflags & PFLAG_PRESENT);
                 if (page_present && fault->is_wrprotect) {
                     n_retries = 0;
-                    ret = uffd_wp_remove(userfault_fd, fault->page, 
-                        CHUNK_SIZE, false, &n_retries);
+                    no_wake = fault->from_kernel ? false : true;
+                    ret = uffd_wp_remove(userfault_fd, fault->page, CHUNK_SIZE, 
+                        no_wake, false, &n_retries);
                     /* TODO: we may want to handle (ret == EAGAIN) later */
                     BUG_ON(ret != 0);
                     RSTAT(FAULTS_DONE)++;
@@ -303,13 +249,13 @@ check_uffd:
                     /* first time should naturally be a write */
                     fault_upgrade_to_write(fault);
 
-                    /* copy zero page */
+                    /* copy zero page. TODO; Use UFFD_ZERO instead? */
                     n_retries = 0;
+                    wrprotect = !fault->is_write;
+                    no_wake = !fault->from_kernel;
                     ret = uffd_copy(userfault_fd, fault->page, (unsigned long) 
-                        zero_page, (fault->is_write ? 0 : UFFDIO_COPY_MODE_WP), 
-                        false, &n_retries, true);
-                    // ret = uffd_zero(fd, fault_addr, CHUNK_SIZE, false, &n_retries);                    
-                    /* TODO: we may want to handle (ret == EAGAIN) later */
+                        zero_page, CHUNK_SIZE, wrprotect, no_wake, true, &n_retries);
+                    RSTAT(UFFD_COPY_RETRIES) += n_retries;
                     BUG_ON(ret != 0);
 
                     /* TODO: clear fault in progress */
@@ -366,6 +312,7 @@ check_responses:
 
     /* destroy state */
     zero_page_free_thread();
+    dne_q_free_thread();
     return NULL;
 }
 
