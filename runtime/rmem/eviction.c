@@ -25,6 +25,28 @@
 
 /* eviction state */
 __thread uint64_t last_seen_faults = 0;
+__thread struct region_t *eviction_region_safe = NULL;
+__thread uint64_t last_evict_try_count = 0;
+
+/**
+ * Gets a safe reference to one of the memory regions to evict from. Trying to
+ * switch regions frequently might be costly as we need to get/put safe 
+ * references every time, so we try and rotate less frequently, holding on to 
+ * the safe reference till we rotate 
+ */
+static inline struct region_t* get_evictable_region_safe() {
+    if (eviction_region_safe == NULL)
+        eviction_region_safe = get_next_evictable_region();
+    else if (RSTAT(EVICT_RETRIES) > last_evict_try_count + 
+            EVICTION_REGION_SWITCH_THR) {
+        put_mr(eviction_region_safe);
+        /* NOTE: we're gonna hold this safe reference until we switch again 
+            * which may be too long in some cases. Not gonna handle now! */
+        eviction_region_safe = get_next_evictable_region();
+        last_evict_try_count = RSTAT(EVICT_RETRIES);
+    }
+    return eviction_region_safe;
+}
 
 /* get process memory from OS */
 unsigned long long get_process_mem() {
@@ -262,9 +284,9 @@ static bool flush_pages(struct region_t *mr, unsigned long base_addr,
 }
 
 /**
- * Main function for eviction
+ * Main function for eviction. Returns number of pages evicted.
  */
-void do_eviction(struct region_t* mr, int max_batch_size) 
+int do_eviction(int max_batch_size) 
 {
     unsigned long base_addr, new_base_addr, addr, size;
     pflags_t oldflags;
@@ -272,6 +294,10 @@ void do_eviction(struct region_t* mr, int max_batch_size)
     pflags_t flags[max_batch_size];
     DEFINE_BITMAP(write_map, max_batch_size);
     unsigned long long pressure;
+    struct region_t* mr;
+
+    /* get region */
+    mr = get_evictable_region_safe();
 
     /* get eviction candidate */
     do {
@@ -288,7 +314,7 @@ void do_eviction(struct region_t* mr, int max_batch_size)
         nchunks_locked = 0;
         for (i = 0; i < nchunks_found; i++) {
             addr = base_addr + i * CHUNK_SIZE;
-            oldflags = set_page_flags(mr, addr, PFLAG_WORK_ONGOING);
+            set_page_flags(mr, addr, PFLAG_WORK_ONGOING, &oldflags);
             if (!!(oldflags & PFLAG_WORK_ONGOING)) {
                 /* some other thread took it */
                 if (nchunks_locked == 0)
@@ -314,8 +340,7 @@ void do_eviction(struct region_t* mr, int max_batch_size)
     assert(nchunks_locked < EVICTION_MAX_BATCH_SIZE);
     for (i = 0; i < nchunks_locked; i++) {
         addr = base_addr + i * CHUNK_SIZE;
-        oldflags = set_page_flags(mr, addr, PFLAG_EVICT_ONGOING);
-        flags[i] = oldflags | PFLAG_EVICT_ONGOING;
+        flags[i] = set_page_flags(mr, addr, PFLAG_EVICT_ONGOING, &oldflags);
     }
     RSTAT(EVICTS)++;
     RSTAT(EVICT_PAGES) += nchunks_locked;
@@ -340,7 +365,8 @@ void do_eviction(struct region_t* mr, int max_batch_size)
          * we don't want another fault to go on reading from remote memory 
          * while the dirtied changes are waiting in the write queue */
         bitmap_for_each_cleared(write_map, nchunks_locked, i) {
-            oldflags = clear_page_flags(mr, addr, PFLAG_WORK_ONGOING | PFLAG_EVICT_ONGOING);
+            clear_page_flags(mr, addr, 
+                PFLAG_WORK_ONGOING | PFLAG_EVICT_ONGOING, &oldflags);
             assert(!!(oldflags & PFLAG_WORK_ONGOING)); /*sanity check*/
 
             /* TODO: safely release the waiting faults */
@@ -353,4 +379,5 @@ void do_eviction(struct region_t* mr, int max_batch_size)
     /* see if eviction was going as expected*/
     verify_eviction();
 #endif
+    return flushed;
 }

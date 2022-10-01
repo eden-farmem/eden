@@ -103,5 +103,6 @@ BUILD_ASSERT(CHUNK_SIZE >= PGSIZE_4KB);
 #define RUNTIME_MAX_FAULTS          1000
 #define FAULT_TCACHE_MAG_SIZE       50
 #define OS_MEM_PROBE_INTERVAL       1e6
+#define FAULT_MAX_RDAHEAD_SIZE      1
 
 #endif  // __CONFIG_H__

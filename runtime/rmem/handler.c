@@ -24,8 +24,6 @@
 
 /* handler state */
 __thread struct hthread *my_hthr = NULL;
-__thread struct region_t *eviction_region_safe = NULL;
-__thread uint64_t last_evict_try_count = 0;
 
 /* poll for faults/other notifications coming from UFFD */
 static inline fault_t* read_uffd_fault() {
@@ -75,6 +73,8 @@ static inline fault_t* read_uffd_fault() {
                 assert(!(fault->is_write && fault->is_wrprotect));
                 fault->is_read = !(fault->is_write || fault->is_wrprotect);
                 fault->from_kernel = true;
+                fault->rdahead_max = 0;   /*no readaheads for kernel faults*/
+                fault->rdahead  = 0;
                 /* NOTE: can also save thread id: message.arg.pagefault.feat.ptid */
                 return fault;
             case UFFD_EVENT_FORK:
@@ -137,14 +137,15 @@ static inline fault_t* read_uffd_fault() {
     return NULL;
 }
 
-static void* rmem_handler(void *arg) {
-    pflags_t pflags, oldflags;
-    struct region_t* mr;
-    bool page_present, page_dirty, noaction, ongoing;
-    bool need_eviction, no_wake, wrprotect;
-    int ret, n_retries;
+/**
+ * Main handler thread function
+ */
+static void* rmem_handler(void *arg) 
+{
+    bool need_eviction;
     unsigned long long pressure;
     fault_t* fault;
+    int ret, nevicts, nevicts_needed, batchsz;
     
     assert(arg != NULL);        /* expecting a hthread_t */
     my_hthr = (hthread_t*) arg; /* save our hthread_t */
@@ -157,130 +158,15 @@ static void* rmem_handler(void *arg) {
     /* do work */
     while(!my_hthr->stop) {
         need_eviction = false;
+        nevicts = nevicts_needed = 0;
 
-check_ready_q:
-        /* check faults that are done */
-        ret++;  /*TODO*/
-        
-check_uffd:
         /* check for uffd faults */
         fault = read_uffd_fault();
-        if(!fault)
-            goto eviction;
-        /* accounting */
-        if (fault->is_read)         RSTAT(FAULTS_R)++;
-        if (fault->is_write)        RSTAT(FAULTS_W)++;
-        if (fault->is_wrprotect)    RSTAT(FAULTS_WP)++;
+        if (fault)
+            handle_page_fault(fault, &nevicts_needed);
 
-        /* find region */
-        mr = get_region_by_addr_safe(fault->page);
-        /* we dont do region deletions yet so it must exist*/
-        BUG_ON(!mr);
-        assert(mr->addr);
-        fault->region = mr;
-
-        pflags = get_page_flags(mr, fault->page);
-        page_present = !!(pflags & PFLAG_PRESENT);
-        page_dirty = !!(pflags & PFLAG_DIRTY);
-        noaction = fault->is_read && page_present;
-        noaction = (fault->is_write || fault->is_wrprotect) && page_dirty;
-        if (unlikely(noaction)) {
-            // goto uffd queue (may need wake-up)
-            // TODO re-cache it in DNE
-        }
-        else {
-            oldflags = set_page_flags(mr, fault->page, PFLAG_WORK_ONGOING);
-            ongoing = !!(oldflags & PFLAG_WORK_ONGOING);
-            if (unlikely(ongoing)) {
-                // someone else is working on it, add to waitq
-                log_debug("%s - saw ongoing work, going to wait", FSTR(fault));
-            }
-            else {
-                /* we need to handle it */
-                log_debug("%s - no ongoing work, start handling", FSTR(fault));
-
-                /* set do-not-evict */
-                oldflags = set_page_flags(mr, fault->page, PFLAG_NOEVICT);
-                pflags = oldflags | PFLAG_NOEVICT;
-
-                /* add to the local DNE queue if I'm the first to set NOEVICT */
-                /* TODO: How useful is this? */
-                if (!(oldflags & PFLAG_NOEVICT))
-                    dne_on_new_fault(mr, fault->page, (pflags & PFLAG_NOEVICT));
-
-                /* we can handle write-protect right away */
-                page_present = !!(pflags & PFLAG_PRESENT);
-                if (page_present && fault->is_wrprotect) {
-                    n_retries = 0;
-                    no_wake = fault->from_kernel ? false : true;
-                    ret = uffd_wp_remove(userfault_fd, fault->page, CHUNK_SIZE, 
-                        no_wake, false, &n_retries);
-                    /* TODO: we may want to handle (ret == EAGAIN) later */
-                    BUG_ON(ret != 0);
-                    RSTAT(FAULTS_DONE)++;
-
-                    /* free fault */
-                    fault_free(fault);
-                    fault = NULL;
-                    put_mr(mr);
-                    log_debug("%s - removed write protection", FSTR(fault));
-                    goto eviction;
-                }
-                else {
-                    /* upgrade to write fault */
-                    fault_upgrade_to_write(fault);
-                    RSTAT(WP_UPGRADES)++;
-                }
-
-                /* book some memory first */
-                pressure = atomic_fetch_add(&memory_booked, PAGE_SIZE);
-                need_eviction = (pressure + PAGE_SIZE > local_memory);
-
-#ifndef WP_ON_READ
-                /* no WP on READ means every fault is a write fault */
-                if (fault->is_read)
-                    fault_upgrade_to_write(fault);
-#endif
-
-                /* first time adding page, use zero page */
-                if (!(pflags & PFLAG_REGISTERED)) {
-                     log_debug("%s - serving zero page", FSTR(fault));
-                    
-                    /* first time should naturally be a write */
-                    fault_upgrade_to_write(fault);
-
-                    /* copy zero page. TODO; Use UFFD_ZERO instead? */
-                    n_retries = 0;
-                    wrprotect = !fault->is_write;
-                    no_wake = !fault->from_kernel;
-                    ret = uffd_copy(userfault_fd, fault->page, (unsigned long) 
-                        zero_page, CHUNK_SIZE, wrprotect, no_wake, true, &n_retries);
-                    RSTAT(UFFD_COPY_RETRIES) += n_retries;
-                    BUG_ON(ret != 0);
-
-                    /* TODO: clear fault in progress */
-                    /* TODO: release waiting faults */
-                    RSTAT(FAULTS_ZP)++;
-                    RSTAT(FAULTS_DONE)++;
-                    
-                    /* free fault */
-                    fault_free(fault);
-                    fault = NULL;
-                    put_mr(mr);
-                    log_debug("%s - added zero page", FSTR(fault));
-                    goto eviction;
-                }
-
-                /* send off page read */
-                /* NOTE: kona also makes an attempt to read from rdma write_q
-                 * to preempt eviction but I won't handle that here */
-                // ret = rmbackend->post_read_async(fault); /* TODO */
-                assertz(ret);
-            }
-        }
-
-eviction:
-        /* if memory is not enough/past pressure, try eviction */
+        /*  do eviction if needed */
+        need_eviction = (nevicts > 0);
         if (!need_eviction) {
             /* if eviction wasn't already signaled by the earlier fault, 
              * see if we need one in general (since this is the handler thread) */
@@ -289,20 +175,15 @@ eviction:
             if (!need_eviction)
                 goto check_responses;
         }
-        
-        /* find a region to do eviction. Rotate regions every once in a while */
-        if (eviction_region_safe == NULL)
-            eviction_region_safe = get_next_evictable_region();
-        else if (RSTAT(EVICT_RETRIES) > last_evict_try_count + EVICTION_REGION_SWITCH_THR) {
-            put_mr(eviction_region_safe);
-            /* NOTE: we're gonna hold this safe reference until we switch again 
-             * which may be too long in some cases. Not gonna handle now! */
-            eviction_region_safe = get_next_evictable_region();
-            last_evict_try_count = RSTAT(EVICT_RETRIES);
-        }
-        
-        /* start eviction. Can use bigger batches in handler threads */
-        do_eviction(eviction_region_safe, EVICTION_MAX_BATCH_SIZE);
+
+        /* start eviction */
+        do {
+            /* can use bigger batches in handler threads if idling */
+            batchsz = EVICTION_MAX_BATCH_SIZE;
+            if (nevicts_needed > 0) 
+                batchsz = nevicts_needed;
+            nevicts += do_eviction(batchsz);
+        } while(nevicts < nevicts_needed);
 
 check_responses:
         /* handle read/write completions from the backend */

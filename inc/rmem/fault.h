@@ -15,6 +15,7 @@
 #include "base/types.h"
 #include "runtime/thread.h"
 #include "rmem/config.h"
+#include "rmem/pflags.h"
 
 /*
  * Fault object 
@@ -26,16 +27,20 @@ typedef struct fault {
     uint8_t is_write;
     uint8_t is_wrprotect;
     uint8_t from_kernel;
-    uint32_t reserved2;
+    uint8_t single_use;
+    uint8_t rdahead_max;        /* suggested max read-ahead */
+    uint8_t rdahead;            /* actual read-ahead locked for this fault */
+    uint8_t reserved;
 
     unsigned long page;
-    struct region_t* region;
+    struct region_t* mr;
     thread_t* thread;
     uint64_t pad[2];
 
     TAILQ_ENTRY(fault) link;
 } fault_t;
 BUILD_ASSERT(sizeof(fault_t) % CACHE_LINE_SIZE == 0);
+BUILD_ASSERT(FAULT_MAX_RDAHEAD_SIZE < UINT8_MAX);
 
 /* fault object as readable string - for debug tracking */
 #define __FAULT_STR_LEN 100
@@ -99,6 +104,12 @@ typedef struct dne_q_item {
 TAILQ_HEAD(dne_fifo_head, dne_q_item);
 void dne_q_init_thread();
 void dne_q_free_thread();
-void dne_on_new_fault(struct region_t *mr, unsigned long addr, bool mark);
+void dne_on_new_fault(struct region_t *mr, unsigned long addr);
+
+/**
+ * Fault handling
+ */
+bool handle_page_fault(fault_t* fault, int* nevicts);
+void fault_done(fault_t* fault);
 
 #endif    // __FAULT_H__
