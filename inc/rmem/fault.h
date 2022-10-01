@@ -6,6 +6,7 @@
 #define __FAULT_H__
 
 #include <stdio.h>
+#include <stdint.h>
 #include <sys/queue.h>
 
 #include "base/assert.h"
@@ -15,7 +16,6 @@
 #include "base/types.h"
 #include "runtime/thread.h"
 #include "rmem/config.h"
-#include "rmem/pflags.h"
 
 /*
  * Fault object 

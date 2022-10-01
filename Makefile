@@ -92,7 +92,7 @@ runtime_asm = $(wildcard runtime/*.S)
 runtime_obj = $(runtime_src:.c=.o) $(runtime_asm:.S=.o)
 
 # controller - remote memory controller
-rcntrl_src = rmem/rcntrl.c runtime/rmem/rdma.c
+rcntrl_src = rmem/rcntrl.c rmem/rdma.c
 rcntrl_obj = $(rcntrl_src:.c=.o)
 
 # memserver - remote memory server

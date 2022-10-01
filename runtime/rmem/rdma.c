@@ -1,5 +1,5 @@
 /*
- * rdma.c - RDMA helper for remote memory
+ * rdma.c - RDMA helper for remote memory (client-side)
  */
 
 #include <execinfo.h>
@@ -17,11 +17,9 @@ void destroy_connection(struct connection *conn) {
 
     ibv_dereg_mr(conn->send_mr);
     ibv_dereg_mr(conn->recv_mr);
-    // ibv_dereg_mr(conn->rdma_local_mr);	/* FIXME: why commented out? */
 
     free(conn->send_msg);
     free(conn->recv_msg);
-    // free(conn->rdma_local_region);
 
     rdma_destroy_id(conn->id);
 

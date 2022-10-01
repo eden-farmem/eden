@@ -1,5 +1,6 @@
 /*
- * rdma.h - RDMA helper for remote memory (client-side)
+ * rdma.h - RDMA helper for remote memory (server-side)
+ * TODO: Consolidate this with runtime/rdma.h
  */
 
 #ifndef __RDMA_H__
@@ -63,28 +64,5 @@ void build_params(struct rdma_conn_param *params);
 void destroy_connection(struct connection *conn);
 void post_receives(struct connection *conn);
 void send_message(struct connection *conn);
-
-struct __request_t {
-    volatile int busy;
-    volatile int ready;
-    struct connection *conn;
-    struct server_conn_t *server;
-    unsigned long local_addr;
-    unsigned long remote_addr;
-    unsigned int lkey;
-    unsigned int rkey;
-    unsigned long size;
-    int fd;
-    rw_mode_t mode;
-    rw_mode_t fault_mode;
-    struct region_t *mr;
-    int index;
-    unsigned long vaddr;
-};
-
-typedef struct __request_t request_t;
-
-void do_rdma_op(request_t *req, bool signal_completion);
-void do_rdma_op_linked(request_t *reqs, unsigned n_reqs, bool signal_completion);
 
 #endif    // __RDMA_H__

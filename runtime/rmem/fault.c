@@ -13,6 +13,7 @@
 #include "rmem/fault.h"
 #include "rmem/pflags.h"
 #include "rmem/uffd.h"
+#include "rmem/pflags.h"
 
 #include "../defs.h"
 

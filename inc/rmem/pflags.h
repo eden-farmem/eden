@@ -67,7 +67,7 @@ static inline bool is_pflags_set_in(pflags_t original, pflags_t expected) {
 
 /* sets flags on a page and returns new flags (and oldflags in ptr) */
 static inline pflags_t set_page_flags(struct region_t *mr, 
-    unsigned long addr, pflags_t flags, pflags_t* oldflags) 
+    unsigned long addr, pflags_t flags, pflags_t* oldflags)
 {
     int bit_offset;
     pflags_t old_flags, new_flags;
@@ -82,7 +82,7 @@ static inline pflags_t set_page_flags(struct region_t *mr,
 
 /* clears flags on a page and returns new flags (and oldflags in ptr) */
 static inline pflags_t clear_page_flags(struct region_t *mr, 
-    unsigned long addr, pflags_t flags, pflags_t* oldflags) 
+    unsigned long addr, pflags_t flags, pflags_t* oldflags)
 {
     int bit_offset;
     pflags_t old_flags, new_flags;
@@ -96,7 +96,7 @@ static inline pflags_t clear_page_flags(struct region_t *mr,
 }
 
 static int set_page_flags_range(struct region_t *mr, unsigned long addr,
-    size_t size, pflags_t flags) 
+    size_t size, pflags_t flags)
 {
     unsigned long offset;
     pflags_t old_flags;
@@ -115,7 +115,7 @@ static int set_page_flags_range(struct region_t *mr, unsigned long addr,
 }
 
 static int clear_page_flags_range(struct region_t *mr, unsigned long addr,
-    size_t size, pflags_t flags) 
+    size_t size, pflags_t flags)
 {
     unsigned long offset;
     int chunks = 0;

@@ -14,25 +14,29 @@
 #include "rmem/config.h"
 #include "rmem/rdma.h"
 
-/* least native type that can support flags for each page */
+/* Smallest native type that can support flags for each page */
 typedef short pflags_t;
 typedef _Atomic(pflags_t) atomic_pflags_t;
 BUILD_ASSERT(sizeof(atomic_pflags_t) == sizeof(pflags_t));
 
+/**
+ * Region definition
+ */
 struct region_t {
+    /* region metadata */
     volatile size_t size;
     unsigned long addr;
     unsigned long remote_addr;
     atomic_ullong current_offset;
     atomic_ullong evict_offset;
 
-    atomic_pflags_t *page_flags;  /* TODO: may want to switch to regular char */
-    atomic_int ref_cnt;
+    /* page metadata */
+    atomic_pflags_t *page_flags;
 
-    /* TODO: move RDMA-specific data into separate rdma region */
-    struct ibv_mr rdma_mr;
+    /* RDMA-specific data. TODO: move into rdma backend */
     struct server_conn_t *server;
-    
+
+    atomic_int ref_cnt;
     CIRCLEQ_ENTRY(region_t) link;
 } __aligned(CACHE_LINE_SIZE);
 
