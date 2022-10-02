@@ -43,14 +43,14 @@ BUILD_ASSERT(sizeof(pflags_t) * 8 == PAGE_FLAGS_NUM);
 #define PFLAG_HOT_MARKER    (1u << PSHIFT_HOT_MARKER)
 #define PAGE_FLAGS_MASK     ((1u << PAGE_FLAGS_NUM) - 1)
 
-inline atomic_pflags_t *page_flags_ptr(struct region_t *mr, unsigned long addr,
+static inline atomic_pflags_t *page_flags_ptr(struct region_t *mr, unsigned long addr,
         int *bits_offset) {
     int offset = ((addr - mr->addr) >> CHUNK_SHIFT);
     *bits_offset = 0;   /* TODO: remove */
     return &mr->page_flags[offset];
 }
 
-inline pflags_t get_page_flags(struct region_t *mr, unsigned long addr) {
+static inline pflags_t get_page_flags(struct region_t *mr, unsigned long addr) {
     int bit_offset;
     atomic_pflags_t *ptr = page_flags_ptr(mr, addr, &bit_offset);
     return (*ptr >> bit_offset) & PAGE_FLAGS_MASK;
@@ -95,7 +95,7 @@ static inline pflags_t clear_page_flags(struct region_t *mr,
     return new_flags;
 }
 
-static int set_page_flags_range(struct region_t *mr, unsigned long addr,
+static inline int set_page_flags_range(struct region_t *mr, unsigned long addr,
     size_t size, pflags_t flags)
 {
     unsigned long offset;
@@ -114,7 +114,7 @@ static int set_page_flags_range(struct region_t *mr, unsigned long addr,
     return chunks;
 }
 
-static int clear_page_flags_range(struct region_t *mr, unsigned long addr,
+static inline int clear_page_flags_range(struct region_t *mr, unsigned long addr,
     size_t size, pflags_t flags)
 {
     unsigned long offset;
