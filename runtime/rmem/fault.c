@@ -93,7 +93,7 @@ bool handle_page_fault(fault_t* fault, int* nevicts_needed)
     struct region_t* mr;
     bool page_present, page_dirty, page_evicting, noaction, was_locked;
     bool no_wake, wrprotect, need_eviction = false, fdone = false;
-    int i, ret, n_retries, nchunks;
+    int i, ret, n_retries, nchunks = 0;
     unsigned long addr;
     unsigned long long pressure;
     *nevicts_needed = 0;
@@ -221,7 +221,7 @@ bool handle_page_fault(fault_t* fault, int* nevicts_needed)
             /* NOTE: kona also makes an attempt to read from rdma write_q
                 * to preempt eviction but I won't handle that here */
             // ret = rmbackend->post_read_async(fault); /* TODO */
-            assertz(ret);
+            // assertz(ret);
 
             /* book some memory for the pages */
             pressure = atomic_fetch_add(&memory_booked, nchunks * CHUNK_SIZE);

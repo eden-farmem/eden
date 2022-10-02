@@ -42,6 +42,7 @@ typedef enum {
 #define MAX_LINKED_WRS          64
 #define RDMA_SERVER_SLAB_SIZE   RMEM_SLAB_SIZE
 #define NUM_POLL_CQ             16
+#define MAX_QPS_PER_REGION      (32+1)
 
 /* settings for different machines */
 #ifdef CLOUDLAB_R320

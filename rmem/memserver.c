@@ -31,7 +31,7 @@
 #include <unistd.h>
 
 #include "base/log.h"
-#include "rmem/rdma.h"
+#include "rdma.h"
 
 static struct context *s_ctx = NULL;
 static volatile bool aborted = false;

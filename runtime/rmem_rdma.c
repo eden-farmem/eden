@@ -14,7 +14,10 @@
 #include "rmem/rdma.h"
 #include "defs.h"
 
-/*TODO: these need to be revisited after per-core QPs/CQs */
+/** Per-connection QP and CQ sizes for send and recv. We only expect a lot of 
+ * outward (send) communication and that too on datapath QPs. 
+ * TODO: These were kona defaults, we can certainly decrease it as we have 
+ * one QP per core */
 #define MAX_CONCURRENT_R_REQS 256
 #define MAX_CONCURRENT_W_REQS 256
 #define CQ_RECV_SIZE 10
@@ -24,7 +27,7 @@
 struct server_conn_t* servers[MAX_SERVERS + 1];
 SLIST_HEAD(servers_listhead, server_conn_t);
 struct servers_listhead servers_list;
-static struct context *s_ctx = NULL;
+static struct context *global_ctx = NULL;
 __thread struct ibv_wc wc[NUM_POLL_CQ];
 bool ready_for_poll = false;
 
@@ -36,9 +39,10 @@ static int on_completion(struct ibv_wc *wc, struct region_t *reg,
     enum ibv_wc_opcode opcode, int msgtype);
 static int connect2server(int index);
 
-/* recv cq is sync */
-static void wait_one_completion(struct region_t *reg, enum ibv_wc_opcode opcode,
-        int msgtype) {
+/** Listen on RCNTRL recv cq for slab add/remove and other events (sync) */
+static void wait_one_completion(struct connection* rcntrl, 
+    struct region_t *reg, enum ibv_wc_opcode opcode, int msgtype) 
+{
     struct ibv_cq *cq;
     struct ibv_wc wc;
     int ret = 0;
@@ -47,13 +51,13 @@ static void wait_one_completion(struct region_t *reg, enum ibv_wc_opcode opcode,
     assert(msgtype < NUM_MSG_TYPE);
 
     // struct context ctx;
-    // ret = ibv_get_cq_event(s_ctx->comp_channel, &cq, (void **) &ctx));
+    // ret = ibv_get_cq_event(rcntrl->cc, &cq, (void **) &ctx));
     // assertz(ret);
     // ibv_ack_cq_events(cq, 1);
     // ret = ibv_req_notify_cq(cq, 0);
     // assertz(ret);
 
-    cq = s_ctx->cq_recv;
+    cq = rcntrl->cq_recv;
     while (1) {
         if (ibv_poll_cq(cq, 1, &wc)) {
             ret = on_completion(&wc, reg, opcode, msgtype);
@@ -179,83 +183,127 @@ static int on_completion(struct ibv_wc *wc, struct region_t *reg,
     }
 }
 
-void register_memory(struct connection *conn) {
+void create_register_send_recv_buf(struct connection *conn) {
     conn->send_msg = malloc(sizeof(struct message));
     assert(conn->send_msg);
 
     conn->recv_msg = malloc(sizeof(struct message));
     assert(conn->recv_msg);
 
-    conn->send_mr = ibv_reg_mr(s_ctx->pd, conn->send_msg, 
+    conn->send_mr = ibv_reg_mr(global_ctx->pd, conn->send_msg, 
         sizeof(struct message), IBV_ACCESS_LOCAL_WRITE);
     assert(conn->send_mr);
 
-    conn->recv_mr = ibv_reg_mr(s_ctx->pd, conn->recv_msg, 
+    conn->recv_mr = ibv_reg_mr(global_ctx->pd, conn->recv_msg, 
         sizeof(struct message), IBV_ACCESS_LOCAL_WRITE);
     assert(conn->recv_mr);
 }
 
-void build_context(struct ibv_context *verbs)
+void build_global_context(struct ibv_context *verbs)
 {
-    if (s_ctx) {
-        assert(s_ctx->ctx == verbs);
+    if (global_ctx) {
+        assert(global_ctx->ctx == verbs);
         return;
     }
 
-    s_ctx = (struct context *) malloc(sizeof(struct context));
-    assert(s_ctx);
-    s_ctx->ctx = verbs;
+    /* save device */
+    global_ctx = (struct context *) malloc(sizeof(struct context));
+    assert(global_ctx);
+    global_ctx->ctx = verbs;
 
-    s_ctx->pd = ibv_alloc_pd(s_ctx->ctx);
-	assert(s_ctx->pd);
-   	s_ctx->comp_channel = ibv_create_comp_channel(s_ctx->ctx);
-	assert(s_ctx->comp_channel);
-    s_ctx->cq_send = ibv_create_cq(s_ctx->ctx, CQ_SEND_SIZE, NULL, s_ctx->comp_channel, 0);
-    assert(s_ctx->cq_send);
-    s_ctx->cq_recv = ibv_create_cq(s_ctx->ctx, CQ_RECV_SIZE, NULL, s_ctx->comp_channel, 0);
-    assert(s_ctx->cq_recv);
+    /* create pd (to be used for all qps) */
+    global_ctx->pd = ibv_alloc_pd(global_ctx->ctx);
+	assert(global_ctx->pd);
 
-    // polling, so we don't need the notification
-    // int ret = ibv_req_notify_cq(s_ctx->cq, 0));
-    // assertz(ret);
-
-    mb();
-    ready_for_poll = 1;
+    /* create shared cqs */
+   	global_ctx->cc = ibv_create_comp_channel(global_ctx->ctx);
+	assert(global_ctx->cc);
+    global_ctx->cq_send = ibv_create_cq(global_ctx->ctx, 
+        CQ_SEND_SIZE, NULL, global_ctx->cc, 0);
+    assert(global_ctx->cq_send);
+    global_ctx->cq_recv = ibv_create_cq(global_ctx->ctx, 
+        CQ_RECV_SIZE, NULL, global_ctx->cc, 0);
+    assert(global_ctx->cq_recv);
 }
 
-void build_qp_attr(struct ibv_qp_init_attr *qp_attr)
+/* initiate connection with a server */
+void init_connection(struct connection* conn, char ip[36], int port)
 {
-    memset(qp_attr, 0, sizeof(*qp_attr));
+    int ret;
+    char portstr[10];
+    struct addrinfo *addr = NULL;
 
-    qp_attr->send_cq = s_ctx->cq_send;
-    qp_attr->recv_cq = s_ctx->cq_recv;
-    qp_attr->qp_type = IBV_QPT_RC;
+    /* get server address */
+    sprintf(portstr, "%d", port);
+    log_info("client connection to server %s on port %s", ip, portstr);
+    ret = getaddrinfo(ip, portstr, NULL, &addr);
+    assertz(ret);
 
-    qp_attr->cap.max_send_wr = CQ_SEND_SIZE;
-    qp_attr->cap.max_recv_wr = CQ_RECV_SIZE;
-    qp_attr->cap.max_send_sge = 1;
-    qp_attr->cap.max_recv_sge = 1;
+    conn->chan = rdma_create_event_channel();
+    assert(conn->chan);
+    ret = rdma_create_id(conn->chan, &(conn->id), NULL, RDMA_PS_TCP);
+    assertz(ret);
+    ret = rdma_resolve_addr(conn->id, NULL, addr->ai_addr, TIMEOUT_IN_MS);
+    assertz(ret);
+
+    /* add back ref */
+    conn->id->context = conn;
+
+    assert(addr != NULL);
+    freeaddrinfo(addr);
 }
 
+/* start connection; allocate QPs and CQs */
 void build_connection(struct rdma_cm_id *id)
 {
-    struct connection *conn;
     struct ibv_qp_init_attr qp_attr;
+    struct connection* conn;
     int ret;
 
-    build_context(id->verbs);
-    build_qp_attr(&qp_attr);
+    /* common resources */
+    build_global_context(id->verbs);
 
-    ret = rdma_create_qp(id, s_ctx->pd, &qp_attr);
+    /* completion queues */
+    assert(id->context);
+    conn = (struct connection*) id->context;
+
+    if (conn->use_global_cq) {
+        conn->cc = global_ctx->cc;
+        conn->cq_send = global_ctx->cq_send;
+        conn->cq_recv = global_ctx->cq_recv;
+    }
+    else {
+        conn->cc = ibv_create_comp_channel(global_ctx->ctx);
+        assert(conn->cc);
+        conn->cq_send = ibv_create_cq(global_ctx->ctx, 
+            CQ_SEND_SIZE, NULL, conn->cc, 0);
+        assert(conn->cq_send);
+        if (conn->one_send_recv_cq)
+            conn->cq_recv = conn->cq_send;
+        else
+            conn->cq_recv = ibv_create_cq(global_ctx->ctx, 
+                CQ_RECV_SIZE, NULL, conn->cc, 0);
+        assert(conn->cq_recv);
+    }
+
+    /* create QP */
+    memset(&qp_attr, 0, sizeof(qp_attr));
+    qp_attr.send_cq = conn->cq_send;
+    qp_attr.recv_cq = conn->cq_recv;
+    qp_attr.qp_type = IBV_QPT_RC;
+
+    qp_attr.cap.max_send_wr = CQ_SEND_SIZE;
+    qp_attr.cap.max_recv_wr = CQ_RECV_SIZE;
+    qp_attr.cap.max_send_sge = 1;
+    qp_attr.cap.max_recv_sge = 1;
+
+    ret = rdma_create_qp(id, global_ctx->pd, &qp_attr);
     assertz(ret);
-    id->context = conn = (struct connection *)malloc(sizeof(struct connection));
-    assert(conn);
-    conn->id = id;
     conn->qp = id->qp;
-    conn->peer = NULL;
     conn->connected = 0;
 
-    register_memory(conn);
+    /* create and post receive buf */
+    create_register_send_recv_buf(conn);
     post_receives(conn);
 }
 
@@ -283,6 +331,9 @@ int on_disconnect(struct rdma_cm_id *id) {
 int on_event(struct rdma_cm_event *event) {
     int r = 0;
     
+    /* check that this event was associated with a conn */
+    assert(event->id->context);
+
     log_debug("on_event client");
     if (event->event == RDMA_CM_EVENT_ADDR_RESOLVED)
         r = on_addr_resolved(event->id);
@@ -310,6 +361,20 @@ int on_route_resolved(struct rdma_cm_id *id) {
     return 0;
 }
 
+/* Follow-through on the ping-pong of RDMA connection setup */
+void follow_connection_setup(struct rdma_event_channel* chan)
+{
+    struct rdma_cm_event *event = NULL;
+
+    /* follow-through on connection setup */
+    while (rdma_get_cm_event(chan, &event) == 0) {
+        struct rdma_cm_event event_copy;
+        memcpy(&event_copy, event, sizeof(*event));
+        rdma_ack_cm_event(event);
+        if (on_event(&event_copy)) break;
+    }
+}
+
 /*************** server communication    ************************************/
 
 void send_msg_slab_add(struct connection *conn, struct region_t *reg, int nslabs) 
@@ -332,57 +397,56 @@ static void send_msg_slab_rem(struct connection *conn, struct region_t *reg)
     conn->send_msg->data.addr = (void *)reg->remote_addr;
 
     send_message(conn);
-    // wait_one_completion(reg, IBV_WC_SEND, MSG_SLAB_REM);
-    // wait_one_completion(reg, IBV_WC_RECV, MSG_DONE);
+    // wait_one_completion(conn, reg, IBV_WC_SEND, MSG_SLAB_REM);
+    // wait_one_completion(conn, reg, IBV_WC_RECV, MSG_DONE);
 }
 
 /**
  * Setup connections with the remote server (with one control connection and  
  * specified number of dataplane connections)
  */
-void remote_client_create(struct server_conn_t *server, int dp_channels) 
+void remote_server_setup(struct server_conn_t *server) 
 {
-    char portstr[10];
-    struct addrinfo *addr = NULL;
-    struct rdma_cm_event *event = NULL;
-    int ret;
+    int i;
 
-    /* get server address */
+    /* init connection metadata */
     assert(server != NULL);
-    sprintf(portstr, "%d", server->port);
-    log_info("client connection to server %s on port %s", server->ip, portstr);
-    ret = getaddrinfo(server->ip, portstr, NULL, &addr);
-    assertz(ret);
-
-    /*  */
-    server->rchannel = rdma_create_event_channel();
-    assert(server->rchannel);
-    ret = rdma_create_id(server->rchannel, &(server->rid), NULL, RDMA_PS_TCP);
-    assertz(ret);
-    ret = rdma_resolve_addr(server->rid, NULL, addr->ai_addr, TIMEOUT_IN_MS);
-    assertz(ret);
-
-    assert(addr != NULL);
-    freeaddrinfo(addr);
-    
-
-    // initiate connection
-    while (rdma_get_cm_event(server->rchannel, &event) == 0) {
-        struct rdma_cm_event event_copy;
-        memcpy(&event_copy, event, sizeof(*event));
-        rdma_ack_cm_event(event);
-        if (on_event(&event_copy)) break;
+    assert(server->num_dp <= (MAX_QPS_PER_REGION-1));
+    server->cp.datapath = 0;
+    server->cp.use_global_cq = 1;
+    server->cp.server = server;
+    for (i = 0; i < server->num_dp; i++) {
+        server->dp[i].datapath = 1;
+        server->dp[i].use_global_cq = 0;
+        server->dp[i].one_send_recv_cq = 1;  /* share CQ for datapath QPs */
+        server->dp[i].server = server;
     }
 
-    struct connection *conn = (struct connection *)server->rid->context;
-    log_info("client connected to server %s on port %d, conn %p!", server->ip,
-        server->port, conn);
+    /* setup control path */
+    init_connection(&(server->cp), server->ip, server->port);
+    follow_connection_setup(server->cp.chan);
+
+    /* we expect to be connected at this point */
+    assert(server->cp.connected);
+    log_info("server %s on port %d: control qp done", server->ip, server->port);
     server->status = CONNECTED;
+
+    /* setup data path queues */
+    for (i = 0; i < server->num_dp; i++) {
+        init_connection(&(server->dp[i]), server->ip, server->port);
+        follow_connection_setup(server->dp[i].chan);
+        assert(server->dp[i].connected);
+        log_info("server %s on port %d: datapath qp %d done", 
+            server->ip, server->port, i);
+    }
 }
 
 void remote_client_destroy(struct server_conn_t *server) {
+    int i;
     log_info("remote client destroy");
-    rdma_destroy_event_channel(server->rchannel);
+    rdma_destroy_event_channel(server->cp.chan);
+    for(i = 0; i < server->num_dp; i++)
+        rdma_destroy_event_channel(server->dp[i].chan);
     server->status = DISCONNECTED;
 }
 
@@ -740,16 +804,16 @@ void remote_client_destroy(struct server_conn_t *server) {
 
 void remote_client_slab_add(struct region_t *reg, int nslabs) {
     log_debug("add new slab, contact rack cntrl %p", servers[0]);
-    struct connection *conn = (struct connection *)servers[0]->rid->context;
+    struct connection *conn = (struct connection *)&(servers[0]->cp);
 
     post_receives(conn);
     send_msg_slab_add(conn, reg, nslabs);
 
     // log_debug("waiting for completion of send_msg_create...");
-    // wait_one_completion(reg, IBV_WC_SEND, MSG_SLAB_ADD);
+    // wait_one_completion(conn, reg, IBV_WC_SEND, MSG_SLAB_ADD);
 
     // log_debug("waiting for completion of receive response done slab add...");
-    wait_one_completion(reg, IBV_WC_RECV, MSG_DONE_SLAB_ADD);
+    wait_one_completion(conn, reg, IBV_WC_RECV, MSG_DONE_SLAB_ADD);
 
     log_info("created remote region at address addr=%lx size=%ld",
         reg->remote_addr, reg->size);
@@ -760,15 +824,16 @@ void remote_client_slab_add(struct region_t *reg, int nslabs) {
 }
 
 void remote_client_slab_rem(struct region_t *reg) {
-    struct connection *conn = (struct connection *)servers[0]->rid->context;
+    log_debug("remove slab, contact rack cntrl %p", servers[0]);
+    struct connection *conn = (struct connection *)&(servers[0]->cp);
     post_receives(conn);
     send_msg_slab_rem(conn, reg);
 
     /* wait completion */
     log_debug("waiting for completion of send_msg_remove...");
-    // wait_one_completion(reg, IBV_WC_SEND, MSG_SLAB_REM);
+    // wait_one_completion(conn, reg, IBV_WC_SEND, MSG_SLAB_REM);
     log_debug("waiting for completion of receive response done/remove...");
-    wait_one_completion(reg, IBV_WC_RECV, MSG_DONE);
+    wait_one_completion(conn, reg, IBV_WC_RECV, MSG_DONE);
 }
 
 /***************** memserver communication    *****************************/
@@ -781,12 +846,13 @@ int connect2server(int index) {
 
     struct server_conn_t *server = servers[index];
     if (server->status == CONNECTED) {
-        log_info("client already connected to the server");
+        log_info("client already added/connected to the server");
         return 0;
     }
 
     SLIST_INSERT_HEAD(&servers_list, server, link);
-    remote_client_create(server, 0);
+    server->num_dp = (MAX_QPS_PER_REGION-1);
+    remote_server_setup(server);
     return 0;
 }
 
@@ -798,9 +864,9 @@ int connect2rcntrl(const char *ip, int port) {
     strcpy(server->ip, ip);
 
     /* ignoring fork support: ibv_fork_init(); */
-    remote_client_create(server, 0);
+    server->num_dp = 0;
+    remote_server_setup(server);
     usleep(10);
-
     return 0;
 }
 
@@ -829,9 +895,11 @@ int rdma_init() {
         local_memory, eviction_threshold, eviction_done_threshold);        
     log_info("rcntrl_ip=%s, rcntrl_port=%d", rcntrl_ip, rcntrl_port);
 
+    /* alloc server objects */
     for (i = 0; i <= MAX_SERVERS; i++) {
-        servers[i] = (struct server_conn_t *) malloc(sizeof(struct server_conn_t));
-        assert(servers[i] != NULL);
+        servers[i] = malloc(sizeof(struct server_conn_t));
+        assert(servers[i]);
+        memset(servers[i], 0, sizeof(struct server_conn_t));
     }
 
     /* connect to rcntrl and a memory server */
@@ -877,10 +945,9 @@ int rdma_perthread_destroy() {
 int rdma_destroy() {
     while (!SLIST_EMPTY(&servers_list)) {
         struct server_conn_t *s = SLIST_FIRST(&servers_list);
-        /*TODO: free all server connections */
+        remote_client_destroy(s);
         munmap(s, sizeof(struct server_conn_t));
     }
-    /*TODO: free shared RDMA data e.g., pd, cq, comp_channel, etc. */
     return 0;
 }
 

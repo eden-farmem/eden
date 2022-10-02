@@ -31,7 +31,7 @@
 
 #include "base/log.h"
 #include "base/assert.h"
-#include "rmem/rdma.h"
+#include "rdma.h"
 
 static struct context *s_ctx = NULL;
 static atomic_int server_id = ATOMIC_VAR_INIT(1);

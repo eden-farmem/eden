@@ -27,11 +27,46 @@ struct context {
     struct ibv_pd *pd;
     struct ibv_cq *cq_recv;
     struct ibv_cq *cq_send;
-    struct ibv_cq *cq;
-    struct ibv_comp_channel *comp_channel;
-    pthread_t cq_poller_thread;
+    struct ibv_comp_channel *cc;
 };
 
+/**
+ * State for a single connection
+ */
+struct server_conn_t;
+struct connection {
+    /* metadata */
+    struct server_conn_t* server;
+    uint8_t datapath;
+    uint8_t use_global_cq;
+    uint8_t one_send_recv_cq;
+
+    /* status */
+    volatile int connected;
+    
+    /* rdma connection state */
+    struct rdma_cm_id *id;
+    struct rdma_event_channel *chan;
+    struct ibv_qp *qp;
+    /* completion queue state */
+    struct ibv_cq *cq_recv;
+    struct ibv_cq *cq_send;
+    struct ibv_comp_channel *cc;
+    /* memory buf */
+    struct ibv_mr *recv_mr;
+    struct ibv_mr *send_mr;
+    struct message *recv_msg;
+    struct message *send_msg;
+
+    /* placeholder for region association during region add/remove 
+     * vestige of bad design from kona. TODO: fix it */
+    struct region_t* reg;
+} __aligned(CACHE_LINE_SIZE);
+
+/**
+ * A server connection that is also currently tied to a single
+ * region. TODO: we should decouple them later.
+ */
 struct server_conn_t {
     char ip[36];
     int port;
@@ -39,30 +74,14 @@ struct server_conn_t {
     int status;
     uint64_t rdmakey;
     uint64_t size;
-    struct rdma_event_channel *rchannel;
-    struct rdma_cm_id *rid;
 
+    int num_dp;
+    struct connection cp;   /* control path */
+    struct connection dp[MAX_QPS_PER_REGION];   /* data path */
+
+    struct region_t* reg;   /* backref to general */
     SLIST_ENTRY(server_conn_t) link;
 };
-
-struct connection {
-    struct rdma_cm_id *id;
-    struct ibv_qp *qp;
-
-    void *peer;
-    volatile int connected;
-
-    struct ibv_mr *recv_mr;
-    struct ibv_mr *send_mr;
-    struct message *recv_msg;
-    struct message *send_msg;
-    struct region_t* reg;
-};
-
-void build_params(struct rdma_conn_param *params);
-void destroy_connection(struct connection *conn);
-void post_receives(struct connection *conn);
-void send_message(struct connection *conn);
 
 struct __request_t {
     volatile int busy;
@@ -84,6 +103,10 @@ struct __request_t {
 
 typedef struct __request_t request_t;
 
+void build_params(struct rdma_conn_param *params);
+void destroy_connection(struct connection *conn);
+void post_receives(struct connection *conn);
+void send_message(struct connection *conn);
 void do_rdma_op(request_t *req, bool signal_completion);
 void do_rdma_op_linked(request_t *reqs, unsigned n_reqs, bool signal_completion);
 

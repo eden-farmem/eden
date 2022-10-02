@@ -96,7 +96,7 @@ rcntrl_src = rmem/rcntrl.c rmem/rdma.c
 rcntrl_obj = $(rcntrl_src:.c=.o)
 
 # memserver - remote memory server
-memserver_src = rmem/memserver.c runtime/rmem/rdma.c
+memserver_src = rmem/memserver.c rmem/rdma.c
 memserver_obj = $(memserver_src:.c=.o)
 
 # test cases
