@@ -86,6 +86,7 @@ void dne_on_new_fault(struct region_t *mr, unsigned long addr)
  * Fault handling
  */
 
+/* after receiving page fault */
 bool handle_page_fault(fault_t* fault, int* nevicts_needed)
 {
     pflags_t pflags, oldflags;
@@ -238,7 +239,30 @@ out:
     return need_eviction;
 }
 
-void fault_done(fault_t* fault) {
+/* after reading the pages for a fault completed */
+int fault_read_done(fault_t* f, unsigned long buf_addr, size_t size)
+{
+    int n_retries, r;
+    bool wrprotect, no_wake;
+    assert(size == (1 + f->rdahead) * CHUNK_SIZE);
+
+    /* uffd copy the page back */
+    wrprotect = !f->is_write;
+    no_wake = !f->from_kernel;
+    r = uffd_copy(userfault_fd, f->page, buf_addr, size, wrprotect, no_wake, 
+        true, &n_retries);
+    assertz(r);
+    RSTAT(UFFD_RETRIES) += n_retries;
+
+    /* set page flags */
+    pflags_t flags = PFLAG_PRESENT;
+    if (!wrprotect) flags |= PFLAG_DIRTY;
+    set_page_flags_range(f->mr, f->page, size, flags);
+}
+
+/* after servicing fault is completely done */
+void fault_done(fault_t* fault) 
+{
     unsigned long addr;
     int i;
     pflags_t oldflags;
@@ -264,4 +288,3 @@ void fault_done(fault_t* fault) {
     put_mr(fault->mr);
     fault_free(fault);
 }
-

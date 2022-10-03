@@ -30,22 +30,13 @@ void do_rdma_op(request_t *req, bool signal_completion) {
     struct ibv_send_wr wr, *bad_wr = NULL;
     struct ibv_sge sge;
 
-    /*
-    if (req->mode == M_WRITE) {
-        log_debug("writing message to remote memory...remote_addr=%lx size=%lu",
-    req->remote_addr, req->size); } else { log_debug("reading message from remote
-    memory...remote_addr=%lx size=%lu", req->remote_addr, req->size);
-        log_debug("into local address %lx %u", req->local_addr, req->lkey);
-    }
-    */
-
     memset(&sge, 0, sizeof(sge));
     sge.addr = req->local_addr;
     sge.length = req->size;
     sge.lkey = req->lkey;
 
     memset(&wr, 0, sizeof(wr));
-    wr.wr_id = (uintptr_t)req->index;
+    wr.wr_id = (uintptr_t) req;      /* TODO: Is sending pointer safe? */
     wr.opcode = (req->mode == M_WRITE) ? IBV_WR_RDMA_WRITE : IBV_WR_RDMA_READ;
     wr.sg_list = &sge;
     wr.num_sge = 1;
@@ -56,18 +47,12 @@ void do_rdma_op(request_t *req, bool signal_completion) {
     int r = ibv_post_send(req->conn->qp, &wr, &bad_wr);
     if (r != 0) {
         log_err("ibv_post_send new op=%d errno=%d\n", wr.opcode, r);
-        void* callstack[128];
-        int i, frames = backtrace(callstack, 128);
-        char** strs = backtrace_symbols(callstack, frames);
-        for (i = 0; i < frames; ++i) {
-            log_err("%s\n", strs[i]);
-        }
-        free(strs);
         BUG();
     }
 }
 
-void do_rdma_op_linked(request_t *reqs, unsigned n_reqs, bool signal_completion) {
+void do_rdma_op_linked(request_t *reqs, unsigned n_reqs, bool signal_completion)
+{
     // This function call is not thread safe at all!
     struct ibv_send_wr *bad_wr = NULL;
 
@@ -85,7 +70,7 @@ void do_rdma_op_linked(request_t *reqs, unsigned n_reqs, bool signal_completion)
         sges[i].lkey = reqs[i].lkey;
 
         memset(&wrs[i], 0, sizeof(wrs[i]));
-        wrs[i].wr_id = (uintptr_t)reqs[i].index;
+        wrs[i].wr_id = (uintptr_t) &reqs[i];
         wrs[i].opcode =
                 (reqs[i].mode == M_WRITE) ? IBV_WR_RDMA_WRITE : IBV_WR_RDMA_READ;
         wrs[i].sg_list = &sges[i];
@@ -106,8 +91,6 @@ void do_rdma_op_linked(request_t *reqs, unsigned n_reqs, bool signal_completion)
         log_err("ibv_post_send errno=%d\n", r);
         BUG();
     }
-
-    // log_debug("done: do_rdma_op %d", req->mode);
 }
 
 void post_receives(struct connection *conn) {

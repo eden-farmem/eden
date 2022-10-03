@@ -110,6 +110,7 @@ void dne_on_new_fault(struct region_t *mr, unsigned long addr);
  * Fault handling
  */
 bool handle_page_fault(fault_t* fault, int* nevicts);
+int fault_read_done(fault_t* f, unsigned long buf_addr, size_t size);
 void fault_done(fault_t* fault);
 
 #endif    // __FAULT_H__

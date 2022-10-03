@@ -17,8 +17,9 @@
 
 /* Handler thread def */
 typedef struct hthread {
-    pthread_t thread;
     volatile bool stop;
+    pthread_t thread;
+    int bkend_chan_id;
     uint64_t rstats[RSTAT_NR];
 } hthread_t __aligned(CACHE_LINE_SIZE);
 extern __thread struct hthread *my_hthr;
@@ -26,5 +27,6 @@ extern __thread struct hthread *my_hthr;
 /* methods */
 hthread_t* new_rmem_handler_thread(int pincore_id);
 int stop_rmem_handler_thread(hthread_t* hthr);
+extern struct completion_cbs hthr_cbs;
 
 #endif  // __HANDLER_H__

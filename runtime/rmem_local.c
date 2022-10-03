@@ -3,6 +3,7 @@
  */
 
 #include "rmem/backend.h"
+#include "rmem/fault.h"
 
 /* backend init */
 int local_init() {
@@ -11,16 +12,10 @@ int local_init() {
     return 0;
 }
 
-/* backend per-thread init */
-int local_perthread_init() {
+/* returns the next available channel (id) for datapath */
+int local_get_data_channel() {
     BUG();  /* not supported yet */
-    return 0;
-}
-
-/* backend per-thread deinit */
-int local_perthread_destroy() {
-    BUG();  /* not supported yet */
-    return 0;
+    return -1;
 }
 
 /* backend destroy */
@@ -41,12 +36,37 @@ int local_free_region(struct region_t *reg) {
     return 0;
 }
 
+
+/* post read on a channel */
+int local_post_read(int chan_id, fault_t* f) 
+{
+    BUG();  /* not supported yet */
+    return 0;
+}
+
+/* post write on a channel */
+int local_post_write(int chan_id, struct region_t* mr, unsigned long addr, 
+    size_t size) 
+{
+    BUG();  /* not supported yet */
+    return 0;
+}
+
+/* backend check for read & write completions on a channel */
+int local_check_cq(int chan_id, struct completion_cbs* cbs, int max_cqe)
+{
+    BUG();  /* not supported yet */
+    return 0;
+}
+
 /* ops for RDMA */
 struct rmem_backend_ops local_backend_ops = {
     .init = local_init,
-    .perthread_init = local_perthread_init,
-    .perthread_destroy = local_perthread_destroy,
+    .get_new_data_channel = local_get_data_channel,
     .destroy = local_destroy,
     .add_memory = local_add_regions,
     .remove_region = local_free_region,
+    .post_read = local_post_read,
+    .post_write = local_post_write,
+    .check_for_completions = local_check_cq,
 };

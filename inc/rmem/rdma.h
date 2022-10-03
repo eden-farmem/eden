@@ -19,6 +19,10 @@
 #include "rmem/rdma_common.h"
 #include "rmem/region.h"
 
+/* forward declarations */
+struct server_conn_t;
+struct request;
+
 /**
  * Common context
  */
@@ -28,16 +32,18 @@ struct context {
     struct ibv_cq *cq_recv;
     struct ibv_cq *cq_send;
     struct ibv_comp_channel *cc;
+    struct ibv_cq *dp_cq[RMEM_MAX_CHANNELS];
+    struct ibv_comp_channel *dp_cc[RMEM_MAX_CHANNELS];
 };
 
 /**
  * State for a single connection
  */
-struct server_conn_t;
 struct connection {
     /* metadata */
     struct server_conn_t* server;
     uint8_t datapath;
+    uint8_t dp_chan_id;
     uint8_t use_global_cq;
     uint8_t one_send_recv_cq;
 
@@ -48,20 +54,33 @@ struct connection {
     struct rdma_cm_id *id;
     struct rdma_event_channel *chan;
     struct ibv_qp *qp;
+
     /* completion queue state */
     struct ibv_cq *cq_recv;
     struct ibv_cq *cq_send;
     struct ibv_comp_channel *cc;
-    /* memory buf */
+
+    /* memory buf for send/recv */
     struct ibv_mr *recv_mr;
     struct ibv_mr *send_mr;
     struct message *recv_msg;
     struct message *send_msg;
 
+    /* memory buf for read/write (only for datapath qps) */
+    void *read_buf;
+    void *write_buf;
+    struct ibv_mr *read_mr;
+    struct ibv_mr *write_mr;
+    struct request *read_reqs;
+    struct request *write_reqs;
+    volatile int read_req_idx;
+    volatile int write_req_idx;
+
     /* placeholder for region association during region add/remove 
      * vestige of bad design from kona. TODO: fix it */
     struct region_t* reg;
 } __aligned(CACHE_LINE_SIZE);
+BUILD_ASSERT(RMEM_MAX_CHANNELS < UINT8_MAX);    /* due to dp_chan_id */
 
 /**
  * A server connection that is also currently tied to a single
@@ -77,31 +96,28 @@ struct server_conn_t {
 
     int num_dp;
     struct connection cp;   /* control path */
-    struct connection dp[MAX_QPS_PER_REGION];   /* data path */
+    struct connection dp[RMEM_MAX_CHANNELS];   /* data path */
 
-    struct region_t* reg;   /* backref to general */
+    struct region_t* reg;   /* backref to region */
     SLIST_ENTRY(server_conn_t) link;
 };
 
-struct __request_t {
+/* RDMA request */
+struct request {
     volatile int busy;
     volatile int ready;
+    int index;
     struct connection *conn;
-    struct server_conn_t *server;
+    struct fault* fault;
+    unsigned long orig_local_addr;
     unsigned long local_addr;
     unsigned long remote_addr;
     unsigned int lkey;
     unsigned int rkey;
     unsigned long size;
-    int fd;
     rw_mode_t mode;
-    rw_mode_t fault_mode;
-    struct region_t *mr;
-    int index;
-    unsigned long vaddr;
 };
-
-typedef struct __request_t request_t;
+typedef struct request request_t;
 
 void build_params(struct rdma_conn_param *params);
 void destroy_connection(struct connection *conn);

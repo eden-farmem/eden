@@ -9,6 +9,7 @@
 #include <sys/mman.h>
 
 #include "base/stddef.h"
+#include "rmem/backend.h"
 #include "rmem/pflags.h"
 #include "rmem/region.h"
 #include "rmem/uffd.h"
@@ -16,6 +17,7 @@
 /* region data */
 struct region_listhead region_list;
 struct region_t* last_evicted = NULL;
+int nregions = 0;
 DEFINE_SPINLOCK(regions_lock);
 
 void deregister_memory_region(struct region_t *mr) {
@@ -71,6 +73,8 @@ int register_memory_region(struct region_t *mr, int writeable) {
      * a region */
     spin_lock(&regions_lock);
     CIRCLEQ_INSERT_HEAD(&region_list, mr, link);
+    nregions++;
+    BUG_ON(nregions > RMEM_MAX_REGIONS);
     spin_unlock(&regions_lock);
     return 0;
 error:
@@ -85,6 +89,7 @@ void remove_memory_region(struct region_t *mr) {
     
     spin_lock(&regions_lock);
     CIRCLEQ_REMOVE(&region_list, mr, link);
+    nregions--;
     last_evicted = CIRCLEQ_FIRST(&region_list); /* reset */
     spin_unlock(&regions_lock);
 

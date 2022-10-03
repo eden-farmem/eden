@@ -25,6 +25,18 @@
 /* handler state */
 __thread struct hthread *my_hthr = NULL;
 
+/* handler fault after fetched pages are ready */
+int hthr_fault_read_done(fault_t* f, unsigned long buf_addr, size_t size)
+{
+    int r;
+    r = fault_read_done(f, buf_addr, size);
+    assertz(r);
+
+    /* release fault */
+    fault_done(f);
+    return 0;
+}
+
 /* poll for faults/other notifications coming from UFFD */
 static inline fault_t* read_uffd_fault() {
     ssize_t read_size;
@@ -145,7 +157,7 @@ static void* rmem_handler(void *arg)
     bool need_eviction;
     unsigned long long pressure;
     fault_t* fault;
-    int ret, nevicts, nevicts_needed, batchsz;
+    int nevicts, nevicts_needed, batchsz;
     
     assert(arg != NULL);        /* expecting a hthread_t */
     my_hthr = (hthread_t*) arg; /* save our hthread_t */
@@ -172,23 +184,25 @@ static void* rmem_handler(void *arg)
              * see if we need one in general (since this is the handler thread) */
             pressure = atomic_load(&memory_used);
             need_eviction = (pressure > local_memory * eviction_threshold);
-            if (!need_eviction)
-                goto check_responses;
         }
 
         /* start eviction */
-        do {
-            /* can use bigger batches in handler threads if idling */
-            batchsz = EVICTION_MAX_BATCH_SIZE;
-            if (nevicts_needed > 0) 
-                batchsz = nevicts_needed;
-            nevicts += do_eviction(batchsz);
-        } while(nevicts < nevicts_needed);
+        if (need_eviction) {
+            do {
+                /* can use bigger batches in handler threads if idling */
+                batchsz = EVICTION_MAX_BATCH_SIZE;
+                if (nevicts_needed > 0) 
+                    batchsz = nevicts_needed;
+                nevicts += do_eviction(batchsz);
+            } while(nevicts < nevicts_needed);
+        }
 
-check_responses:
         /* handle read/write completions from the backend */
-        ret++;  /*TODO*/
-        // rmbackend->poll_completions(hook);
+        rmbackend->check_for_completions(my_hthr->bkend_chan_id, &hthr_cbs, RMEM_MAX_COMP_PER_OP);
+
+#ifdef SECOND_CHANCE_EVICTION
+        /* TODO: clear all hot bits once in a while */
+#endif
     }
 
     /* destroy state */
@@ -198,11 +212,16 @@ check_responses:
 }
 
 /* create a new fault handler thread */
-hthread_t* new_rmem_handler_thread(int pincore_id) {
+hthread_t* new_rmem_handler_thread(int pincore_id)
+{
     int r;
     hthread_t* hthr = malloc(sizeof(hthread_t));
     assert(hthr);
     memset(hthr, 0, sizeof(hthread_t));
+
+    /* get a backend channel */
+    hthr->bkend_chan_id = rmbackend->get_new_data_channel();
+    assert(hthr->bkend_chan_id >= 0);
 
     /* create thread */
     hthr->stop = false;
@@ -221,7 +240,8 @@ hthread_t* new_rmem_handler_thread(int pincore_id) {
 }
 
 /* stop and deallocate a fault handler thread */
-int stop_rmem_handler_thread(hthread_t* hthr) {
+int stop_rmem_handler_thread(hthread_t* hthr)
+{
     int r;
 
     /* signal and wait for thread to stop */
@@ -235,3 +255,9 @@ int stop_rmem_handler_thread(hthread_t* hthr) {
     free(hthr);
     return 0;
 }
+
+/* handler thread completion callbacks */
+struct completion_cbs hthr_cbs = {
+    .read_completion = hthr_fault_read_done,
+    .write_completion = write_back_completed
+};

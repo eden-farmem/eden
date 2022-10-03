@@ -18,6 +18,10 @@ typedef enum {
 // #define RMEM_BACKEND_DEFAULT 0  
 #define RMEM_BACKEND_DEFAULT    1
 #define RMEM_SLAB_SIZE          (128 * 1024L)
+#define RMEM_MAX_CHANNELS       32
+#define RMEM_MAX_CHUNKS_PER_OP  5
+#define RMEM_MAX_COMP_PER_OP    16
+
 
 /********* Cluster *******************************************/
 #define VRG_SC2             // Intel Skylake - CX5
@@ -41,8 +45,7 @@ typedef enum {
 #define TIMEOUT_IN_MS           500 /* ms */
 #define MAX_LINKED_WRS          64
 #define RDMA_SERVER_SLAB_SIZE   RMEM_SLAB_SIZE
-#define NUM_POLL_CQ             16
-#define MAX_QPS_PER_REGION      (32+1)
+#define MAX_QPS_PER_REGION      (RMEM_MAX_CHANNELS+1)
 
 /* settings for different machines */
 #ifdef CLOUDLAB_R320
@@ -99,11 +102,16 @@ BUILD_ASSERT(CHUNK_SIZE >= PGSIZE_4KB);
 #define EVICTION_DONE_THRESHOLD     0.99
 #define EVICTION_MAX_BATCH_SIZE     1
 #define EVICTION_REGION_SWITCH_THR  1000
+BUILD_ASSERT(EVICTION_MAX_BATCH_SIZE <= RMEM_MAX_CHUNKS_PER_OP);
 
 /* Fault handling */
 #define RUNTIME_MAX_FAULTS          1000
 #define FAULT_TCACHE_MAG_SIZE       50
 #define OS_MEM_PROBE_INTERVAL       1e6
 #define FAULT_MAX_RDAHEAD_SIZE      1
+BUILD_ASSERT((1 + FAULT_MAX_RDAHEAD_SIZE) <= RMEM_MAX_CHUNKS_PER_OP);
+
+/* Region settings */
+#define RMEM_MAX_REGIONS    10
 
 #endif  // __CONFIG_H__

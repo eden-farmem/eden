@@ -30,6 +30,11 @@ enum {
     RSTAT_EVICT_WRITE_FAIL,
     RSTAT_EVICT_MADV,
     RSTAT_EVICT_DONE,
+    RSTAT_EVICT_PAGES_DONE,
+
+    RSTAT_NET_READ,
+    RSTAT_NET_WRITE,
+
     RSTAT_NR,   /* total number of counters */
 };
 

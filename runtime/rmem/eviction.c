@@ -284,6 +284,34 @@ static bool flush_pages(struct region_t *mr, unsigned long base_addr,
 }
 
 /**
+ * Called after backend write has completed
+ */
+int write_back_completed(struct region_t* mr, unsigned long addr, size_t size)
+{
+    unsigned long page;
+    pflags_t oldflags;
+    size_t covered;
+    assert(addr % CHUNK_SIZE == 0 && size % CHUNK_SIZE == 0);
+    
+    covered = 0;
+    while(covered < size) {
+        page = addr + covered;
+        clear_page_flags(mr, page, PFLAG_EVICT_ONGOING, &oldflags);
+        if (!(oldflags & PFLAG_EVICT_ONGOING)) {
+            /* I'm the last one to reach here, clear other bits. See 
+             * do_eviction() for a comment on what we're doing here. */
+            log_debug("evict done at wrback, clearing all for page %lx", addr);
+            clear_page_flags(mr, page, PFLAG_PRESENT | PFLAG_DIRTY |
+                PFLAG_WORK_ONGOING | PFLAG_HOT_MARKER, &oldflags);
+            assert(!!(oldflags & PFLAG_WORK_ONGOING)); /*sanity check*/
+            RSTAT(EVICT_PAGES_DONE)++;
+        }
+        covered += CHUNK_SIZE;
+    }
+    return 0;
+}
+
+/**
  * Main function for eviction. Returns number of pages evicted.
  */
 int do_eviction(int max_batch_size) 
@@ -307,7 +335,7 @@ int do_eviction(int max_batch_size)
             RSTAT(EVICT_RETRIES)++;
             /* TODO: error out if we are stuck here */
             continue;
-        } 
+        }
 
         /* get the longest contiguous sub-chunk that we manage to lock! */
         assert(nchunks_found < max_batch_size);
@@ -360,19 +388,39 @@ int do_eviction(int max_batch_size)
         nchunks = clear_page_flags_range(mr, addr, size, PFLAG_PRESENT);
         assert(nchunks == flushed);     /*sanity check*/
 
-        /* we can set them not-present at this point but don't release those 
-         * that are waiting for writes to complete. Because 
-         * we don't want another fault to go on reading from remote memory 
-         * while the dirtied changes are waiting in the write queue */
+        /* For pages that were discarded and not written-back, we can just 
+         * clear most bits, including the lock, and let them go */
         bitmap_for_each_cleared(write_map, nchunks_locked, i) {
-            clear_page_flags(mr, addr, 
-                PFLAG_WORK_ONGOING | PFLAG_EVICT_ONGOING, &oldflags);
+            addr = base_addr + i * CHUNK_SIZE;
+            log_debug("evict done at flush, clearing all for page %lx", addr);
+            clear_page_flags(mr, addr, PFLAG_PRESENT | PFLAG_DIRTY |
+                PFLAG_WORK_ONGOING | PFLAG_EVICT_ONGOING | PFLAG_HOT_MARKER, 
+                &oldflags);
             assert(!!(oldflags & PFLAG_WORK_ONGOING)); /*sanity check*/
-
-            /* TODO: safely release the waiting faults */
-
-            RSTAT(EVICT_DONE)++;
+            RSTAT(EVICT_PAGES_DONE)++;
         }
+
+        /* For pages that were written-back, the story is more complicated. 
+         * We can set them non-present at this point but cannot release those 
+         * that are waiting for writes to complete. Because we don't want 
+         * another fault to go on reading from remote memory while the dirtied 
+         * changes are waiting in the write queue. At the same time, we cannot
+         * clear after write completion because that might happen before the 
+         * madvise here. So we try and determine who goes before the other
+         * using the PFLAG_EVICT_ONGOING flag */
+        bitmap_for_each_set(write_map, nchunks_locked, i) {
+            addr = base_addr + i * CHUNK_SIZE;
+            clear_page_flags(mr, addr, PFLAG_EVICT_ONGOING, &oldflags);
+            if (!(oldflags & PFLAG_EVICT_ONGOING)) {
+                /* I'm the last one to reach here, clear other bits */
+                log_debug("evict done at mdv, clearing all for page %lx", addr);
+                clear_page_flags(mr, addr, PFLAG_PRESENT | PFLAG_DIRTY |
+                    PFLAG_WORK_ONGOING | PFLAG_HOT_MARKER, &oldflags);
+                assert(!!(oldflags & PFLAG_WORK_ONGOING)); /*sanity check*/
+                RSTAT(EVICT_PAGES_DONE)++;
+            }
+        }
+        RSTAT(EVICT_DONE)++;
     }
 
 #ifdef SAFEMODE

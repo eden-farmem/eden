@@ -314,7 +314,8 @@ struct kthread {
 	unsigned int 		pf_channel;
 	unsigned int 		pf_pending;
 	struct list_head 	pf_waiters;
-	unsigned int		pad3[7];
+	unsigned int		bkend_chan_id;
+	unsigned int		pad3[6];
 
 	/* 10th cache-line, statistics counters */
 	uint64_t		stats[STAT_NR];

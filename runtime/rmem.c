@@ -87,7 +87,8 @@ int rmem_init()
 int rmem_init_thread()
 {
     struct kthread *k = myk();
-    return rmbackend->perthread_init(k);
+    k->bkend_chan_id = rmbackend->get_new_data_channel();
+    return (k->bkend_chan_id < 0);
 }
 
 /**

@@ -6,9 +6,12 @@
 #define __BACKEND_H__
 
 #include "rmem/config.h"
+#include "rmem/fault.h"
 #include "rmem/region.h"
 
-struct region_t;    /*forward declaration, defined in region.h*/
+/* forward declarations */
+struct region_t;
+struct completion_cbs;
 
 /* define and register backend */
 struct rmem_backend_ops {
@@ -19,16 +22,10 @@ struct rmem_backend_ops {
     int (*init)();
 
     /**
-     * perthread_init - backend init per each kthread
-     * returns 0 if success, 1 otherwise
+     * get_new_data_channel - next available channel for read/write pages
+     * returns channel id if available, -1 otherwise
      */
-    int (*perthread_init)();
-
-    /**
-     * perthread_destroy - backend destroy per each kthread
-     * returns 0 if success, 1 otherwise
-     */
-    int (*perthread_destroy)();
+    int (*get_new_data_channel)();
 
     /**
      * destroy - backend destroy
@@ -49,11 +46,32 @@ struct rmem_backend_ops {
      */
     int (*remove_region)(struct region_t *reg);
     
-    // int read(struct region_t *reg, unsigned long fault_addr, ...);
-    // int write(struct region_t *reg, unsigned long addr, size_t size);
-    // int read_from_rdma_write_q(int fd, struct region_t *mr, addr ...);
-    // int poller_on_completion(struct ibv_wc *wc);
-    // int drain_write_reqs();
+    /**
+     * post_read - post read request for the pages needed by the fault from 
+     * the backend. returns 0 if posted, EAGAIN if busy
+     */
+    int (*post_read)(int chan_id, fault_t* f);
+
+    /**
+     * post_write - post write request for the page range pointed by addr and 
+     * size to the backend. returns 0 if posted, EAGAIN if busy
+     */
+    int (*post_write)(int chan_id, struct region_t* mr, unsigned long addr, 
+        size_t size);
+
+    /**
+     * check_for_completions - check with backend for read/write completions
+     * for the posted ones. One can also specify max events it is allowed to
+     * check before. Returns the number of events addressed or -1 on error.
+     */
+    int (*check_for_completions)(int chan_id, struct completion_cbs* cbs,
+        int max_cqe);
+};
+
+/* callbacks for backend read/write completions */
+struct completion_cbs {
+    int (*read_completion)(fault_t* fault, unsigned long buf_addr, size_t size);
+    int (*write_completion)(struct region_t* mr, unsigned long addr, size_t size);
 };
 
 /* available backends */

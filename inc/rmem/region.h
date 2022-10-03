@@ -10,7 +10,6 @@
 #include <stdatomic.h>
 
 #include "base/lock.h"
-#include "rmem/backend.h"
 #include "rmem/config.h"
 #include "rmem/rdma.h"
 
