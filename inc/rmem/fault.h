@@ -40,7 +40,7 @@ typedef struct fault {
     TAILQ_ENTRY(fault) link;
 } fault_t;
 BUILD_ASSERT(sizeof(fault_t) % CACHE_LINE_SIZE == 0);
-BUILD_ASSERT(FAULT_MAX_RDAHEAD_SIZE < UINT8_MAX);
+BUILD_ASSERT(FAULT_MAX_RDAHEAD_SIZE < UINT8_MAX);   /* due to rdahead */
 
 /* fault object as readable string - for debug tracking */
 #define __FAULT_STR_LEN 100
@@ -109,8 +109,24 @@ void dne_on_new_fault(struct region_t *mr, unsigned long addr);
 /**
  * Fault handling
  */
-bool handle_page_fault(fault_t* fault, int* nevicts);
+enum fault_status {
+    FAULT_DONE = 0,
+    FAULT_AGAIN,
+    FAULT_READ_POSTED
+};
+enum fault_status handle_page_fault(int chan_id, fault_t* fault, int* nevicts);
 int fault_read_done(fault_t* f, unsigned long buf_addr, size_t size);
 void fault_done(fault_t* fault);
+
+/**
+ * Fault wait queue support
+ * (inlining datapath functions in the header)
+ */
+TAILQ_HEAD(fault_wait_q_head, fault);
+extern __thread unsigned int n_wait_q;
+extern __thread struct fault_wait_q_head fault_wait_q;
+void fault_wait_q_init_thread();
+void fault_wait_q_free_thread();
+
 
 #endif    // __FAULT_H__

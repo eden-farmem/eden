@@ -10,6 +10,7 @@
 #include <sys/mman.h>
 #include <unistd.h>
 
+#include "rmem/backend.h"
 #include "rmem/fault.h"
 #include "rmem/pflags.h"
 #include "rmem/uffd.h"
@@ -21,9 +22,12 @@
 __thread void* zero_page = NULL;
 __thread char fstr[__FAULT_STR_LEN];
 
-struct dne_fifo_head dne_q;
-unsigned int n_dne_fifo;
+__thread struct dne_fifo_head dne_q;
+__thread unsigned int n_dne_fifo;
 __thread dne_q_item_t dne_q_items[DNE_QUEUE_SIZE];
+
+__thread unsigned int n_wait_q;
+__thread struct fault_wait_q_head fault_wait_q;
 
 /**
  * Per-thread zero page support
@@ -86,60 +90,65 @@ void dne_on_new_fault(struct region_t *mr, unsigned long addr)
  * Fault handling
  */
 
+/* are we already in the state that the fault hoped to acheive? */
+bool is_fault_serviced(fault_t* f)
+{    
+    pflags_t pflags;
+    bool page_present, page_dirty, page_evicting;
+
+    pflags = get_page_flags(f->mr, f->page);
+    page_present = !!(pflags & PFLAG_PRESENT);
+    page_dirty = !!(pflags & PFLAG_DIRTY);
+    page_evicting = !!(pflags & PFLAG_EVICT_ONGOING);
+
+    /* PFLAG_PRESENT is reliable except for some time during eviction. There is 
+     * a small window during eviction (before madvise and clearing the 
+     * PRESENT bit when a kernel fault might get here with the PRESENT
+     * bit set while the page is absent */
+    if(page_present && !(f->from_kernel && page_evicting)){
+        if (f->is_read)
+            return true;
+        if((f->is_write || f->is_wrprotect) && page_dirty)
+            return true;
+    }
+    return false;
+}
+
 /* after receiving page fault */
-bool handle_page_fault(fault_t* fault, int* nevicts_needed)
+enum fault_status handle_page_fault(int chan_id, fault_t* fault, 
+    int* nevicts_needed)
 {
     pflags_t pflags, oldflags;
     pflags_t flags[FAULT_MAX_RDAHEAD_SIZE+1];
     struct region_t* mr;
-    bool page_present, page_dirty, page_evicting, noaction, was_locked;
-    bool no_wake, wrprotect, need_eviction = false, fdone = false;
+    bool page_present, was_locked, no_wake, wrprotect;
     int i, ret, n_retries, nchunks = 0;
     unsigned long addr;
     unsigned long long pressure;
     *nevicts_needed = 0;
-    
-    /* accounting */
-    if (fault->is_read)         RSTAT(FAULTS_R)++;
-    if (fault->is_write)        RSTAT(FAULTS_W)++;
-    if (fault->is_wrprotect)    RSTAT(FAULTS_WP)++;
-
-    /* find region */
-    mr = get_region_by_addr_safe(fault->page);
-    BUG_ON(!mr);    /* we dont do region deletions yet so it must exist*/
-    assert(mr->addr);
-    fault->mr = mr;
 
     /* see if this fault needs to be acted upon, because some other fault 
-        * on the same page might have handled it by now. There is a small 
-        * window, however, during eviction (before madvise and clearing the 
-        * PRESENT bit when a kernel fault might get here with PRESENT
-        * bit set but needs to be handled */
-    pflags = get_page_flags(mr, fault->page);
-    page_present = !!(pflags & PFLAG_PRESENT);
-    page_dirty = !!(pflags & PFLAG_DIRTY);
-    page_evicting = !!(pflags & PFLAG_EVICT_ONGOING);
-    noaction = fault->is_read && page_present && 
-        !(fault->from_kernel && page_evicting);
-    noaction = (fault->is_write || fault->is_wrprotect) && page_dirty;
-    if (unlikely(noaction)) {
+     * on the same page might have handled it by now */
+    if (is_fault_serviced(fault)) {
         /* some other fault addressed the page, wake up if kernel fault */
         if (fault->from_kernel) {
             ret = uffd_wake(userfault_fd, fault->page, CHUNK_SIZE);
             assertz(ret);
         }
-        fdone = true;
-        goto out;
+        /* fault done */
+        log_debug("%s - fault done, was redundant", FSTR(fault));
+        return FAULT_DONE;
     }
     else {
         /* try getting a lock on the page */
+        mr = fault->mr;
+        assert(mr);
         pflags = set_page_flags(mr, fault->page, PFLAG_WORK_ONGOING, &oldflags);
         was_locked = !!(oldflags & PFLAG_WORK_ONGOING);
         if (unlikely(was_locked)) {
-            // someone else is working on it, add to waitq
+            /* someone else is working on it, check back later */
             log_debug("%s - saw ongoing work, going to wait", FSTR(fault));
-            /* TODO: add to waitq */
-
+            return FAULT_AGAIN;
         }
         else {
             /* we are handling it */
@@ -157,8 +166,7 @@ bool handle_page_fault(fault_t* fault, int* nevicts_needed)
 
                 /* done */
                 log_debug("%s - removed write protection", FSTR(fault));
-                fdone = true;
-                goto out;
+                return FAULT_DONE;
             }
             else {
                 /* upgrade to write fault */
@@ -192,8 +200,7 @@ bool handle_page_fault(fault_t* fault, int* nevicts_needed)
                 
                 /* done */
                 log_debug("%s - added zero page", FSTR(fault));
-                fdone = true;
-                goto out;
+                return FAULT_DONE;
             }
 
             /* at this point, we can support read-ahead. see if we can get 
@@ -220,23 +227,31 @@ bool handle_page_fault(fault_t* fault, int* nevicts_needed)
 
             /* send off page read */
             /* NOTE: kona also makes an attempt to read from rdma write_q
-                * to preempt eviction but I won't handle that here */
-            // ret = rmbackend->post_read_async(fault); /* TODO */
-            // assertz(ret);
+             * to preempt eviction but I won't do that here */
+            do {
+                ret = rmbackend->post_read(chan_id, fault);
+                if (ret == EAGAIN) {
+                    /* read queue is full, nothing to do but repeat and keep 
+                     * checking for completions to free request slots. We can 
+                     * just check for one completion here? */
+                    /* TODO: we may want to count idle cycles here */    
+                    rmbackend->check_for_completions(chan_id, &hthr_cbs, 
+                        RMEM_MAX_COMP_PER_OP);
+		            cpu_relax();
+                }
+            } while(ret == EAGAIN);
+            assertz(ret);
 
             /* book some memory for the pages */
             pressure = atomic_fetch_add(&memory_booked, nchunks * CHUNK_SIZE);
             pressure += nchunks * CHUNK_SIZE;
-            need_eviction = (pressure > local_memory);
-            if (need_eviction)
+            if (pressure > local_memory)
                 *nevicts_needed = (local_memory - pressure) / CHUNK_SIZE;
+
+            return FAULT_READ_POSTED;
         }
     }
-    
-out:
-    if (fdone)
-        fault_done(fault);
-    return need_eviction;
+    unreachable();
 }
 
 /* after reading the pages for a fault completed */
@@ -258,6 +273,7 @@ int fault_read_done(fault_t* f, unsigned long buf_addr, size_t size)
     pflags_t flags = PFLAG_PRESENT;
     if (!wrprotect) flags |= PFLAG_DIRTY;
     set_page_flags_range(f->mr, f->page, size, flags);
+    return 0;
 }
 
 /* after servicing fault is completely done */
@@ -287,4 +303,20 @@ void fault_done(fault_t* fault)
     /* free */
     put_mr(fault->mr);
     fault_free(fault);
+}
+
+/**
+ * Per-thread fault wait queue support
+ * Holds off concurrent faults on a page while one of them service it 
+ */
+void fault_wait_q_init_thread()
+{
+    TAILQ_INIT(&fault_wait_q);
+    n_wait_q = 0;
+}
+
+void fault_wait_q_free_thread()
+{
+    /* nothing to do */
+    assert(!TAILQ_EMPTY(&fault_wait_q));
 }

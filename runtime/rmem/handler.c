@@ -156,9 +156,10 @@ static void* rmem_handler(void *arg)
 {
     bool need_eviction;
     unsigned long long pressure;
-    fault_t* fault;
+    fault_t *fault, *next;
     int nevicts, nevicts_needed, batchsz;
-    
+    enum fault_status fstatus;
+    struct region_t* mr;
     assert(arg != NULL);        /* expecting a hthread_t */
     my_hthr = (hthread_t*) arg; /* save our hthread_t */
 
@@ -166,28 +167,88 @@ static void* rmem_handler(void *arg)
     fault_tcache_init_thread();
     zero_page_init_thread();
     dne_q_init_thread();
+    fault_wait_q_init_thread();
 
     /* do work */
     while(!my_hthr->stop) {
         need_eviction = false;
         nevicts = nevicts_needed = 0;
 
+        /* pick faults from the backlog first */
+        fault = TAILQ_FIRST(&fault_wait_q);
+        while (fault != NULL) {
+            next = TAILQ_NEXT(fault, link);
+            fstatus = handle_page_fault(my_hthr->bkend_chan_id, fault, 
+                &nevicts_needed);
+            switch (fstatus) {
+                case FAULT_DONE:
+                    log_debug("%s - done, released from wait", FSTR(fault));
+                    TAILQ_REMOVE(&fault_wait_q, fault, link);
+                    n_wait_q--;
+                    assert(n_wait_q >= 0);
+                    fault_done(fault);
+                    break;
+                case FAULT_READ_POSTED:
+                    log_debug("%s - done, released from wait", FSTR(fault));
+                    TAILQ_REMOVE(&fault_wait_q, fault, link);
+                    n_wait_q--;
+                    assert(n_wait_q >= 0);
+                    if (nevicts_needed > 0)
+                        goto eviction;
+                    break;
+                case FAULT_AGAIN:
+                    log_debug("%s - not released from wait", FSTR(fault));
+                    break;
+            }
+            fault = next;
+        }
+
         /* check for uffd faults */
         fault = read_uffd_fault();
-        if (fault)
-            handle_page_fault(fault, &nevicts_needed);
+        if (fault) {
+            /* accounting */
+            if (fault->is_read)         RSTAT(FAULTS_R)++;
+            if (fault->is_write)        RSTAT(FAULTS_W)++;
+            if (fault->is_wrprotect)    RSTAT(FAULTS_WP)++;
 
+            /* find region */
+            mr = get_region_by_addr_safe(fault->page);
+            BUG_ON(!mr);  /* we dont do region deletions yet so it must exist */
+            assert(mr->addr);
+            fault->mr = mr;
+
+            /* start handling fault */
+            fstatus = handle_page_fault(my_hthr->bkend_chan_id, fault, 
+                &nevicts_needed);
+            switch (fstatus) {
+                case FAULT_DONE:
+                    fault_done(fault);
+                    break;
+                case FAULT_AGAIN:
+                    /* add to wait */
+                    TAILQ_INSERT_TAIL(&fault_wait_q, fault, link);
+                    n_wait_q++;
+                    log_debug("%s - added to wait", FSTR(fault));
+                    break;
+                case FAULT_READ_POSTED:
+                    /* nothing to do here, we check for completions later*/
+                    break;
+            }
+        }
+
+eviction:
         /*  do eviction if needed */
-        need_eviction = (nevicts > 0);
+        need_eviction = (nevicts_needed > 0);
         if (!need_eviction) {
             /* if eviction wasn't already signaled by the earlier fault, 
-             * see if we need one in general (since this is the handler thread) */
+             * see if we need one in general (since this is the handler thread)*/
             pressure = atomic_load(&memory_used);
             need_eviction = (pressure > local_memory * eviction_threshold);
         }
 
         /* start eviction */
         if (need_eviction) {
+            nevicts = 0;
             do {
                 /* can use bigger batches in handler threads if idling */
                 batchsz = EVICTION_MAX_BATCH_SIZE;
@@ -198,7 +259,8 @@ static void* rmem_handler(void *arg)
         }
 
         /* handle read/write completions from the backend */
-        rmbackend->check_for_completions(my_hthr->bkend_chan_id, &hthr_cbs, RMEM_MAX_COMP_PER_OP);
+        rmbackend->check_for_completions(my_hthr->bkend_chan_id, &hthr_cbs, 
+            RMEM_MAX_COMP_PER_OP);
 
 #ifdef SECOND_CHANCE_EVICTION
         /* TODO: clear all hot bits once in a while */
@@ -208,6 +270,7 @@ static void* rmem_handler(void *arg)
     /* destroy state */
     zero_page_free_thread();
     dne_q_free_thread();
+    fault_wait_q_free_thread();
     return NULL;
 }
 

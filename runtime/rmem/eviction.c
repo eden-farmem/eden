@@ -296,13 +296,13 @@ int write_back_completed(struct region_t* mr, unsigned long addr, size_t size)
     covered = 0;
     while(covered < size) {
         page = addr + covered;
-        clear_page_flags(mr, page, PFLAG_EVICT_ONGOING, &oldflags);
+        clear_page_flags(mr, page, PFLAG_EVICT_ONGOING | PFLAG_PRESENT | 
+            PFLAG_DIRTY | PFLAG_HOT_MARKER, &oldflags);
         if (!(oldflags & PFLAG_EVICT_ONGOING)) {
-            /* I'm the last one to reach here, clear other bits. See 
+            /* I'm the last one to reach here, unlock the page. See 
              * do_eviction() for a comment on what we're doing here. */
-            log_debug("evict done at wrback, clearing all for page %lx", addr);
-            clear_page_flags(mr, page, PFLAG_PRESENT | PFLAG_DIRTY |
-                PFLAG_WORK_ONGOING | PFLAG_HOT_MARKER, &oldflags);
+            log_debug("evict done at wrback, unlocking page %lx", addr);
+            clear_page_flags(mr, page, PFLAG_WORK_ONGOING, &oldflags);
             assert(!!(oldflags & PFLAG_WORK_ONGOING)); /*sanity check*/
             RSTAT(EVICT_PAGES_DONE)++;
         }
@@ -392,7 +392,7 @@ int do_eviction(int max_batch_size)
          * clear most bits, including the lock, and let them go */
         bitmap_for_each_cleared(write_map, nchunks_locked, i) {
             addr = base_addr + i * CHUNK_SIZE;
-            log_debug("evict done at flush, clearing all for page %lx", addr);
+            log_debug("evict done at flush, unlocking page %lx", addr);
             clear_page_flags(mr, addr, PFLAG_PRESENT | PFLAG_DIRTY |
                 PFLAG_WORK_ONGOING | PFLAG_EVICT_ONGOING | PFLAG_HOT_MARKER, 
                 &oldflags);
@@ -410,12 +410,12 @@ int do_eviction(int max_batch_size)
          * using the PFLAG_EVICT_ONGOING flag */
         bitmap_for_each_set(write_map, nchunks_locked, i) {
             addr = base_addr + i * CHUNK_SIZE;
-            clear_page_flags(mr, addr, PFLAG_EVICT_ONGOING, &oldflags);
+            clear_page_flags(mr, addr, PFLAG_EVICT_ONGOING | PFLAG_PRESENT | 
+                PFLAG_DIRTY | PFLAG_HOT_MARKER, &oldflags);
             if (!(oldflags & PFLAG_EVICT_ONGOING)) {
-                /* I'm the last one to reach here, clear other bits */
-                log_debug("evict done at mdv, clearing all for page %lx", addr);
-                clear_page_flags(mr, addr, PFLAG_PRESENT | PFLAG_DIRTY |
-                    PFLAG_WORK_ONGOING | PFLAG_HOT_MARKER, &oldflags);
+                /* I'm the last one to reach here, clear the lock as well */
+                log_debug("evict done at mdv, unlocking page %lx", addr);
+                clear_page_flags(mr, addr, PFLAG_WORK_ONGOING, &oldflags);
                 assert(!!(oldflags & PFLAG_WORK_ONGOING)); /*sanity check*/
                 RSTAT(EVICT_PAGES_DONE)++;
             }
