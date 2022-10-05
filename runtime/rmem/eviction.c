@@ -174,7 +174,7 @@ static int remove_pages(struct region_t *mr, unsigned long addr, size_t size)
     int r;
     log_debug("remove memory range: addr=%lx, size=%ld", addr, size);
 
-#ifdef REGISTER_MADVISE_NOTIF
+#ifdef REGISTER_MADVISE_REMOVE
     /* we don't support receiving madvise notifications for page 
      * deletions (which will lead to deadlocks as the notifications 
      * will need to be handled before we move on from here - something we 

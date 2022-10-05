@@ -66,6 +66,8 @@ static __noreturn void jmp_thread(thread_t *th)
 		while (load_acquire(&th->stack_busy))
 			cpu_relax();
 	}
+
+	RUNTIME_EXIT();
 	__jmp_thread(&th->tf);
 }
 
@@ -107,6 +109,7 @@ static void jmp_runtime(runtime_fn_t fn)
 	assert_preempt_disabled();
 	assert(thread_self() != NULL);
 
+	RUNTIME_ENTER();
 	__jmp_runtime(&thread_self()->tf, fn, runtime_stack);
 }
 
@@ -119,6 +122,7 @@ static __noreturn void jmp_runtime_nosave(runtime_fn_t fn)
 {
 	assert_preempt_disabled();
 
+	RUNTIME_ENTER();
 	__jmp_runtime_nosave(fn, runtime_stack);
 }
 

@@ -9,12 +9,13 @@
 #include <sys/queue.h>
 #include <stdatomic.h>
 
+#include "base/assert.h"
 #include "base/lock.h"
 #include "rmem/config.h"
 #include "rmem/rdma.h"
 
 /* Smallest native type that can support flags for each page */
-typedef short pflags_t;
+typedef char pflags_t;
 typedef _Atomic(pflags_t) atomic_pflags_t;
 BUILD_ASSERT(sizeof(atomic_pflags_t) == sizeof(pflags_t));
 

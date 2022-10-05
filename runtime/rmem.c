@@ -78,7 +78,7 @@ int rmem_init()
      * (currently just one but we can add more) */
     nhandlers = 1;
     handlers = malloc(nhandlers*sizeof(hthread_t*));
-    // handlers[0] = new_rmem_handler_thread(PIN_RMEM_HANDLER_CORE);
+    handlers[0] = new_rmem_handler_thread(PIN_RMEM_HANDLER_CORE);
 
 #ifdef USE_VDSO_CHECKS
     /* init vdso objects */

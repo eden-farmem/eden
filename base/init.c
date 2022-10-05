@@ -105,7 +105,6 @@ int base_init(void)
 	return 0;
 }
 
-extern int thread_init_perthread(void);
 static const struct init_level init_thread_level = INIT_LEVEL(thread, t);
 
 static int init_thread_internal(void)

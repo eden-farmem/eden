@@ -200,6 +200,7 @@ enum fault_status handle_page_fault(int chan_id, fault_t* fault,
                 
                 /* done */
                 log_debug("%s - added zero page", FSTR(fault));
+                set_page_flags(mr, fault->page, PFLAG_REGISTERED, NULL);
                 return FAULT_DONE;
             }
 

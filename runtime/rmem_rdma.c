@@ -590,18 +590,17 @@ int rdma_init() {
 /* returns the next available channel (id) for datapath */
 int rdma_get_data_channel()
 {
-    int nchan;
+    int chan_id;
     do {
-        nchan = atomic_load(&nchannels);
-        BUG_ON(nchan > RMEM_MAX_CHANNELS);
-        if (nchan == RMEM_MAX_CHANNELS) {
+        chan_id = atomic_load(&nchannels);
+        BUG_ON(chan_id > RMEM_MAX_CHANNELS);
+        if (chan_id == RMEM_MAX_CHANNELS) {
             log_warn("out of rdma channels!");
             return -1;
         }
-        nchan++;
-    } while(atomic_compare_exchange_strong(&nchannels, &nchan, nchan+1));
-    log_debug("channel %d taken", nchan);
-    return nchan;
+    } while(!atomic_compare_exchange_strong(&nchannels, &chan_id, chan_id+1));
+    log_debug("channel %d taken, num channels: %d", chan_id, nchannels);
+    return chan_id;
 }
 
 /* backend destroy */

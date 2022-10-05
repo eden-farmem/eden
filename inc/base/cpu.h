@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include <pthread.h>
 #include <unistd.h>
 
 #include <base/stddef.h>
@@ -28,4 +29,4 @@ struct cpu_info {
 };
 
 extern struct cpu_info cpu_info_tbl[NCPU];
-int cores_pin_thread(pid_t tid, int core);
+int cpu_pin_thread(pthread_t tid, int core);
