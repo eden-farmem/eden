@@ -1,258 +1,243 @@
 /*
- * pgfault.c - support for userspace pagefaults
+ * pgfault.c - support for userspace page faults
  */
 
 #include <sys/auxv.h>
 
-#include <base/lock.h>
-#include <base/log.h>
-#include <base/time.h>
-#include <runtime/thread.h>
-#include <runtime/pgfault.h>
-#include <runtime/sync.h>
-#include <runtime/vdso.h>
+#include "base/lock.h"
+#include "base/log.h"
+#include "base/time.h"
+#include "base/vdso.h"
+#include "rmem/eviction.h"
+#include "rmem/fault.h"
+#include "rmem/pflags.h"
+#include "rmem/region.h"
+#include "runtime/thread.h"
+#include "runtime/pgfault.h"
+#include "runtime/sync.h"
 
 #include "defs.h"
 
-/*
- * Scheduler-supported page faults 
- */
+/* state */
+__thread struct region_t* __cached_mr = NULL;
 
+/* objects for vdso-based page checks */
 const char *version = "LINUX_2.6";
 const char *name_mapped = "__vdso_is_page_mapped";
 const char *name_wp = "__vdso_is_page_mapped_and_wrprotected";
-typedef long (*vdso_check_page_t)(const void *p);
-vdso_check_page_t is_page_mapped_vdso;
-vdso_check_page_t is_page_mapped_and_readonly_vdso;
+vdso_check_page_t __is_page_mapped_vdso;
+vdso_check_page_t __is_page_mapped_and_readonly_vdso;
 
 /**
- * pgfault_init - initializes page fault support 
+ * Initialize vDSO page check calls
  */
-int pgfault_init()
+int __vdso_init()
 {
-#ifndef PAGE_FAULTS
-	log_info("PAGE_FAULTS not set, skipping pgfault_init");
-	return 0;
+#ifndef USE_VDSO_CHECKS
+    BUG();
 #endif
+    /* find vDSO symbols */
+    unsigned long sysinfo_ehdr;
+    sysinfo_ehdr = getauxval(AT_SYSINFO_EHDR);
+    if (!sysinfo_ehdr) {
+        log_err("AT_SYSINFO_EHDR is not present");
+        return -ENOENT;
+    }
 
-#ifdef PAGE_FAULTS_ASYNC
-	log_info("initializing ASYNC pagefaults");
-#else
-	log_info("initializing SYNC pagefaults");
-#endif
+    vdso_init_from_sysinfo_ehdr(getauxval(AT_SYSINFO_EHDR));
+    __is_page_mapped_vdso = (vdso_check_page_t)vdso_sym(version, name_mapped);
+    if (!__is_page_mapped_vdso) {
+        log_err("Could not find %s in vdso", name_mapped);
+        return -ENOENT;
+    }
+    __is_page_mapped_and_readonly_vdso = (vdso_check_page_t)vdso_sym(version, name_wp);
+    if (!__is_page_mapped_and_readonly_vdso) {
+        log_err("Could not find %s in vdso", name_wp);
+        return -ENOENT;
+    }
+    return 0;
+}
 
-	unsigned long sysinfo_ehdr;
+/* finish handling fault - the page is in the state required by the fault */
+int kthr_fault_done(fault_t* f)
+{
+    /* release thread */
+    assert(f->thread);
+    thread_ready(f->thread);
 
-	/* find vDSO symbols */
-	sysinfo_ehdr = getauxval(AT_SYSINFO_EHDR);
-	if (!sysinfo_ehdr) {
-		log_err("AT_SYSINFO_EHDR is not present");
-		return -ENOENT;
-	}
+    /* release fault */
+    fault_done(f);
+    return 0;
+}
 
-	vdso_init_from_sysinfo_ehdr(getauxval(AT_SYSINFO_EHDR));
-	is_page_mapped_vdso = (vdso_check_page_t)vdso_sym(version, name_mapped);
-	if (!is_page_mapped_vdso) {
-		log_err("Could not find %s in vdso", name_mapped);
-		return -ENOENT;
-	}
-	is_page_mapped_and_readonly_vdso = (vdso_check_page_t)vdso_sym(version, name_wp);
-	if (!is_page_mapped_and_readonly_vdso) {
-		log_err("Could not find %s in vdso", name_wp);
-		return -ENOENT;
-	}
+/* handler fault after fetched pages are ready */
+int kthr_fault_read_done(fault_t* f, unsigned long buf_addr, size_t size)
+{
+    int r;
+    struct kthread *k;
+    
+    /* we expect the lock to be taken before calling completions */
+    k = myk();
+    assert_spin_lock_held(&k->pf_lock);
+    if (k->bkend_chan_id != f->posted_chan_id)
+        RSTAT(TOTAL_STEALS)++;
 
-	/* check if a backend is available */
-	if (fault_backend.is_ready == NULL) {
-		log_err("found no backend for PAGE_FAULTS");
-		return -EPERM;
-	}
-	if (!fault_backend.is_ready()) {
-		/* TODO: should we wait until ready? */
-		log_err("backend not ready for PAGE_FAULTS");
-		return -EPERM;
-	}
-	return 0;
+    /* finish up page mapping */
+    r = fault_read_done(f, buf_addr, size);
+    assertz(r);
+
+    /* release thread & fault */
+    r = kthr_fault_done(f);
+    assertz(r);
+
+    return 0;
+}
+
+/* kthread check for completions. returns the number of read completions 
+ * that serviced faults (at this point, threads associated with those 
+ * faults will have been added to the ready queue */
+int kthr_check_for_completions(struct kthread* k, int max_budget)
+{
+    int nfaults_done, ntotal; 
+    ntotal = rmbackend->check_for_completions(k->bkend_chan_id, &kthr_cbs, 
+        max_budget, &nfaults_done, NULL);
+    assert(k->pf_pending >= nfaults_done);
+    k->pf_pending -= nfaults_done;
+    log_debug("handled %d completions on chan %d", k->bkend_chan_id, ntotal);
+    return nfaults_done;
+}
+
+/* kthread run through waiting faults to see if they are ready to go */
+int kthr_handle_waiting_faults(struct kthread* k)
+{
+    struct fault *fault, *next;
+    int nevicts_needed, nevicts = 0;  
+    enum fault_status fstatus;
+    fault = TAILQ_FIRST(&k->fault_wait_q);
+    while (fault != NULL) {
+        next = TAILQ_NEXT(fault, link);
+        fstatus = handle_page_fault(k->bkend_chan_id, fault, &nevicts_needed, 
+            &kthr_cbs);
+        switch (fstatus) {
+            case FAULT_DONE:
+                log_debug("%s - done, released from wait", FSTR(fault));
+                TAILQ_REMOVE(&k->fault_wait_q, fault, link);
+                kthr_fault_done(fault);
+                k->pf_pending--;
+                assert(k->n_wait_q > 0);
+                k->n_wait_q--;
+                break;
+            case FAULT_READ_POSTED:
+                log_debug("%s - done, released from wait", FSTR(fault));
+                TAILQ_REMOVE(&k->fault_wait_q, fault, link);
+                assert(k->n_wait_q > 0);
+                k->n_wait_q--;
+                if (nevicts_needed > 0) {
+                    nevicts = 0;
+                    while(nevicts < nevicts_needed)
+                        nevicts += do_eviction(k->bkend_chan_id, &kthr_cbs, 
+                            min(nevicts_needed, EVICTION_MAX_BATCH_SIZE));
+                    /* TODO: shall we break after one eviction or continue? */
+                }
+                break;
+            case FAULT_AGAIN:
+                log_debug("%s - not released from wait", FSTR(fault));
+                break;
+        }
+        fault = next;
+    }
+    return 0;
 }
 
 /**
- * pgfault_init_thread - initializes per-thread page fault support
+ * Handle the fault in Shenango
  */
-int pgfault_init_thread()
-{	
-	struct kthread *k = myk();
-	k->pf_pending = 0;
-#ifndef PAGE_FAULTS
-	log_debug("PAGE_FAULTS not set, skipping pgfault_init_thread");
-	return 0;
-#endif
-
-	k->pf_channel = fault_backend.get_available_channel();
-	if (k->pf_channel < 0) {
-		log_err("could not get a pagefault channel");
-		return -ENOENT;
-	}
-	return 0;
-}
-
-
-static inline void __possible_fault_on(void* address, int flags) 
+void kthr_send_fault_to_scheduler(void* address, bool write, int rdahead)
 {
-#ifndef PAGE_FAULTS
-	return;
+#ifndef REMOTE_MEMORY
+    log_err("remote memory not defined");
+    BUG();
 #endif
+    struct fault* fault;
+    unsigned long page;
+    struct kthread *k;
+    struct region_t* mr;
+    int nevicts_needed = 0, nevicts = 0;
+    enum fault_status fstatus;
 
-	/* fast path */
-#ifdef KONA_PAGE_CHECKS
-	bool nofault = (flags & FAULT_FLAG_READ)
-		? kapi_is_page_mapped((unsigned long)address)
-		: kapi_is_page_mapped_and_readonly((unsigned long)address);
-#else
-	bool nofault = (flags & FAULT_FLAG_READ)
-		? is_page_mapped_vdso(address)
-		: is_page_mapped_and_readonly_vdso(address);
-#endif
+    /* disable preempt and get fault lock. If we're spending too much time 
+     * getting this lock, we may have to do more fine-grained locking */
+    k = getk();
+    spin_lock(&k->pf_lock);
 
-	if (nofault) {
-		/* Only do this for debugging, this will affect performance 
-		 * of fastpath when running with multiple cores */
-		STAT(PF_ANNOT_HITS)++;
-		return;
-	}
+    /* alloc fault object */
+    page = ((unsigned long) address) & CHUNK_MASK;
+    fault = fault_alloc();
+    if (unlikely(!fault)) {
+        log_debug("couldn't get a fault object");
+        BUG();
+    }
+    memset(fault, 0, sizeof(fault_t));
+    fault->page = page & CHUNK_MASK;
+    fault->is_read = !write;
+    fault->is_write = write;
+    fault->from_kernel = false;
+    fault->rdahead_max = rdahead;
+    fault->rdahead = 0;
+    fault->thread = thread_self();
 
-	/* fault path */
-	int ret, posted = 0;
-	struct kthread *k;
-	bool yield;
-	unsigned long start_tsc = 0;
-#ifdef PAGE_FAULTS_SYNC
-	struct kthread *l;
-#endif
+    /* accounting */
+    if (fault->is_read)         RSTAT(FAULTS_R)++;
+    if (fault->is_write)        RSTAT(FAULTS_W)++;
+    if (fault->is_wrprotect)    RSTAT(FAULTS_WP)++;
 
-	thread_t* myth = thread_self();
-	pgfault_t fault = {
-		.channel = -1,	/* to be filled */
-		.fault_addr = (unsigned long) address,
-		.flags = flags,
-		.tag = (void*) myth
-	};
+    /* find region */
+    mr = get_region_by_addr_safe(fault->page);
+    BUG_ON(!mr);  /* we dont do region deletions yet so it must exist */
+    assert(mr->addr);
+    fault->mr = mr;
 
-	do {
-		/* we may be running in a different kthread
-		 * in each loop due to preemption or stealing */
-		k = getk();
-		spin_lock(&k->pf_lock);
-		fault.channel = k->pf_channel;
+    /* start handling fault */
+    fstatus = handle_page_fault(k->bkend_chan_id, fault, &nevicts_needed, &kthr_cbs);
+    switch (fstatus) {
+        case FAULT_DONE:
+            fault_done(fault);
+            spin_unlock(&k->pf_lock);
+            putk();
+            return;
+        case FAULT_AGAIN:
+            /* add to wait and yield to run another thread */
+            TAILQ_INSERT_TAIL(&k->fault_wait_q, fault, link);
+            k->n_wait_q++;
+            log_debug("%s - added to wait", FSTR(fault));
+            goto yield_thread_and_wait;
+            break;
+        case FAULT_READ_POSTED:
+            /* nothing to do here, we check for completions later*/
+            if (nevicts_needed)
+                goto eviction;
+            goto yield_thread_and_wait;
+            break;
+    }
 
-		/* post */
-		log_debug("thread %p posting fault %p on channel %d", 
-			myth, address, fault.channel);
-		ret = fault_backend.post_async(fault.channel, &fault);
-		posted = (ret == 0);
-		if (posted) {
-			if (start_tsc != 0)
-				STAT(SCHED_CYCLES_IDLE) += (rdtscp(NULL) - start_tsc);
-			break;
-		}
-#ifdef PAGE_FAULTS_SYNC
-		BUG();	/* post shouldn't fail in sync case */
-#endif
+eviction:
+    /* start eviction; evict only as much as necessary on shenango cores */
+    while(nevicts < nevicts_needed)
+        nevicts += do_eviction(k->bkend_chan_id, &kthr_cbs, 
+            min(nevicts_needed - nevicts, EVICTION_MAX_BATCH_SIZE));
 
-		/* nothing we can do except wait and try again later */
-		log_debug("thread %p could not post", myth);
-		spin_unlock(&k->pf_lock);
+yield_thread_and_wait:
+    k->pf_pending++;
+    putk();
+    thread_park_and_unlock_np(&k->pf_lock); /* yield */
 
-		/* count towards idle time as long as the we're waiting to post */
-		if (start_tsc == 0)
-			start_tsc = rdtsc();
-
-		/* check if we should yield; its important that we yield 
-		 * to resolve page fault responses to avoid livelocks. 
-		 * currently we do not yield for external irqs like network 
-		 * events */
-		yield = timer_needed(k) || pgfault_response_ready(k);
-		putk();
-
-		if (yield) {
-			log_debug("thread %p yielding", myth);
-			/* record idle time before yielding */
-			STAT(SCHED_CYCLES_IDLE) += (rdtscp(NULL) - start_tsc);
-			thread_yield();
-			start_tsc = rdtsc();	/* start idle time again */
-		}
-
-		cpu_relax();
-	} while (!posted);
-	k->pf_pending++;
-	STAT(PF_POSTED)++;
-
-#ifdef PAGE_FAULTS_SYNC
-	spin_unlock(&k->pf_lock);
-	putk();
-
-	/* poll wait for the fault response */
-	start_tsc = rdtsc();
-	pgfault_t response = {0};
-	do {
-		l = getk();
-		/* make sure we're running on the same kernel thread */
-		assert(k->pf_channel == l->pf_channel);	
-		ret = fault_backend.read_response_async(l->pf_channel, &response);
-		l->pf_pending--;
-		putk();
-		cpu_relax();
-	} while(ret != 0);
-
-	/* sanity checks */
-	// assert((response.fault_addr & PAGE_MASK) == ((unsigned long) address & PAGE_MASK));
-	assert((thread_t*) response.tag == myth);
-	STAT(PF_RETURNED)++;
-
-	/* count the wait as idle time */
-	STAT(SCHED_CYCLES_IDLE) += (rdtscp(NULL) - start_tsc);
-#else 
-	/* wait until woken up */
-	thread_park_and_unlock_np(&k->pf_lock);
-#endif
-
-#ifdef DEBUG
-	/* there should be no fault at this point */	
-	log_debug("thread %p released after servicing %p", myth, address);
-#ifdef KONA_PAGE_CHECKS
-	nofault = (flags & FAULT_FLAG_READ)
-		? kapi_is_page_mapped((unsigned long)address)
-		: kapi_is_page_mapped_and_readonly((unsigned long)address);
-#else
-	nofault = (flags & FAULT_FLAG_READ)
-		? is_page_mapped_vdso(address)
-		: is_page_mapped_and_readonly_vdso(address);
-#endif
-	if (!nofault) {
-		STAT(PF_FAILED)++;
-		log_debug("thread %p pagefault serviced but still faults at %p", 
-			myth, address);
-	}
-#endif
-
+    /* fault serviced if we get here */
+    assert(fault->thread == thread_self());
+    assert(!__is_fault_pending(address, write));
 }
 
-void possible_read_fault_on(void* address) {
-	__possible_fault_on(address, FAULT_FLAG_READ);
-}
-
-void possible_write_fault_on(void* address) {
-	__possible_fault_on(address, FAULT_FLAG_WRITE);
-}
-
-/* register a backend */
-#ifdef WITH_KONA		/*kona backend*/
-	struct fault_backend_ops fault_backend = {
-		.post_async = app_post_fault_async,
-		.poll_response_async = app_poll_fault_resp_async,
-		.read_response_async = app_read_fault_resp_async,
-		.is_ready = is_appfaults_initialized,
-		.get_available_channel = app_faults_get_next_channel
-	};	
-#else					/*default*/
-	struct fault_backend_ops fault_backend = {0};		
-#endif
+/* kthread backend read/write completion ops */
+struct completion_cbs kthr_cbs = {
+    .read_completion = kthr_fault_read_done,
+    .write_completion = write_back_completed
+};

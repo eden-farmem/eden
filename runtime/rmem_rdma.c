@@ -747,7 +747,8 @@ int rdma_post_write(int chan_id, struct region_t* mr, unsigned long addr,
 }
 
 /* backend check for read & write completions on a channel */
-int rdma_check_cq(int chan_id, struct completion_cbs* cbs, int max_cqe)
+int rdma_check_cq(int chan_id, struct completion_cbs* cbs, int max_cqe, 
+    int* nread, int* nwrite)
 {
     struct request* req;
     struct ibv_cq *cq;
@@ -778,7 +779,6 @@ int rdma_check_cq(int chan_id, struct completion_cbs* cbs, int max_cqe)
             /* handle read completion */
             req = (struct request*)(uintptr_t)wc->wr_id;
             assert(req && req->fault);
-            RSTAT(NET_READ)++;
             log_debug("%s - RDMA READ completed successfully", FSTR(req->fault));
            
             /* call completion hook */
@@ -787,13 +787,14 @@ int rdma_check_cq(int chan_id, struct completion_cbs* cbs, int max_cqe)
 
             /* release request slot */
             req->busy = 0;
+            RSTAT(NET_READ)++;
+            if (nread)  (*nread)++;
         } else {
             /* handle write completion */
             assert(opcode == IBV_WC_RDMA_WRITE);
             req = (struct request*)(uintptr_t)wc->wr_id;
             assert(req && req->conn && req->conn->server); 
             assert(req->conn->server->reg);
-            RSTAT(NET_WRITE)++;
             log_debug("RDMA WRITE completed on chan %d: index=%d, addr=%lx", 
                 chan_id, req->index, req->orig_local_addr);
 
@@ -804,9 +805,12 @@ int rdma_check_cq(int chan_id, struct completion_cbs* cbs, int max_cqe)
 
             /* release request slot */
             req->busy = 0;
+            RSTAT(NET_WRITE)++;
+            if (nwrite)  (*nwrite)++;
         }
     }
 
+    assert(!(nread && nwrite) || (*nread + *nwrite == ncqe));
     return ncqe;
 }
 

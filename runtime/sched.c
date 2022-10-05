@@ -142,6 +142,8 @@ static bool steal_work(struct kthread *l, struct kthread *r)
 {
 	thread_t *th;
 	uint32_t i, avail, rq_tail;
+	int nthr_ready, wait_count;
+	struct fault *fault, *next;
 
 	assert_spin_lock_held(&l->lock);
 	assert(l->rq_head == 0 && l->rq_tail == 0);
@@ -179,6 +181,39 @@ static bool steal_work(struct kthread *l, struct kthread *r)
 	if (th) {
 		r->rq_overflow_len--;
 		goto done;
+	}
+
+	/* steal completed and waiting faults */
+	if (spin_try_lock(&r->pf_lock)) {
+		nthr_ready = kthr_check_for_completions(r, RMEM_MAX_COMP_PER_OP);
+		if (nthr_ready > 0) {
+			/* we added some completed threads to our ready queue */
+			RSTAT(READY_STEALS) += nthr_ready;
+			spin_unlock(&r->pf_lock);
+			return true;
+		}
+
+		/* otherwise, steal half from the wait queue */
+		fault = TAILQ_FIRST(&r->fault_wait_q);
+		avail = r->n_wait_q > 0 ? div_up(r->n_wait_q, 2) : 0;
+		if (avail > 0) {
+			while (fault != NULL && avail > 0) {
+				next = TAILQ_NEXT(fault, link);
+				TAILQ_REMOVE(&r->fault_wait_q, fault, link);
+				r->pf_pending--;
+				assert(r->n_wait_q > 0);
+				r->n_wait_q--;
+				TAILQ_INSERT_TAIL(&l->fault_wait_q, fault, link);
+				l->pf_pending++;
+				l->n_wait_q++;
+				RSTAT(WAIT_STEALS)++;
+				fault = next;
+				avail--;
+			}		
+			spin_unlock(&r->pf_lock);
+			return false;
+		}
+		spin_unlock(&r->pf_lock);
 	}
 
 	/* check for softirqs */
@@ -273,6 +308,12 @@ again:
 	/* reset the local runqueue since it's empty */
 	l->rq_head = l->rq_tail = 0;
 
+	/* then handle remote memory */
+	spin_lock(&l->pf_lock);
+	kthr_check_for_completions(l, RMEM_MAX_COMP_PER_OP);
+	kthr_handle_waiting_faults(l);
+	spin_unlock(&l->pf_lock);
+
 	/* then check for local softirqs */
 	th = softirq_run_thread(l, RUNTIME_SOFTIRQ_BUDGET);
 	if (th) {
@@ -304,8 +345,8 @@ again:
 	/* keep trying to find work until the polling timeout expires */
 	if (!preempt_needed() &&
 	    (++iters < RUNTIME_SCHED_POLL_ITERS ||
-	     rdtsc() - start_tsc < cycles_per_us * RUNTIME_SCHED_MIN_POLL_US ||
-		 l->pf_pending > 0))
+	    rdtsc() - start_tsc < cycles_per_us * RUNTIME_SCHED_MIN_POLL_US ||
+		l->pf_pending > 0))
 		goto again;
 
 	/* did not find anything to run, park this kthread */
@@ -338,7 +379,8 @@ done:
 	STAT(SCHED_CYCLES) += duration;
 	if (!first_try)
 		/* if we didn't get here in the first try, count 
-		 * all the time towards idling */
+		 * all the time towards idling TODO: don't count the time spent in 
+		 * fault handing towards this */
 		STAT(SCHED_CYCLES_IDLE) += duration;
 	last_tsc = end_tsc;
 

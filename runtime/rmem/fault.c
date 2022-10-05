@@ -116,7 +116,7 @@ bool is_fault_serviced(fault_t* f)
 
 /* after receiving page fault */
 enum fault_status handle_page_fault(int chan_id, fault_t* fault, 
-    int* nevicts_needed)
+    int* nevicts_needed, struct completion_cbs* cbs)
 {
     pflags_t pflags, oldflags;
     pflags_t flags[FAULT_MAX_RDAHEAD_SIZE+1];
@@ -235,18 +235,19 @@ enum fault_status handle_page_fault(int chan_id, fault_t* fault,
                      * checking for completions to free request slots. We can 
                      * just check for one completion here? */
                     /* TODO: we may want to count idle cycles here */    
-                    rmbackend->check_for_completions(chan_id, &hthr_cbs, 
-                        RMEM_MAX_COMP_PER_OP);
+                    rmbackend->check_for_completions(chan_id, cbs, 
+                        RMEM_MAX_COMP_PER_OP, NULL, NULL);
 		            cpu_relax();
                 }
             } while(ret == EAGAIN);
             assertz(ret);
+            fault->posted_chan_id = chan_id;
 
             /* book some memory for the pages */
             pressure = atomic_fetch_add(&memory_booked, nchunks * CHUNK_SIZE);
             pressure += nchunks * CHUNK_SIZE;
             if (pressure > local_memory)
-                *nevicts_needed = (local_memory - pressure) / CHUNK_SIZE;
+                *nevicts_needed = nchunks;
 
             return FAULT_READ_POSTED;
         }
@@ -313,10 +314,4 @@ void fault_wait_q_init_thread()
 {
     TAILQ_INIT(&fault_wait_q);
     n_wait_q = 0;
-}
-
-void fault_wait_q_free_thread()
-{
-    /* nothing to do */
-    assert(!TAILQ_EMPTY(&fault_wait_q));
 }

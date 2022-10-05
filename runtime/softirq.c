@@ -11,12 +11,11 @@
 #include "net/defs.h"
 
 struct softirq_work {
-	unsigned int recv_cnt, compl_cnt, join_cnt, timer_budget, fault_cnt;
+	unsigned int recv_cnt, compl_cnt, join_cnt, timer_budget;
 	struct kthread *k;
 	struct rx_net_hdr *recv_reqs[SOFTIRQ_MAX_BUDGET];
 	struct mbuf *compl_reqs[SOFTIRQ_MAX_BUDGET];
 	struct kthread *join_reqs[SOFTIRQ_MAX_BUDGET];
-	struct thread *pgfault_served[SOFTIRQ_MAX_BUDGET];
 };
 
 static void softirq_fn(void *arg)
@@ -38,55 +37,27 @@ static void softirq_fn(void *arg)
 	/* join parked kthreads */
 	for (i = 0; i < w->join_cnt; i++)
 		join_kthread(w->join_reqs[i]);
-
-	/* release parked threads blocked on pgfaults */
-	/* TODO: should we take the pf_lock? */
-	for (i = 0; i < w->fault_cnt; i++) {
-		log_debug("softirq setting thread %p ready", w->pgfault_served[i]);
-		thread_ready(w->pgfault_served[i]);
-	}
 }
 
 static void softirq_gather_work(struct softirq_work *w, struct kthread *k,
 				unsigned int budget)
 {
-	unsigned int recv_cnt = 0, compl_cnt = 0, join_cnt = 0, fault_cnt = 0;
+	unsigned int recv_cnt = 0, compl_cnt = 0, join_cnt = 0;
 	int budget_left, local_budget_left;
 
 	budget_left = min(budget, SOFTIRQ_MAX_BUDGET);
-
-#ifdef PAGE_FAULTS_ASYNC
-	/* prioritize pgfault-unblocked threads over new work */
-	int ret, active_threads;
-	pgfault_t fault;
-	spin_lock(&k->pf_lock);
-	while(budget_left > 0) {
-		budget_left--;
-		log_debug("softirq reading fault responses on channel %d", k->pf_channel);
-		ret = fault_backend.read_response_async(k->pf_channel, &fault);
-		if (ret != 0)
-			break;
-
-		log_debug("softirq read a fault response on channel %d", k->pf_channel);
-		/* hoping that the thread pointer is not corrupted! */
-		assert((thread_t*) fault.tag != NULL);
-		w->pgfault_served[fault_cnt++] = (thread_t*) fault.tag;
-		k->pf_pending--;
-		assert(k->pf_pending >= 0);
-		STAT(PF_RETURNED)++;
-	}
-	spin_unlock(&k->pf_lock);
-
-	/* supress new work when it gets congested */
-	/* NOTE(FIXME): we assume that supressing RX means supressing new work, which 
-	 * is not always true. Also, we're supressing other events for IO core 
-	 * like TX completions due to the shared events queue - might cause 
-	 * trouble later. */
-	active_threads = (k->rq_head - k->rq_tail) + k->rq_overflow_len; 
-	local_budget_left = CONGESTION_THRESHOLD - active_threads;
-#else 
 	local_budget_left = SOFTIRQ_MAX_BUDGET;
+
+#ifdef REMOTE_MEMORY
+	/* supress new work when it gets congested. NOTE(TODO): we assume that 
+	 * supressing RX means supressing new work, which is not always true. Also, 
+	 * we're supressing other events for IO core like TX completions due to the 
+	 * shared events queue, which may cause trouble in some cases. */
+	int active_threads = (k->rq_head - k->rq_tail) + k->rq_overflow_len; 
+	local_budget_left = CONGESTION_THRESHOLD - (active_threads + k->pf_pending);
 #endif
+
+
 
 	while (budget_left > 0 && local_budget_left > 0) {
 		budget_left--; local_budget_left--;
@@ -124,7 +95,6 @@ static void softirq_gather_work(struct softirq_work *w, struct kthread *k,
 	w->compl_cnt = compl_cnt;
 	w->join_cnt = join_cnt;
 	w->timer_budget = budget_left;
-	w->fault_cnt = fault_cnt;
 }
 
 
@@ -132,8 +102,11 @@ static void softirq_gather_work(struct softirq_work *w, struct kthread *k,
  * softirq_ready - checks if there are any softirqs ready to be handled
  * @k: the kthread from which to take RX queue commands
  */
-static inline bool softirq_ready(struct kthread* k) {
-	return pgfault_response_ready(k) || timer_needed(k) || !lrpc_empty(&k->rxq);
+static inline bool softirq_ready(struct kthread* k) 
+{
+	/* we could use a more accurate indicator for pgfault completions but 
+	 * RDMA does not provide checking for CQE without reading them */
+	return (k->pf_pending > 0) || timer_needed(k) || !lrpc_empty(&k->rxq);
 }
 
 /**

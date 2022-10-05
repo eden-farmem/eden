@@ -208,10 +208,10 @@ bool needs_write_back(pflags_t flags)
 }
 
 /* write-back a region of pages to the backend */
-static unsigned int write_pages_to_backend(struct region_t *mr, 
-    unsigned long addr, int nchunks) 
+static unsigned int write_pages_to_backend(int chan_id, struct region_t *mr, 
+    unsigned long addr, int nchunks, struct completion_cbs* cbs) 
 {
-    int r, n_retries;    
+    int r, n_retries, ncompletions = 0;    
     log_debug("writing back contiguous region at [%lx, %d)", addr, nchunks);
 
     /* protect the region first */
@@ -222,20 +222,30 @@ static unsigned int write_pages_to_backend(struct region_t *mr,
     RSTAT(EVICT_WBACK)++;
 
     /* post the write-back */
-    // r = rmbackend->post_write_async(mr, addr, nchunks * CHUNK_SIZE); /* TODO */
-    if (r != 0) {
-        RSTAT(EVICT_WRITE_FAIL)++;
-        /* allow it to fail? what if the write_q is full */
-        BUG();
-    }
+    do {
+        r = rmbackend->post_write(chan_id, mr, addr, nchunks * CHUNK_SIZE);
+        if (r == EAGAIN) {
+            /* write queue is full, nothing to do but repeat and keep 
+             * checking for completions to free request slots; raising error
+             * if we handled completions but still cannot post */
+            assert (ncompletions >= 1);
+            ncompletions += rmbackend->check_for_completions(chan_id, cbs, 
+                RMEM_MAX_COMP_PER_OP, NULL, NULL);
+
+            /* TODO: we may want to count idle cycles here */
+            cpu_relax();
+        }
+    } while(r == EAGAIN);
+    assertz(r);
     return 0;
 }
 
 /* flush pages (with write-back if necessary). 
  * Returns whether any of the pages were written to backend and should be 
  * monitored for completions */
-static bool flush_pages(struct region_t *mr, unsigned long base_addr, 
-    int nchunks, pflags_t* pflags, bitmap_ptr write_map, bool remove)
+static bool flush_pages(int chan_id, struct region_t *mr, 
+    unsigned long base_addr, int nchunks, pflags_t* pflags, 
+    bitmap_ptr write_map, bool remove, struct completion_cbs* cbs)
 {
     int i, r;
     pflags_t flags;
@@ -261,7 +271,7 @@ static bool flush_pages(struct region_t *mr, unsigned long base_addr,
 
         if (dirty_chunks > 0) {
             /* write the last contiguous subset of dirty chunks */
-            write_pages_to_backend(mr, new_base_addr, dirty_chunks);
+            write_pages_to_backend(chan_id, mr, new_base_addr, dirty_chunks, cbs);
 
             /* start of a new subset */
             new_base_addr = addr + CHUNK_SIZE;
@@ -269,9 +279,8 @@ static bool flush_pages(struct region_t *mr, unsigned long base_addr,
         }
     }
     /* last subset */
-    if (dirty_chunks > 0) {
-        write_pages_to_backend(mr, new_base_addr, dirty_chunks);
-    }
+    if (dirty_chunks > 0)
+        write_pages_to_backend(chan_id, mr, new_base_addr, dirty_chunks, cbs);
 
     /* remove pages from UFFD */
     if (remove) {
@@ -314,7 +323,7 @@ int write_back_completed(struct region_t* mr, unsigned long addr, size_t size)
 /**
  * Main function for eviction. Returns number of pages evicted.
  */
-int do_eviction(int max_batch_size) 
+int do_eviction(int chan_id, struct completion_cbs* cbs, int max_batch_size) 
 {
     unsigned long base_addr, new_base_addr, addr, size;
     pflags_t oldflags;
@@ -374,7 +383,8 @@ int do_eviction(int max_batch_size)
     RSTAT(EVICT_PAGES) += nchunks_locked;
 
     /* flush pages */
-    flushed = flush_pages(mr, base_addr, nchunks_locked, flags, write_map, true);
+    flushed = flush_pages(chan_id, mr, base_addr, nchunks_locked, flags, 
+        write_map, true, cbs);
     assert(nchunks_locked == flushed);
 
     /* memory accounting */

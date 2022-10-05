@@ -47,12 +47,6 @@ static const char *stat_names[] = {
 	"rx_tcp_in_order",
 	"rx_tcp_out_of_order",
 	"rx_tcp_text_cycles",
-
-	/* page fault counters */
-	"pf_posted",
-	"pf_returned",
-	"pf_failed",
-	"pf_annot_hits"
 };
 
 /* must correspond exactly to STAT_* enum definitions in defs.h */

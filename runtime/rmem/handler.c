@@ -163,11 +163,17 @@ static void* rmem_handler(void *arg)
     assert(arg != NULL);        /* expecting a hthread_t */
     my_hthr = (hthread_t*) arg; /* save our hthread_t */
 
+    static struct completion_cbs hthr_cbs = {
+        .read_completion = hthr_fault_read_done,
+        .write_completion = write_back_completed
+    };
+    
     /* init */
     fault_tcache_init_thread();
     zero_page_init_thread();
     dne_q_init_thread();
-    fault_wait_q_init_thread();
+    TAILQ_INIT(&my_hthr->fault_wait_q);
+    my_hthr->n_wait_q = 0;
 
     /* do work */
     while(!my_hthr->stop) {
@@ -175,24 +181,24 @@ static void* rmem_handler(void *arg)
         nevicts = nevicts_needed = 0;
 
         /* pick faults from the backlog first */
-        fault = TAILQ_FIRST(&fault_wait_q);
+        fault = TAILQ_FIRST(&my_hthr->fault_wait_q);
         while (fault != NULL) {
             next = TAILQ_NEXT(fault, link);
             fstatus = handle_page_fault(my_hthr->bkend_chan_id, fault, 
-                &nevicts_needed);
+                &nevicts_needed, &hthr_cbs);
             switch (fstatus) {
                 case FAULT_DONE:
                     log_debug("%s - done, released from wait", FSTR(fault));
-                    TAILQ_REMOVE(&fault_wait_q, fault, link);
-                    n_wait_q--;
-                    assert(n_wait_q >= 0);
+                    TAILQ_REMOVE(&my_hthr->fault_wait_q, fault, link);
+                    my_hthr->n_wait_q--;
+                    assert(my_hthr->n_wait_q >= 0);
                     fault_done(fault);
                     break;
                 case FAULT_READ_POSTED:
                     log_debug("%s - done, released from wait", FSTR(fault));
-                    TAILQ_REMOVE(&fault_wait_q, fault, link);
-                    n_wait_q--;
-                    assert(n_wait_q >= 0);
+                    TAILQ_REMOVE(&my_hthr->fault_wait_q, fault, link);
+                    my_hthr->n_wait_q--;
+                    assert(my_hthr->n_wait_q >= 0);
                     if (nevicts_needed > 0)
                         goto eviction;
                     break;
@@ -219,15 +225,15 @@ static void* rmem_handler(void *arg)
 
             /* start handling fault */
             fstatus = handle_page_fault(my_hthr->bkend_chan_id, fault, 
-                &nevicts_needed);
+                &nevicts_needed, &hthr_cbs);
             switch (fstatus) {
                 case FAULT_DONE:
                     fault_done(fault);
                     break;
                 case FAULT_AGAIN:
                     /* add to wait */
-                    TAILQ_INSERT_TAIL(&fault_wait_q, fault, link);
-                    n_wait_q++;
+                    TAILQ_INSERT_TAIL(&my_hthr->fault_wait_q, fault, link);
+                    my_hthr->n_wait_q++;
                     log_debug("%s - added to wait", FSTR(fault));
                     break;
                 case FAULT_READ_POSTED:
@@ -253,14 +259,14 @@ eviction:
                 /* can use bigger batches in handler threads if idling */
                 batchsz = EVICTION_MAX_BATCH_SIZE;
                 if (nevicts_needed > 0) 
-                    batchsz = nevicts_needed;
-                nevicts += do_eviction(batchsz);
+                    batchsz = min(nevicts_needed, EVICTION_MAX_BATCH_SIZE);
+                nevicts += do_eviction(my_hthr->bkend_chan_id, &hthr_cbs, batchsz);
             } while(nevicts < nevicts_needed);
         }
 
         /* handle read/write completions from the backend */
         rmbackend->check_for_completions(my_hthr->bkend_chan_id, &hthr_cbs, 
-            RMEM_MAX_COMP_PER_OP);
+            RMEM_MAX_COMP_PER_OP, NULL, NULL);
 
 #ifdef SECOND_CHANCE_EVICTION
         /* TODO: clear all hot bits once in a while */
@@ -270,7 +276,7 @@ eviction:
     /* destroy state */
     zero_page_free_thread();
     dne_q_free_thread();
-    fault_wait_q_free_thread();
+    assert(TAILQ_EMPTY(&my_hthr->fault_wait_q));
     return NULL;
 }
 
@@ -318,9 +324,3 @@ int stop_rmem_handler_thread(hthread_t* hthr)
     free(hthr);
     return 0;
 }
-
-/* handler thread completion callbacks */
-struct completion_cbs hthr_cbs = {
-    .read_completion = hthr_fault_read_done,
-    .write_completion = write_back_completed
-};

@@ -15,6 +15,7 @@
 #include "base/thread.h"
 #include "base/types.h"
 #include "runtime/thread.h"
+#include "rmem/backend.h"
 #include "rmem/config.h"
 
 /*
@@ -30,7 +31,7 @@ typedef struct fault {
     uint8_t single_use;
     uint8_t rdahead_max;        /* suggested max read-ahead */
     uint8_t rdahead;            /* actual read-ahead locked for this fault */
-    uint8_t reserved;
+    int8_t posted_chan_id;
 
     unsigned long page;
     struct region_t* mr;
@@ -114,7 +115,10 @@ enum fault_status {
     FAULT_AGAIN,
     FAULT_READ_POSTED
 };
-enum fault_status handle_page_fault(int chan_id, fault_t* fault, int* nevicts);
+
+struct completion_cbs;
+enum fault_status handle_page_fault(int chan_id, fault_t* fault, int* nevicts, 
+    struct completion_cbs* cbs);
 int fault_read_done(fault_t* f, unsigned long buf_addr, size_t size);
 void fault_done(fault_t* fault);
 
@@ -123,10 +127,5 @@ void fault_done(fault_t* fault);
  * (inlining datapath functions in the header)
  */
 TAILQ_HEAD(fault_wait_q_head, fault);
-extern __thread unsigned int n_wait_q;
-extern __thread struct fault_wait_q_head fault_wait_q;
-void fault_wait_q_init_thread();
-void fault_wait_q_free_thread();
-
 
 #endif    // __FAULT_H__

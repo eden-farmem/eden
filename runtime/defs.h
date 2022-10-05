@@ -262,12 +262,6 @@ enum {
 	STAT_RX_TCP_OUT_OF_ORDER,
 	STAT_RX_TCP_TEXT_CYCLES,
 
-	/* page fault counters */
-	STAT_PF_POSTED,
-	STAT_PF_RETURNED,
-	STAT_PF_FAILED,
-	STAT_PF_ANNOT_HITS,
-
 	/* total number of counters */
 	STAT_NR,
 };
@@ -309,12 +303,12 @@ struct kthread {
 	struct timer_idx	*timers;
 	unsigned long		pad2[6];
 
-	/* 9th cache-line */
+	/* 9th cache-line (all protected by the pf_lock) */
 	spinlock_t 			pf_lock;
-	unsigned int 		pf_channel;
 	unsigned int 		pf_pending;
-	struct list_head 	pf_waiters;
 	unsigned int		bkend_chan_id;
+    struct fault_wait_q_head fault_wait_q;
+    unsigned int 		n_wait_q;
 	unsigned int		pad3[6];
 
 	/* 10th cache-line, statistics counters */
@@ -409,8 +403,9 @@ static inline uint64_t* my_rstats() {
 
 /* the maximum number of events to handle in a softirq invocation */
 #define SOFTIRQ_MAX_BUDGET		128
+
 /* amount of active threads that signal congestion before we start 
- * pushing back on new work */
+ * pushing back on new work. TODO: is the value too high? */
 #ifndef CONGESTION_THRESHOLD
 #define CONGESTION_THRESHOLD	128
 #endif
@@ -498,7 +493,6 @@ extern int sched_init_thread(void);
 extern int stat_init_thread(void);
 extern int net_init_thread(void);
 extern int smalloc_init_thread(void);
-extern int pgfault_init_thread(void);
 extern int rmem_init_thread(void);
 
 /* global initialization */
@@ -510,7 +504,6 @@ extern int net_init(void);
 extern int arp_init(void);
 extern int trans_init(void);
 extern int smalloc_init(void);
-extern int pgfault_init(void);
 extern int rmem_init(void);
 
 /* late initialization */
@@ -529,3 +522,10 @@ extern void sched_start(void) __noreturn;
 extern int thread_spawn_main(thread_fn_t fn, void *arg);
 extern void thread_yield_kthread();
 extern void join_kthread(struct kthread *k);
+
+/* kthread fault handling helpers */
+extern struct completion_cbs kthr_cbs;
+int kthr_fault_done(fault_t* f);
+int kthr_fault_read_done(fault_t* f, unsigned long buf_addr, size_t size);
+int kthr_check_for_completions(struct kthread* k, int max_budget);
+int kthr_handle_waiting_faults(struct kthread* k);

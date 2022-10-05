@@ -1,51 +1,77 @@
 /*
- * pgfault.h - support for userspace pagefaults
+ * pgfault.h - gateway to scheduler-supported remote memory
  */
 
 #pragma once
 
-#ifdef WITH_KONA
-#include <klib.h>
-#endif
+#include "base/assert.h"
+#include "rmem/backend.h"
+#include "rmem/pflags.h"
+#include "rmem/region.h"
 
-/*
- * Scheduler-supported page faults 
+/* API */
+/**
+ * Pagefault API
+ * hint the scheduler to check for an impending fault and take over if so
  */
-
-#ifdef PAGE_FAULTS
-	#error "Use PAGE_FAULTS_SYNC or PAGE_FAULTS_ASYNC"
-#endif
-#if defined(PAGE_FAULTS_ASYNC) || defined(PAGE_FAULTS_SYNC)
-	#define PAGE_FAULTS
-#endif
-
-#ifdef WITH_KONA		/*kona backend*/
-	#define FAULT_FLAG_READ             APP_FAULT_FLAG_READ
-	#define FAULT_FLAG_WRITE            APP_FAULT_FLAG_WRITE
-	typedef app_fault_packet_t pgfault_t;
-#else					/*default*/
-	#define FAULT_FLAG_READ             (1<<0)
-	#define FAULT_FLAG_WRITE            (1<<1)
-	struct _pgfault {
-		uint16_t channel;
-		uint16_t flags;
-		/* note: it's essential that the backend returns tag unmodified */
-		void* tag;
-		unsigned long fault_addr;
-	};
-	typedef struct _pgfault pgfault_t;	
+#ifdef REMOTE_MEMORY
+#define hint_fault(addr,write,rd)                           \
+    do {                                                    \
+        if (__is_fault_pending(addr, write))                \
+            kthr_send_fault_to_scheduler(addr, write, rd);  \
+    } while (0);
+#define hint_read_fault_rdahead(addr,rd)    hint_fault(addr, false, rd)
+#define hint_write_fault_rdahead(addr,rd)   hint_fault(addr, true,  rd)
+#define hint_read_fault(addr)               hint_fault(addr, false, 0)
+#define hint_write_fault(addr)              hint_fault(addr, true,  0)
+#else
+#define hint_fault(addr,write,rd)           do {} while(0)
+#define hint_read_fault_rdahead(addr,rd)    do {} while(0)
+#define hint_write_fault_rdahead(addr,rd)   do {} while(0)
+#define hint_read_fault(addr)               do {} while(0)
+#define hint_write_fault(addr)              do {} while(0)
 #endif
 
-/* define and register backend */
-struct fault_backend_ops {
-	int (*post_async)(int channel, pgfault_t *fault);
-	int (*poll_response_async)(int channel);
-	int (*read_response_async)(int channel, pgfault_t *response_buf);
-	int (*is_ready)(void);
-	int (*get_available_channel)(void);
-};
-extern struct fault_backend_ops fault_backend;
+/* back-compat API */
+#define possible_read_fault_on 	            hint_read_fault
+#define possible_write_fault_on	            hint_write_fault
 
-/* functions */
-void possible_read_fault_on(void* address);
-void possible_write_fault_on(void* address);
+/**
+ * Pagefault Internal
+ */
+int __vdso_init();
+typedef long (*vdso_check_page_t)(const void *p);
+extern vdso_check_page_t __is_page_mapped_vdso;
+extern vdso_check_page_t __is_page_mapped_and_readonly_vdso;
+extern __thread struct region_t* __cached_mr;
+void send_fault_to_scheduler(void* address, bool write, int rdahead);
+
+/* checks if a page at an address is in a state that results in page fault
+ * (inlining in header file for low-overhead access) */
+static inline bool __is_fault_pending(void* address, bool write)
+{
+    bool nofault;
+#ifndef USE_VDSO_CHECKS
+    pflags_t pflags;
+    bool page_present, page_dirty;
+    /* we only support one region now so caching an unsafe reference for future 
+     * fast path accesses. this is neither correct nor safe when we have 
+     * multiple regions along with regular region updates */
+    if (unlikely(!__cached_mr)) {
+        __cached_mr = get_first_region_unsafe();
+        assert(__cached_mr);
+    }
+    assert(is_in_memory_region_unsafe(__cached_mr, (unsigned long) address));
+    pflags = get_page_flags(__cached_mr, (unsigned long) address);
+    page_present = !!(pflags & PFLAG_PRESENT);
+    page_dirty = !!(pflags & PFLAG_DIRTY);
+    nofault = page_dirty || (!write && page_present);
+#else
+    assert(__is_page_mapped_vdso);
+    assert(__is_page_mapped_and_readonly_vdso);
+    nofault = (!write)
+        ? __is_page_mapped_vdso(address)
+        : __is_page_mapped_and_readonly_vdso(address);
+#endif
+    return !nofault;
+}

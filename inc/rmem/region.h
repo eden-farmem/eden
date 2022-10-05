@@ -133,6 +133,16 @@ static inline struct region_t *get_next_evictable_region()
     return last_evicted;
 }
 
+/* Get first region. It returns an unsafe reference so use it with care. */
+static inline struct region_t *get_first_region_unsafe() 
+{
+    struct region_t* mr;
+    spin_lock(&regions_lock);
+    mr = CIRCLEQ_FIRST(&region_list);
+    spin_unlock(&regions_lock);
+    return mr;
+}
+
 static inline struct region_t* __get_region_by_addr(unsigned long addr, 
     bool add_ref) 
 {

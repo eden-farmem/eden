@@ -8,12 +8,14 @@
 
 #include <sys/mman.h>
 
-#include <rmem/backend.h>
-#include <rmem/config.h>
-#include <rmem/fault.h>
-#include <rmem/handler.h>
-#include <rmem/region.h>
-#include <rmem/uffd.h>
+#include "rmem/backend.h"
+#include "rmem/config.h"
+#include "rmem/fault.h"
+#include "rmem/handler.h"
+#include "rmem/region.h"
+#include "rmem/uffd.h"
+#include "runtime/pgfault.h"
+
 #include "defs.h"
 
 /* externed global settings */
@@ -78,17 +80,33 @@ int rmem_init()
     handlers = malloc(nhandlers*sizeof(hthread_t*));
     // handlers[0] = new_rmem_handler_thread(PIN_RMEM_HANDLER_CORE);
 
+#ifdef USE_VDSO_CHECKS
+    /* init vdso objects */
+    __vdso_init();
+#endif
+
     return 0;
 }
 
 /**
- * rmem_init_thread - initializes per-thread remote memory support
+ * rmem_init_thread - initializes per-thread remote memory support (only for
+ * shenango threads, not rmem handlers)
  */
 int rmem_init_thread()
 {
     struct kthread *k = myk();
+
+    /* init per-thread data */
+    fault_tcache_init_thread();
+    zero_page_init_thread();
+    dne_q_init_thread();
+    TAILQ_INIT(&k->fault_wait_q);
+    k->n_wait_q = 0;
+
+    /* get dedicated backend channel */
     k->bkend_chan_id = rmbackend->get_new_data_channel();
-    return (k->bkend_chan_id < 0);
+    assert(k->bkend_chan_id >= 0);
+    return 0;
 }
 
 /**
@@ -100,9 +118,22 @@ int rmem_init_late()
 }
 
 /**
+ * rmem_destroy_thread - destroy per-thread remote memory support
+ * (shenango doesn't destroy anything before shutting down so the control never 
+ * gets here but we're still gonna implement cleanup in good faith!)
+ */
+int rmem_destroy_thread()
+{
+    zero_page_free_thread();
+    dne_q_free_thread();
+    assert(TAILQ_EMPTY(&myk()->fault_wait_q));
+    return 0;
+}
+
+/**
  * rmem_destroy - remote memory clean-up
- * shenango doesn't destroy anything before shutting down so the control never 
- * gets here but we're still gonna implement cleanup in good faith!
+ * (shenango doesn't destroy anything before shutting down so the control never 
+ * gets here but we're still gonna implement cleanup in good faith!)
  */
 int rmem_destroy()
 {
@@ -114,6 +145,8 @@ int rmem_destroy()
         assertz(ret);
     }
     free(handlers);
+
+    /* TODO: anyway to destroy fault tcache? */
 
     /* ensure all regions freed */
     struct region_t *mr = NULL;
@@ -128,4 +161,3 @@ int rmem_destroy()
     }
     return 0;
 }
-

@@ -27,7 +27,7 @@
 #include <limits.h>
 #include <elf.h>
 
-#include <runtime/vdso.h>
+#include "base/vdso.h"
 
 /* And here's the code. */
 #ifndef ELF_BITS
