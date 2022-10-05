@@ -11,10 +11,10 @@
 #include "base/log.h"
 #include "base/mem.h"
 #include "base/atomic.h"
+#include "rmem/common.h"
 #include "rmem/eviction.h"
 #include "rmem/pflags.h"
 #include "rmem/region.h"
-#include "runtime/rmem.h"
 #include "defs.h"
 
 /* TODO: Not sure why kona was doing this; remove and see. */

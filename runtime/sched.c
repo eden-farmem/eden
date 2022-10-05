@@ -146,7 +146,7 @@ static bool steal_work(struct kthread *l, struct kthread *r)
 {
 	thread_t *th;
 	uint32_t i, avail, rq_tail;
-	int nthr_ready, wait_count;
+	int nthr_ready;
 	struct fault *fault, *next;
 
 	assert_spin_lock_held(&l->lock);

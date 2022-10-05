@@ -13,13 +13,13 @@
 #include "base/cpu.h"
 #include "base/log.h"
 #include "rmem/backend.h"
+#include "rmem/common.h"
 #include "rmem/config.h"
 #include "rmem/fault.h"
 #include "rmem/handler.h"
 #include "rmem/pflags.h"
 #include "rmem/region.h"
 #include "rmem/uffd.h"
-#include "runtime/rmem.h"
 
 #include "../defs.h"
 

@@ -11,6 +11,7 @@
 
 #include "base/cpu.h"
 #include "rmem/backend.h"
+#include "rmem/common.h"
 #include "rmem/config.h"
 #include "rmem/eviction.h"
 #include "rmem/fault.h"
@@ -19,7 +20,6 @@
 #include "rmem/region.h"
 #include "rmem/uffd.h"
 
-#include "runtime/rmem.h"
 #include "../defs.h"
 
 /* handler state */
