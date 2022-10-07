@@ -23,6 +23,7 @@
 extern void *perthread_offsets[NTHREAD];
 extern __thread void *perthread_ptr;
 extern unsigned int thread_count;
+int thread_init_perthread(void);
 
 /**
  * perthread_get_remote - get a perthread variable on a specific thread

@@ -21,9 +21,9 @@
 #ifdef STATS_CORE
 #define STAT_REPORT_LOCAL
 #define STAT_INTERVAL_SECS 	1
+static const char statsfile[] = "runtime.out";
 #endif
 
-static const char statsfile[] = "runtime.out";
 static const char *stat_names[] = {
 	/* scheduler counters */
 	"reschedules",
@@ -97,54 +97,41 @@ static ssize_t stat_write_buf(char *buf, size_t len)
 	return pos - buf;
 }
 
-/* pin this thread to a particular core */
-static int pin_thread(int core) {
-  cpu_set_t cpuset;
-  CPU_ZERO(&cpuset);
-  CPU_SET(core, &cpuset);
-  int retcode = pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
-  if (retcode) { 
-      errno = retcode;
-      perror("pthread_setaffinitity_np");
-  }
-  return retcode;
-}
+// static ssize_t thread_state_buf(char *buf, size_t len) {
+// 	char *pos = buf, *end = buf + len;
+// 	int i, ret;
+// 	char name[100];
+// 	char* field;
 
-static ssize_t thread_state_buf(char *buf, size_t len) {
-	char *pos = buf, *end = buf + len;
-	int i, ret;
-	char name[100];
-	char* field;
+// 	/* gather stats from each kthread */
+// 	/* FIXME: not correct when parked kthreads removed from @ks */
+// 	field = "pf_pending";
+// 	for (i = 0; i < maxks; i++) {
+// 		sprintf(name, "%s_%d", field, i);
+// 		ret = append_stat(pos, end - pos, name, allks[i]->pf_pending);
+// 		if (ret < 0)	return -EINVAL;
+// 		else if (ret >= end - pos)	return -E2BIG;
+// 		pos += ret;
+// 	}
 
-	/* gather stats from each kthread */
-	/* FIXME: not correct when parked kthreads removed from @ks */
-	field = "pf_pending";
-	for (i = 0; i < maxks; i++) {
-		sprintf(name, "%s_%d", field, i);
-		ret = append_stat(pos, end - pos, name, allks[i]->pf_pending);
-		if (ret < 0)	return -EINVAL;
-		else if (ret >= end - pos)	return -E2BIG;
-		pos += ret;
-	}
+// 	field = "rq_overflow";
+// 	for (i = 0; i < maxks; i++) {
+// 		sprintf(name, "%s_%d", field, i);
+// 		ret = append_stat(pos, end - pos, name, allks[i]->rq_overflow_len);
+// 		if (ret < 0)	return -EINVAL;
+// 		else if (ret >= end - pos)	return -E2BIG;
+// 		pos += ret;
+// 	}
 
-	field = "rq_overflow";
-	for (i = 0; i < maxks; i++) {
-		sprintf(name, "%s_%d", field, i);
-		ret = append_stat(pos, end - pos, name, allks[i]->rq_overflow_len);
-		if (ret < 0)	return -EINVAL;
-		else if (ret >= end - pos)	return -E2BIG;
-		pos += ret;
-	}
-
-	pos[-1] = '\0'; /* clip off last ',' */
-	return pos - buf;
-}
+// 	pos[-1] = '\0'; /* clip off last ',' */
+// 	return pos - buf;
+// }
 
 #ifdef STAT_REPORT_LOCAL
 static void* stat_worker_local(void *arg)
 {
 	log_info("pinning stats worker to core %d", STATS_CORE);
-	int ret = pin_thread(STATS_CORE);
+	int ret = cpu_pin_thread(pthread_self(), STATS_CORE);
 	if (ret) {
 		log_err("stat: couldn't pin thread to core %d", STATS_CORE);
 		return NULL;

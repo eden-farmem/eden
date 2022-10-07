@@ -16,10 +16,12 @@
 #include <net/ip.h>
 #include <iokernel/control.h>
 #include <net/mbufq.h>
+#include <rmem/common.h>
+#include <rmem/fault.h>
+#include <rmem/handler.h>
 #include <runtime/thread.h>
 #include <runtime/rcu.h>
 #include <runtime/preempt.h>
-#include <runtime/rmem.h>
 
 /*
  * constant limits

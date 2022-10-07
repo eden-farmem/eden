@@ -38,6 +38,10 @@ enum {
     RSTAT_WAIT_STEALS,
     RSTAT_TOTAL_STEALS,
 
+    RSTAT_MALLOC_SIZE,
+    RSTAT_MUNMAP_SIZE,
+    RSTAT_MADV_SIZE,
+
     RSTAT_NR,   /* total number of counters */
 };
 

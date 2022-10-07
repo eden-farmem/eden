@@ -507,6 +507,30 @@ static void wake_kthread_on_core(struct thread *th, int core)
 	BUG_ON(s != sizeof(uint64_t));
 }
 
+/*
+ * cores_pin_thread - Pins thread tid to core. 
+ * 
+ * Returns 0 on success and < 0 on error. Note that this function can always 
+ * fail with error ESRCH, because threads can be killed at any time.
+ */
+int cores_pin_thread(pid_t tid, int core)
+{
+	cpu_set_t cpuset;
+	int ret;
+
+	CPU_ZERO(&cpuset);
+	CPU_SET(core, &cpuset);
+
+	ret = sched_setaffinity(tid, sizeof(cpu_set_t), &cpuset);
+	if (ret < 0) {
+		log_warn("cores: failed to set affinity for thread %d with err %d",
+			tid, errno);
+		return -errno;
+	}
+
+	return 0;
+}
+
 /**
  * cores_park_kthread - parks the given kthread and frees its core.
  * @th: thread to park

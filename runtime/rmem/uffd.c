@@ -27,15 +27,15 @@ int uffd_init(void) {
     int r;
     struct uffdio_api api = {
             .api = UFFD_API,
-#ifdef REGISTER_MADVISE_NOTIF
-            .features = UFFD_FEATURE_EVENT_FORK | UFFD_FEATURE_EVENT_REMAP |
-                UFFD_FEATURE_EVENT_REMOVE | UFFD_FEATURE_EVENT_UNMAP
-#else
-            .features = UFFD_FEATURE_EVENT_FORK | UFFD_FEATURE_EVENT_REMAP |
-                UFFD_FEATURE_EVENT_UNMAP
-#endif
+            .features = UFFD_FEATURE_EVENT_FORK | UFFD_FEATURE_EVENT_REMAP
     };
 
+#ifdef REGISTER_MADVISE_REMOVE
+    features |= UFFD_FEATURE_EVENT_REMOVE;
+#endif
+#ifdef REGISTER_MADVISE_UNMAP
+    features |= UFFD_FEATURE_EVENT_UNMAP;
+#endif
 // #ifdef UFFD_APP_POLL
 //     api.features |= UFFD_FEATURE_POLL;
 // #endif

@@ -13,17 +13,9 @@ enum {
     PSHIFT_PRESENT,
     PSHIFT_DIRTY,
     PSHIFT_NOEVICT,
-    PSHIFT_ZEROPAGE,
     PSHIFT_WORK_ONGOING,
-    PSHIFT_READ_ONGOING,
-    PSHIFT_MAP_ONGOING,
     PSHIFT_EVICT_ONGOING,
-    PSHIFT_AWAITED,
     PSHIFT_HOT_MARKER,
-    UNUSED_5,
-    UNUSED_4,
-    UNUSED_3,
-    UNUSED_2,
     UNUSED_1,
     PAGE_FLAGS_NUM
 };
@@ -34,12 +26,8 @@ BUILD_ASSERT(sizeof(pflags_t) * 8 == PAGE_FLAGS_NUM);
 #define PFLAG_PRESENT       (1u << PSHIFT_PRESENT)
 #define PFLAG_DIRTY         (1u << PSHIFT_DIRTY)
 #define PFLAG_NOEVICT       (1u << PSHIFT_NOEVICT)
-#define PFLAG_ZEROPAGE      (1u << PSHIFT_ZEROPAGE)
 #define PFLAG_WORK_ONGOING  (1u << PSHIFT_WORK_ONGOING)
-#define PFLAG_READ_ONGOING  (1u << PSHIFT_READ_ONGOING)
-#define PFLAG_MAP_ONGOING   (1u << PSHIFT_MAP_ONGOING)
 #define PFLAG_EVICT_ONGOING (1u << PSHIFT_EVICT_ONGOING)
-#define PFLAG_AWAITED       (1u << PSHIFT_AWAITED)
 #define PFLAG_HOT_MARKER    (1u << PSHIFT_HOT_MARKER)
 #define PAGE_FLAGS_MASK     ((1u << PAGE_FLAGS_NUM) - 1)
 
@@ -67,31 +55,33 @@ static inline bool is_pflags_set_in(pflags_t original, pflags_t expected) {
 
 /* sets flags on a page and returns new flags (and oldflags in ptr) */
 static inline pflags_t set_page_flags(struct region_t *mr, 
-    unsigned long addr, pflags_t flags, pflags_t* oldflags)
+    unsigned long addr, pflags_t flags, pflags_t* oldflags_out)
 {
     int bit_offset;
-    pflags_t old_flags, new_flags;
+    pflags_t oldflags, new_flags;
     atomic_pflags_t *ptr = page_flags_ptr(mr, addr, &bit_offset);
 
-    old_flags = atomic_fetch_or(ptr, flags << bit_offset);
-    old_flags = (old_flags >> bit_offset) & PAGE_FLAGS_MASK;
-    *oldflags = old_flags;
-    new_flags = old_flags | flags;
+    oldflags = atomic_fetch_or(ptr, flags << bit_offset);
+    oldflags = (oldflags >> bit_offset) & PAGE_FLAGS_MASK;
+    if (oldflags_out)
+        *oldflags_out = oldflags;
+    new_flags = oldflags | flags;
     return new_flags;
 }
 
 /* clears flags on a page and returns new flags (and oldflags in ptr) */
 static inline pflags_t clear_page_flags(struct region_t *mr, 
-    unsigned long addr, pflags_t flags, pflags_t* oldflags)
+    unsigned long addr, pflags_t flags, pflags_t* oldflags_out)
 {
     int bit_offset;
-    pflags_t old_flags, new_flags;
+    pflags_t oldflags, new_flags;
     atomic_pflags_t *ptr = page_flags_ptr(mr, addr, &bit_offset);
 
-    old_flags = atomic_fetch_and(ptr, ~(flags << bit_offset));
-    old_flags = (old_flags >> bit_offset) & PAGE_FLAGS_MASK;
-    *oldflags = old_flags;
-    new_flags = old_flags & (~flags);
+    oldflags = atomic_fetch_and(ptr, ~(flags << bit_offset));
+    oldflags = (oldflags >> bit_offset) & PAGE_FLAGS_MASK;
+    if (oldflags_out)
+        *oldflags_out = oldflags;
+    new_flags = oldflags & (~flags);
     return new_flags;
 }
 
@@ -99,12 +89,12 @@ static inline int set_page_flags_range(struct region_t *mr, unsigned long addr,
     size_t size, pflags_t flags)
 {
     unsigned long offset;
-    pflags_t old_flags;
+    pflags_t oldflags;
     int chunks = 0;
 
     for (offset = 0; offset < size; offset += CHUNK_SIZE) {
-        set_page_flags(mr, addr + offset, flags, &old_flags);
-        if (!(old_flags & flags)) {
+        set_page_flags(mr, addr + offset, flags, &oldflags);
+        if (!(oldflags & flags)) {
             log_debug("[%s] page flags set (clear earlier) for page: %lx", 
                 __func__, addr + offset);
             chunks++;
@@ -119,11 +109,11 @@ static inline int clear_page_flags_range(struct region_t *mr, unsigned long addr
 {
     unsigned long offset;
     int chunks = 0;
-    pflags_t old_flags;
+    pflags_t oldflags;
 
     for (offset = 0; offset < size; offset += CHUNK_SIZE) {
-        clear_page_flags(mr, addr + offset, flags, &old_flags);
-        if (!!(old_flags & flags)) {
+        clear_page_flags(mr, addr + offset, flags, &oldflags);
+        if (!!(oldflags & flags)) {
             log_debug("[%s] page flags cleared (set earlier) for page: %lx", 
                 __func__, addr + offset);
             chunks++;

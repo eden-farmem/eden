@@ -59,11 +59,11 @@ mem_lookup_page_phys_addr(void *addr, size_t pgsize, physaddr_t *paddr)
 }
 
 extern __thread bool __from_runtime;
-#define RUNTIME_BEGIN()             \
+#define RUNTIME_ENTER()             \
   do {                              \
     __from_runtime = true;          \
   } while (0)
-#define RUNTIME_END()               \
+#define RUNTIME_EXIT()            	\
   do {                              \
     __from_runtime = false;         \
   } while (0)

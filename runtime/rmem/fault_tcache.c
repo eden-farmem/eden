@@ -26,40 +26,38 @@ static void fault_tcache_free(struct tcache *tc, int nr, void **items)
 	/* save  for reallocation */
 	int i;
 	spin_lock(&fault_lock);
-	for (i = 0; i < nr; i++)
+	for (i = 0; i < nr; i++) {
+		BUG_ON(free_fault_count >= RUNTIME_MAX_FAULTS);
 		free_faults[free_fault_count++] = items[i];
-	BUG_ON(free_fault_count >= RUNTIME_MAX_FAULTS);
+	}
 	spin_unlock(&fault_lock);
 }
 
 static int fault_tcache_alloc(struct tcache *tc, int nr, void **items)
 {
 	int i = 0;
-    int fault_count_read;
 
 	spin_lock(&fault_lock);
 	while (free_fault_count && i < nr) {
 		items[i++] = free_faults[--free_fault_count];
 	}
-	spin_unlock(&fault_lock);
 
 	for (; i < nr; i++) {
         /* allocate new */
-	    spin_lock(&fault_lock);
-        fault_count_read = ++fault_count;
-	    spin_unlock(&fault_lock);
-        if(fault_count_read > RUNTIME_MAX_FAULTS)
-            goto fail_toomany;
-		items[i] = aligned_alloc(CACHE_LINE_SIZE, sizeof(fault_t));
-		if (unlikely(!items[i]))
+        if(++fault_count > RUNTIME_MAX_FAULTS){
+    		log_err_ratelimited("too many faults, cannot allocate more");
 			goto fail;
+		}
+		items[i] = aligned_alloc(CACHE_LINE_SIZE, sizeof(fault_t));
+		if (unlikely(!items[i])) {
+			log_err_ratelimited("fault: failed to allocate fault memory");
+			goto fail;
+		}
 	}
+	spin_unlock(&fault_lock);
 	return 0;
-
-fail_toomany:
-    log_err_ratelimited("too many faults, cannot allocate more");
 fail:
-	log_err_ratelimited("fault: failed to allocate fault memory");
+	spin_unlock(&fault_lock);
 	fault_tcache_free(tc, i, items);
 	return -ENOMEM;
 }

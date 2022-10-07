@@ -5,18 +5,19 @@
 #ifndef __RMEM_H__
 #define __RMEM_H__
 
-#include <stdatomic.h>
+#include <stddef.h>
 #include "base/types.h"
-#include <rmem/handler.h>
 
-/* global remote memory settings */
-extern bool rmem_enabled;
-extern uint64_t local_memory;
-extern double eviction_threshold;
-extern double eviction_done_threshold;
+/*** Supported ***/
+void *rmalloc(size_t size);
+void *rmrealloc(void *ptr, size_t size, size_t old_size);
+int rmunmap(void *addr, size_t length);
+int rmadvise(void *addr, size_t length, int advice);
 
-/* global state */
-extern atomic_ullong memory_booked;
-extern atomic_ullong memory_used;
+/*** Unsupported ***/
+int rmfree(void *ptr);
+int rmpin(void *addr, size_t size);
+int rmflush(void *addr, size_t size, bool evict);
+
 
 #endif  // __RMEM_H__

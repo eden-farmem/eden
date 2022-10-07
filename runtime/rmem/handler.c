@@ -11,6 +11,7 @@
 
 #include "base/cpu.h"
 #include "rmem/backend.h"
+#include "rmem/common.h"
 #include "rmem/config.h"
 #include "rmem/eviction.h"
 #include "rmem/fault.h"
@@ -19,7 +20,6 @@
 #include "rmem/region.h"
 #include "rmem/uffd.h"
 
-#include "runtime/rmem.h"
 #include "../defs.h"
 
 /* handler state */
@@ -99,9 +99,11 @@ static inline fault_t* read_uffd_fault() {
                 log_warn("faulted process performed a mremap");
                 return NULL;
             case UFFD_EVENT_REMOVE:
-                /* we get here for evicted pages with REGISTER_MADVISE_NOTIF 
-                 * otherwise call it a bug */
-#ifdef REGISTER_MADVISE_NOTIF
+                /* we get here for evicted pages with REGISTER_MADVISE_REMOVE */
+#ifndef REGISTER_MADVISE_REMOVE
+                log_err("REMOVE event unexpected without REGISTER_MADVISE_REMOVE");
+                BUG();
+#endif
                 log_debug("process madvise at %p to %p, size=%llu",
                     (void *)message.arg.remove.start,
                     (void *)(message.arg.remove.end - 1),
@@ -111,23 +113,19 @@ static inline fault_t* read_uffd_fault() {
 
                 /* mark pages not present and adjust memory counters */
                 mr = get_region_by_addr_safe(addr);
-                r = clear_page_flags_range(mr, addr, size, PFLAG_PRESENT);
-                pressure = atomic_fetch_sub_explicit(
-                    &memory_booked, r*PAGE_SIZE, memory_order_acquire);
-                pressure = atomic_fetch_sub_explicit(
-                    &memory_used, r*PAGE_SIZE, memory_order_acquire);
-                log_debug("Freed %d page(s), pressure=%lld", r, 
-                    pressure - r*PAGE_SIZE);
+                /* we should have locked the page by this point */
+                assert(!!(get_page_flags(mr, addr) & PFLAG_WORK_ONGOING));
+                clear_page_flags_range(mr, addr, size, PFLAG_PRESENT);
                 put_mr(mr);
                 RSTAT(UFFD_NOTIF)++;
                 return NULL;
-#else
-                log_err("REMOVE event not expected for no REGISTER_MADVISE_NOTIF");
-                BUG();
-#endif
             case UFFD_EVENT_UNMAP:
                 /* we get here (presumably) for unintercepted munmap */
-                log_debug("process madvise/munmap at %p to %p, size=%llu",
+#ifndef REGISTER_MADVISE_UNMAP
+                log_err("UNMAP event unexpected without REGISTER_MADVISE_UNMAP");
+                BUG();
+#endif
+                log_debug("process munmap at %p to %p, size=%llu",
                     (void *)message.arg.remove.start,
                     (void *)(message.arg.remove.end - 1),
                     message.arg.remove.end - message.arg.remove.start);
@@ -136,7 +134,9 @@ static inline fault_t* read_uffd_fault() {
 
                 /* deregister pages (we will adjust memory after eviction) */
                 mr = get_region_by_addr_safe(addr);
-                clear_page_flags_range(mr, addr, size, PFLAG_PRESENT);
+                /* we should have locked the page by this point */
+                assert(!!(get_page_flags(mr, addr) & PFLAG_WORK_ONGOING));
+                clear_page_flags_range(mr, addr, size, PFLAG_REGISTERED);
                 /* TODO: add these pages as readily evictible!! */
                 put_mr(mr);
                 RSTAT(UFFD_NOTIF)++;
@@ -157,7 +157,7 @@ static void* rmem_handler(void *arg)
     bool need_eviction;
     unsigned long long pressure;
     fault_t *fault, *next;
-    int nevicts, nevicts_needed, batchsz;
+    int nevicts, nevicts_needed, batchsz, r;
     enum fault_status fstatus;
     struct region_t* mr;
     assert(arg != NULL);        /* expecting a hthread_t */
@@ -167,8 +167,10 @@ static void* rmem_handler(void *arg)
         .read_completion = hthr_fault_read_done,
         .write_completion = write_back_completed
     };
-    
+
     /* init */
+    r = thread_init_perthread();    /* for tcache support */
+	assertz(r);
     fault_tcache_init_thread();
     zero_page_init_thread();
     dne_q_init_thread();
@@ -302,7 +304,7 @@ hthread_t* new_rmem_handler_thread(int pincore_id)
     pthread_setname_np(hthr->thread, "rmem_handler");
 
     /* pin thread */
-    r = cores_pin_thread(hthr->thread, pincore_id);
+    r = cpu_pin_thread(hthr->thread, pincore_id);
     assertz(r);
 
     return hthr;
