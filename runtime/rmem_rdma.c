@@ -7,7 +7,6 @@
 #endif
 
 #include <netdb.h>
-#include <stdatomic.h>
 #include <sys/mman.h>
 #include <sys/queue.h>
 
@@ -21,13 +20,6 @@
  * outward (send) communication and that too on datapath QPs. CQs are shared 
  * for each channel
  */
-#define MAX_CONNECTIONS         RMEM_MAX_REGIONS         
-#define MAX_R_REQS_PER_CONN_CHAN 32
-#define MAX_W_REQS_PER_CONN_CHAN 32
-#define MAX_R_REQS_PER_CHAN     (MAX_R_REQS_PER_CONN_CHAN * MAX_CONNECTIONS)
-#define MAX_W_REQS_PER_CHAN     (MAX_W_REQS_PER_CONN_CHAN * MAX_CONNECTIONS)
-#define MAX_REQS_PER_CHAN       (MAX_R_REQS_PER_CHAN + MAX_W_REQS_PER_CHAN)
-#define MAX_REQS_TOTAL          (RMEM_MAX_CHANNELS * MAX_REQS_PER_CHAN)
 #define CQ_RECV_SIZE            10
 #define CQ_SEND_SIZE            MAX_REQS_PER_CHAN
 #define DATAPATH_CQ_SIZE        MAX_REQS_PER_CHAN
@@ -44,7 +36,6 @@ struct server_conn_t* servers[MAX_SERVERS + 1];
 SLIST_HEAD(servers_listhead, server_conn_t);
 struct servers_listhead servers_list;
 static struct context *global_ctx = NULL;
-atomic_int nchannels = ATOMIC_VAR_INIT(0);
 
 /* thread-local state */
 __thread struct ibv_wc wc[RMEM_MAX_COMP_PER_OP];
@@ -587,22 +578,6 @@ int rdma_init() {
     return ret;
 }
 
-/* returns the next available channel (id) for datapath */
-int rdma_get_data_channel()
-{
-    int chan_id;
-    do {
-        chan_id = atomic_load(&nchannels);
-        BUG_ON(chan_id > RMEM_MAX_CHANNELS);
-        if (chan_id == RMEM_MAX_CHANNELS) {
-            log_warn("out of rdma channels!");
-            return -1;
-        }
-    } while(!atomic_compare_exchange_strong(&nchannels, &chan_id, chan_id+1));
-    log_debug("channel %d taken, num channels: %d", chan_id, nchannels);
-    return chan_id;
-}
-
 /* backend destroy */
 int rdma_destroy() {
     while (!SLIST_EMPTY(&servers_list)) {
@@ -644,7 +619,7 @@ int rdma_post_read(int chan_id, fault_t* f)
     int req_id;
     
     /* get connection */
-    assert(chan_id >= 0 && chan_id < nchannels);
+    assert(chan_id >= 0 && chan_id < nchans_bkend);
     conn = &(f->mr->server->dp[chan_id]);
     assert(conn->datapath);
 
@@ -699,7 +674,7 @@ int rdma_post_write(int chan_id, struct region_t* mr, unsigned long addr,
     int req_id;
     
     /* get connection */
-    assert(chan_id >= 0 && chan_id < nchannels);
+    assert(chan_id >= 0 && chan_id < nchans_bkend);
     conn = &(mr->server->dp[chan_id]);
     assert(conn->datapath);
 
@@ -756,7 +731,7 @@ int rdma_check_cq(int chan_id, struct completion_cbs* cbs, int max_cqe,
     enum ibv_wc_opcode opcode;
     
     assert(max_cqe > 0 && max_cqe <= RMEM_MAX_COMP_PER_OP);
-    assert(chan_id >= 0 && chan_id < nchannels);
+    assert(chan_id >= 0 && chan_id < nchans_bkend);
     if(nread)   *nread = 0;
     if(nwrite)  *nwrite = 0;
 
@@ -821,7 +796,7 @@ int rdma_check_cq(int chan_id, struct completion_cbs* cbs, int max_cqe,
 /* Ops for RDMA backend */
 struct rmem_backend_ops rdma_backend_ops = {
     .init = rdma_init,
-    .get_new_data_channel = rdma_get_data_channel,
+    .get_new_data_channel = backend_get_data_channel,
     .destroy = rdma_destroy,
     .add_memory = rdma_add_regions,
     .remove_region = rdma_free_region,
