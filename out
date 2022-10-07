@@ -1,0 +1,828 @@
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -c base/stat.c -o base/stat.o
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -c base/lrpc.c -o base/lrpc.o
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -c base/mem.c -o base/mem.o
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -c base/time.c -o base/time.o
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -c base/log.c -o base/log.o
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -c base/init.c -o base/init.o
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -c base/mempool.c -o base/mempool.o
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -c base/jenkins_hash.c -o base/jenkins_hash.o
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -c base/vdso.c -o base/vdso.o
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -c base/list.c -o base/list.o
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -c base/tcache.c -o base/tcache.o
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -c base/cpu.c -o base/cpu.o
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -c base/slab.c -o base/slab.o
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -c base/pci.c -o base/pci.o
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -c base/bitmap.c -o base/bitmap.o
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -c base/page.c -o base/page.o
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -c base/thread.c -o base/thread.o
+base/mem.c:25:2: warning: #warning "Your system does not support specifying MAP_HUGETLB page sizes" [-Wcpp]
+   25 | #warning "Your system does not support specifying MAP_HUGETLB page sizes"
+      |  ^~~~~~~
+base/mem.c:29:2: warning: #warning "Your system does not support specifying SHM_HUGETLB page sizes" [-Wcpp]
+   29 | #warning "Your system does not support specifying SHM_HUGETLB page sizes"
+      |  ^~~~~~~
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -c base/sysfs.c -o base/sysfs.o
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -c net/netdump.c -o net/netdump.o
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -c net/mbuf.c -o net/mbuf.o
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -c runtime/stat.c -o runtime/stat.o
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -c runtime/stack.c -o runtime/stack.o
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -c runtime/ioqueues.c -o runtime/ioqueues.o
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -c runtime/rmem_rdma.c -o runtime/rmem_rdma.o
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -c runtime/init.c -o runtime/init.o
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -c runtime/preempt.c -o runtime/preempt.o
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -c runtime/rcu.c -o runtime/rcu.o
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -c runtime/sync.c -o runtime/sync.o
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -c runtime/pgfault.c -o runtime/pgfault.o
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -c runtime/kthread.c -o runtime/kthread.o
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -c runtime/sched.c -o runtime/sched.o
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -c runtime/rmem_local.c -o runtime/rmem_local.o
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -c runtime/smalloc.c -o runtime/smalloc.o
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -c runtime/softirq.c -o runtime/softirq.o
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -c runtime/cfg.c -o runtime/cfg.o
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -c runtime/timer.c -o runtime/timer.o
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -c runtime/rmem.c -o runtime/rmem.o
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -c runtime/net/tcp.c -o runtime/net/tcp.o
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -c runtime/net/ping.c -o runtime/net/ping.o
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -c runtime/net/core.c -o runtime/net/core.o
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -c runtime/net/arp.c -o runtime/net/arp.o
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -c runtime/net/transport.c -o runtime/net/transport.o
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -c runtime/net/tcp_in.c -o runtime/net/tcp_in.o
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -c runtime/net/tcp_debug.c -o runtime/net/tcp_debug.o
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -c runtime/net/icmp.c -o runtime/net/icmp.o
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -c runtime/net/udp.c -o runtime/net/udp.o
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -c runtime/net/tcp_out.c -o runtime/net/tcp_out.o
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -c runtime/rmem/fault_tcache.c -o runtime/rmem/fault_tcache.o
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -c runtime/rmem/rlib.c -o runtime/rmem/rlib.o
+runtime/stat.c:113:16: warning: ‘thread_state_buf’ defined but not used [-Wunused-function]
+  113 | static ssize_t thread_state_buf(char *buf, size_t len) {
+      |                ^~~~~~~~~~~~~~~~
+runtime/stat.c:101:12: warning: ‘pin_thread’ defined but not used [-Wunused-function]
+  101 | static int pin_thread(int core) {
+      |            ^~~~~~~~~~
+runtime/stat.c:26:19: warning: ‘statsfile’ defined but not used [-Wunused-const-variable=]
+   26 | static const char statsfile[] = "runtime.out";
+      |                   ^~~~~~~~~
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -c runtime/rmem/uffd.c -o runtime/rmem/uffd.o
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -c runtime/rmem/rdma.c -o runtime/rmem/rdma.o
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -c runtime/rmem/fault.c -o runtime/rmem/fault.o
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -c runtime/rmem/handler.c -o runtime/rmem/handler.o
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -c runtime/rmem/region.c -o runtime/rmem/region.o
+runtime/rmem_local.c: In function ‘local_add_regions’:
+runtime/rmem_local.c:70:26: warning: unused variable ‘lreg’ [-Wunused-variable]
+   70 |     struct local_region* lreg;
+      |                          ^~~~
+runtime/rmem_local.c: In function ‘local_free_region’:
+runtime/rmem_local.c:104:15: warning: passing argument 1 of ‘munmap’ makes pointer from integer without a cast [-Wint-conversion]
+  104 |     munmap(reg->remote_addr, reg->size);
+      |            ~~~^~~~~~~~~~~~~
+      |               |
+      |               long unsigned int
+In file included from runtime/rmem_local.c:10:
+/usr/include/x86_64-linux-gnu/sys/mman.h:76:26: note: expected ‘void *’ but argument is of type ‘long unsigned int’
+   76 | extern int munmap (void *__addr, size_t __len) __THROW;
+      |                    ~~~~~~^~~~~~
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -c runtime/rmem/eviction.c -o runtime/rmem/eviction.o
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -c runtime/switch.S -o runtime/switch.o
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -c iokernel/stat.c -o iokernel/stat.o
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -c iokernel/cores.c -o iokernel/cores.o
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -c iokernel/main.c -o iokernel/main.o
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -c iokernel/tx.c -o iokernel/tx.o
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -c iokernel/dp_clients.c -o iokernel/dp_clients.o
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -c iokernel/dpdk.c -o iokernel/dpdk.o
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -c iokernel/commands.c -o iokernel/commands.o
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -c iokernel/rx.c -o iokernel/rx.o
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -c iokernel/mempool_completion.c -o iokernel/mempool_completion.o
+runtime/sched.c: In function ‘steal_work’:
+runtime/sched.c:145:18: warning: unused variable ‘wait_count’ [-Wunused-variable]
+  145 |  int nthr_ready, wait_count;
+      |                  ^~~~~~~~~~
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -c iokernel/control.c -o iokernel/control.o
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -Wno-unused-variable -DCORES_NOHT -c iokernel/stat.c -o iokernel/stat-noht.o
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -Wno-unused-variable -DCORES_NOHT -c iokernel/cores.c -o iokernel/cores-noht.o
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -Wno-unused-variable -DCORES_NOHT -c iokernel/main.c -o iokernel/main-noht.o
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -Wno-unused-variable -DCORES_NOHT -c iokernel/tx.c -o iokernel/tx-noht.o
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -Wno-unused-variable -DCORES_NOHT -c iokernel/dp_clients.c -o iokernel/dp_clients-noht.o
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -Wno-unused-variable -DCORES_NOHT -c iokernel/dpdk.c -o iokernel/dpdk-noht.o
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -Wno-unused-variable -DCORES_NOHT -c iokernel/commands.c -o iokernel/commands-noht.o
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -Wno-unused-variable -DCORES_NOHT -c iokernel/rx.c -o iokernel/rx-noht.o
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -Wno-unused-variable -DCORES_NOHT -c iokernel/mempool_completion.c -o iokernel/mempool_completion-noht.o
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -Wno-unused-variable -DCORES_NOHT -c iokernel/control.c -o iokernel/control-noht.o
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -c rmem/rcntrl.c -o rmem/rcntrl.o
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -c rmem/rdma.c -o rmem/rdma.o
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -c rmem/memserver.c -o rmem/memserver.o
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -c tests/test_runtime_mutexes.c -o tests/test_runtime_mutexes.o
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -c tests/test_base_thread.c -o tests/test_base_thread.o
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -c tests/test_kthread_wakeup.c -o tests/test_kthread_wakeup.o
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -c tests/test_base_lrpc.c -o tests/test_base_lrpc.o
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -c tests/netperf.c -o tests/netperf.o
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -c tests/test_multiple_runtimes.c -o tests/test_multiple_runtimes.o
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -c tests/test_base_hello.c -o tests/test_base_hello.o
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -c tests/test_many_threads.c -o tests/test_many_threads.o
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -c tests/test_base_gen.c -o tests/test_base_gen.o
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -c tests/test_runtime_threads.c -o tests/test_runtime_threads.o
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -c tests/test_runtime_smalloc.c -o tests/test_runtime_smalloc.o
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -c tests/test_kthread_attach.c -o tests/test_kthread_attach.o
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -c tests/test_runtime_timer.c -o tests/test_runtime_timer.o
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -c tests/test_ping.c -o tests/test_ping.o
+gcc -g -Wall -std=gnu11 -D_GNU_SOURCE -I./inc -mssse3 -include rte_config.h -march=native -I/usr/local/include -I/usr/include/libnl3 -DNDEBUG -O3 -DMLX5 -c tests/test_runtime_rcu.c -o tests/test_runtime_rcu.o
+ar rcs libnet.a net/netdump.o net/mbuf.o
+ar rcs libbase.a base/stat.o base/lrpc.o base/mem.o base/time.o base/log.o base/init.o base/mempool.o base/jenkins_hash.o base/vdso.o base/list.o base/tcache.o base/cpu.o base/slab.o base/pci.o base/bitmap.o base/page.o base/thread.o base/sysfs.o
+gcc -T base/base.ld -no-pie -o memserver rmem/memserver.o rmem/rdma.o libbase.a -lpthread -lrdmacm -libverbs
+gcc -T base/base.ld -no-pie -o rcntrl rmem/rcntrl.o rmem/rdma.o libbase.a -lpthread -lrdmacm -libverbs
+gcc -T base/base.ld -no-pie -o iokerneld-noht iokernel/stat-noht.o iokernel/cores-noht.o iokernel/main-noht.o iokernel/tx-noht.o iokernel/dp_clients-noht.o iokernel/dpdk-noht.o iokernel/commands-noht.o iokernel/rx-noht.o iokernel/mempool_completion-noht.o iokernel/control-noht.o libbase.a libnet.a -L/usr/local/lib/x86_64-linux-gnu -Wl,--whole-archive -l:librte_common_cpt.a -l:librte_common_dpaax.a -l:librte_common_iavf.a -l:librte_common_octeontx.a -l:librte_common_octeontx2.a -l:librte_common_sfc_efx.a -l:librte_bus_dpaa.a -l:librte_bus_fslmc.a -l:librte_bus_ifpga.a -l:librte_bus_pci.a -l:librte_bus_vdev.a -l:librte_bus_vmbus.a -l:librte_common_mlx5.a -l:librte_common_qat.a -l:librte_mempool_bucket.a -l:librte_mempool_dpaa.a -l:librte_mempool_dpaa2.a -l:librte_mempool_octeontx.a -l:librte_mempool_octeontx2.a -l:librte_mempool_ring.a -l:librte_mempool_stack.a -l:librte_net_af_packet.a -l:librte_net_ark.a -l:librte_net_atlantic.a -l:librte_net_avp.a -l:librte_net_axgbe.a -l:librte_net_bond.a -l:librte_net_bnx2x.a -l:librte_net_bnxt.a -l:librte_net_cxgbe.a -l:librte_net_dpaa.a -l:librte_net_dpaa2.a -l:librte_net_e1000.a -l:librte_net_ena.a -l:librte_net_enetc.a -l:librte_net_enic.a -l:librte_net_failsafe.a -l:librte_net_fm10k.a -l:librte_net_i40e.a -l:librte_net_hinic.a -l:librte_net_hns3.a -l:librte_net_iavf.a -l:librte_net_ice.a -l:librte_net_igc.a -l:librte_net_ipn3ke.a -l:librte_net_ixgbe.a -l:librte_net_kni.a -l:librte_net_liquidio.a -l:librte_net_memif.a -l:librte_net_mlx5.a -l:librte_net_netvsc.a -l:librte_net_nfp.a -l:librte_net_null.a -l:librte_net_octeontx.a -l:librte_net_octeontx2.a -l:librte_net_pcap.a -l:librte_net_pfe.a -l:librte_net_qede.a -l:librte_net_ring.a -l:librte_net_sfc.a -l:librte_net_softnic.a -l:librte_net_tap.a -l:librte_net_thunderx.a -l:librte_net_txgbe.a -l:librte_net_vdev_netvsc.a -l:librte_net_vhost.a -l:librte_net_virtio.a -l:librte_net_vmxnet3.a -l:librte_raw_dpaa2_cmdif.a -l:librte_raw_dpaa2_qdma.a -l:librte_raw_ifpga.a -l:librte_raw_ioat.a -l:librte_raw_ntb.a -l:librte_raw_octeontx2_dma.a -l:librte_raw_octeontx2_ep.a -l:librte_raw_skeleton.a -l:librte_crypto_bcmfs.a -l:librte_crypto_caam_jr.a -l:librte_crypto_ccp.a -l:librte_crypto_dpaa_sec.a -l:librte_crypto_dpaa2_sec.a -l:librte_crypto_nitrox.a -l:librte_crypto_null.a -l:librte_crypto_octeontx.a -l:librte_crypto_octeontx2.a -l:librte_crypto_openssl.a -l:librte_crypto_scheduler.a -l:librte_crypto_virtio.a -l:librte_compress_octeontx.a -l:librte_compress_zlib.a -l:librte_regex_mlx5.a -l:librte_regex_octeontx2.a -l:librte_vdpa_ifc.a -l:librte_vdpa_mlx5.a -l:librte_event_dlb.a -l:librte_event_dlb2.a -l:librte_event_dpaa.a -l:librte_event_dpaa2.a -l:librte_event_octeontx2.a -l:librte_event_opdl.a -l:librte_event_skeleton.a -l:librte_event_sw.a -l:librte_event_dsw.a -l:librte_event_octeontx.a -l:librte_baseband_null.a -l:librte_baseband_turbo_sw.a -l:librte_baseband_fpga_lte_fec.a -l:librte_baseband_fpga_5gnr_fec.a -l:librte_baseband_acc100.a -l:librte_node.a -l:librte_graph.a -l:librte_bpf.a -l:librte_flow_classify.a -l:librte_pipeline.a -l:librte_table.a -l:librte_port.a -l:librte_fib.a -l:librte_ipsec.a -l:librte_vhost.a -l:librte_stack.a -l:librte_security.a -l:librte_sched.a -l:librte_reorder.a -l:librte_rib.a -l:librte_regexdev.a -l:librte_rawdev.a -l:librte_pdump.a -l:librte_power.a -l:librte_member.a -l:librte_lpm.a -l:librte_latencystats.a -l:librte_kni.a -l:librte_jobstats.a -l:librte_ip_frag.a -l:librte_gso.a -l:librte_gro.a -l:librte_eventdev.a -l:librte_efd.a -l:librte_distributor.a -l:librte_cryptodev.a -l:librte_compressdev.a -l:librte_cfgfile.a -l:librte_bitratestats.a -l:librte_bbdev.a -l:librte_acl.a -l:librte_timer.a -l:librte_hash.a -l:librte_metrics.a -l:librte_cmdline.a -l:librte_pci.a -l:librte_ethdev.a -l:librte_meter.a -l:librte_net.a -l:librte_mbuf.a -l:librte_mempool.a -l:librte_rcu.a -l:librte_ring.a -l:librte_eal.a -l:librte_telemetry.a -l:librte_kvargs.a -Wl,--no-whole-archive /usr/lib/gcc/x86_64-linux-gnu/9/../../../x86_64-linux-gnu/librt.so -lmlx5 -lpthread -libverbs -lmlx5 -libverbs -lpthread -lnl-route-3 -lnl-3 -lcrypto -ldl -pthread -lpcap -lelf -lz -Wl,--as-needed -lrte_node -lrte_graph -lrte_bpf -lrte_flow_classify -lrte_pipeline -lrte_table -lrte_port -lrte_fib -lrte_ipsec -lrte_vhost -lrte_stack -lrte_security -lrte_sched -lrte_reorder -lrte_rib -lrte_regexdev -lrte_rawdev -lrte_pdump -lrte_power -lrte_member -lrte_lpm -lrte_latencystats -lrte_kni -lrte_jobstats -lrte_ip_frag -lrte_gso -lrte_gro -lrte_eventdev -lrte_efd -lrte_distributor -lrte_cryptodev -lrte_compressdev -lrte_cfgfile -lrte_bitratestats -lrte_bbdev -lrte_acl -lrte_timer -lrte_hash -lrte_metrics -lrte_cmdline -lrte_pci -lrte_ethdev -lrte_meter -lrte_net -lrte_mbuf -lrte_mempool -lrte_rcu -lrte_ring -lrte_eal -lrte_telemetry -lrte_kvargs -pthread -lm -ldl -lnuma -lfdt -lpcap \
+ -lpthread -lnuma -ldl
+gcc -T base/base.ld -no-pie -o iokerneld iokernel/stat.o iokernel/cores.o iokernel/main.o iokernel/tx.o iokernel/dp_clients.o iokernel/dpdk.o iokernel/commands.o iokernel/rx.o iokernel/mempool_completion.o iokernel/control.o libbase.a libnet.a -L/usr/local/lib/x86_64-linux-gnu -Wl,--whole-archive -l:librte_common_cpt.a -l:librte_common_dpaax.a -l:librte_common_iavf.a -l:librte_common_octeontx.a -l:librte_common_octeontx2.a -l:librte_common_sfc_efx.a -l:librte_bus_dpaa.a -l:librte_bus_fslmc.a -l:librte_bus_ifpga.a -l:librte_bus_pci.a -l:librte_bus_vdev.a -l:librte_bus_vmbus.a -l:librte_common_mlx5.a -l:librte_common_qat.a -l:librte_mempool_bucket.a -l:librte_mempool_dpaa.a -l:librte_mempool_dpaa2.a -l:librte_mempool_octeontx.a -l:librte_mempool_octeontx2.a -l:librte_mempool_ring.a -l:librte_mempool_stack.a -l:librte_net_af_packet.a -l:librte_net_ark.a -l:librte_net_atlantic.a -l:librte_net_avp.a -l:librte_net_axgbe.a -l:librte_net_bond.a -l:librte_net_bnx2x.a -l:librte_net_bnxt.a -l:librte_net_cxgbe.a -l:librte_net_dpaa.a -l:librte_net_dpaa2.a -l:librte_net_e1000.a -l:librte_net_ena.a -l:librte_net_enetc.a -l:librte_net_enic.a -l:librte_net_failsafe.a -l:librte_net_fm10k.a -l:librte_net_i40e.a -l:librte_net_hinic.a -l:librte_net_hns3.a -l:librte_net_iavf.a -l:librte_net_ice.a -l:librte_net_igc.a -l:librte_net_ipn3ke.a -l:librte_net_ixgbe.a -l:librte_net_kni.a -l:librte_net_liquidio.a -l:librte_net_memif.a -l:librte_net_mlx5.a -l:librte_net_netvsc.a -l:librte_net_nfp.a -l:librte_net_null.a -l:librte_net_octeontx.a -l:librte_net_octeontx2.a -l:librte_net_pcap.a -l:librte_net_pfe.a -l:librte_net_qede.a -l:librte_net_ring.a -l:librte_net_sfc.a -l:librte_net_softnic.a -l:librte_net_tap.a -l:librte_net_thunderx.a -l:librte_net_txgbe.a -l:librte_net_vdev_netvsc.a -l:librte_net_vhost.a -l:librte_net_virtio.a -l:librte_net_vmxnet3.a -l:librte_raw_dpaa2_cmdif.a -l:librte_raw_dpaa2_qdma.a -l:librte_raw_ifpga.a -l:librte_raw_ioat.a -l:librte_raw_ntb.a -l:librte_raw_octeontx2_dma.a -l:librte_raw_octeontx2_ep.a -l:librte_raw_skeleton.a -l:librte_crypto_bcmfs.a -l:librte_crypto_caam_jr.a -l:librte_crypto_ccp.a -l:librte_crypto_dpaa_sec.a -l:librte_crypto_dpaa2_sec.a -l:librte_crypto_nitrox.a -l:librte_crypto_null.a -l:librte_crypto_octeontx.a -l:librte_crypto_octeontx2.a -l:librte_crypto_openssl.a -l:librte_crypto_scheduler.a -l:librte_crypto_virtio.a -l:librte_compress_octeontx.a -l:librte_compress_zlib.a -l:librte_regex_mlx5.a -l:librte_regex_octeontx2.a -l:librte_vdpa_ifc.a -l:librte_vdpa_mlx5.a -l:librte_event_dlb.a -l:librte_event_dlb2.a -l:librte_event_dpaa.a -l:librte_event_dpaa2.a -l:librte_event_octeontx2.a -l:librte_event_opdl.a -l:librte_event_skeleton.a -l:librte_event_sw.a -l:librte_event_dsw.a -l:librte_event_octeontx.a -l:librte_baseband_null.a -l:librte_baseband_turbo_sw.a -l:librte_baseband_fpga_lte_fec.a -l:librte_baseband_fpga_5gnr_fec.a -l:librte_baseband_acc100.a -l:librte_node.a -l:librte_graph.a -l:librte_bpf.a -l:librte_flow_classify.a -l:librte_pipeline.a -l:librte_table.a -l:librte_port.a -l:librte_fib.a -l:librte_ipsec.a -l:librte_vhost.a -l:librte_stack.a -l:librte_security.a -l:librte_sched.a -l:librte_reorder.a -l:librte_rib.a -l:librte_regexdev.a -l:librte_rawdev.a -l:librte_pdump.a -l:librte_power.a -l:librte_member.a -l:librte_lpm.a -l:librte_latencystats.a -l:librte_kni.a -l:librte_jobstats.a -l:librte_ip_frag.a -l:librte_gso.a -l:librte_gro.a -l:librte_eventdev.a -l:librte_efd.a -l:librte_distributor.a -l:librte_cryptodev.a -l:librte_compressdev.a -l:librte_cfgfile.a -l:librte_bitratestats.a -l:librte_bbdev.a -l:librte_acl.a -l:librte_timer.a -l:librte_hash.a -l:librte_metrics.a -l:librte_cmdline.a -l:librte_pci.a -l:librte_ethdev.a -l:librte_meter.a -l:librte_net.a -l:librte_mbuf.a -l:librte_mempool.a -l:librte_rcu.a -l:librte_ring.a -l:librte_eal.a -l:librte_telemetry.a -l:librte_kvargs.a -Wl,--no-whole-archive /usr/lib/gcc/x86_64-linux-gnu/9/../../../x86_64-linux-gnu/librt.so -lmlx5 -lpthread -libverbs -lmlx5 -libverbs -lpthread -lnl-route-3 -lnl-3 -lcrypto -ldl -pthread -lpcap -lelf -lz -Wl,--as-needed -lrte_node -lrte_graph -lrte_bpf -lrte_flow_classify -lrte_pipeline -lrte_table -lrte_port -lrte_fib -lrte_ipsec -lrte_vhost -lrte_stack -lrte_security -lrte_sched -lrte_reorder -lrte_rib -lrte_regexdev -lrte_rawdev -lrte_pdump -lrte_power -lrte_member -lrte_lpm -lrte_latencystats -lrte_kni -lrte_jobstats -lrte_ip_frag -lrte_gso -lrte_gro -lrte_eventdev -lrte_efd -lrte_distributor -lrte_cryptodev -lrte_compressdev -lrte_cfgfile -lrte_bitratestats -lrte_bbdev -lrte_acl -lrte_timer -lrte_hash -lrte_metrics -lrte_cmdline -lrte_pci -lrte_ethdev -lrte_meter -lrte_net -lrte_mbuf -lrte_mempool -lrte_rcu -lrte_ring -lrte_eal -lrte_telemetry -lrte_kvargs -pthread -lm -ldl -lnuma -lfdt -lpcap \
+-lpthread -lnuma -ldl
+ar rcs libruntime.a runtime/stat.o runtime/stack.o runtime/ioqueues.o runtime/rmem_rdma.o runtime/init.o runtime/preempt.o runtime/rcu.o runtime/sync.o runtime/pgfault.o runtime/kthread.o runtime/sched.o runtime/rmem_local.o runtime/smalloc.o runtime/softirq.o runtime/cfg.o runtime/timer.o runtime/rmem.o runtime/net/tcp.o runtime/net/ping.o runtime/net/core.o runtime/net/arp.o runtime/net/transport.o runtime/net/tcp_in.o runtime/net/tcp_debug.o runtime/net/icmp.o runtime/net/udp.o runtime/net/tcp_out.o runtime/rmem/fault_tcache.o runtime/rmem/rlib.o runtime/rmem/uffd.o runtime/rmem/rdma.o runtime/rmem/fault.o runtime/rmem/handler.o runtime/rmem/region.o runtime/rmem/eviction.o runtime/switch.o
+gcc -T base/base.ld -no-pie -o tests/test_runtime_mutexes tests/test_runtime_mutexes.o libruntime.a libnet.a libbase.a -lpthread -lrdmacm -libverbs
+gcc -T base/base.ld -no-pie -o tests/test_base_thread tests/test_base_thread.o libruntime.a libnet.a libbase.a -lpthread -lrdmacm -libverbs
+gcc -T base/base.ld -no-pie -o tests/test_kthread_wakeup tests/test_kthread_wakeup.o libruntime.a libnet.a libbase.a -lpthread -lrdmacm -libverbs
+gcc -T base/base.ld -no-pie -o tests/test_base_lrpc tests/test_base_lrpc.o libruntime.a libnet.a libbase.a -lpthread -lrdmacm -libverbs
+gcc -T base/base.ld -no-pie -o tests/netperf tests/netperf.o libruntime.a libnet.a libbase.a -lpthread -lrdmacm -libverbs
+gcc -T base/base.ld -no-pie -o tests/test_multiple_runtimes tests/test_multiple_runtimes.o libruntime.a libnet.a libbase.a -lpthread -lrdmacm -libverbs
+gcc -T base/base.ld -no-pie -o tests/test_base_hello tests/test_base_hello.o libruntime.a libnet.a libbase.a -lpthread -lrdmacm -libverbs
+gcc -T base/base.ld -no-pie -o tests/test_many_threads tests/test_many_threads.o libruntime.a libnet.a libbase.a -lpthread -lrdmacm -libverbs
+gcc -T base/base.ld -no-pie -o tests/test_base_gen tests/test_base_gen.o libruntime.a libnet.a libbase.a -lpthread -lrdmacm -libverbs
+gcc -T base/base.ld -no-pie -o tests/test_runtime_threads tests/test_runtime_threads.o libruntime.a libnet.a libbase.a -lpthread -lrdmacm -libverbs
+gcc -T base/base.ld -no-pie -o tests/test_runtime_smalloc tests/test_runtime_smalloc.o libruntime.a libnet.a libbase.a -lpthread -lrdmacm -libverbs
+gcc -T base/base.ld -no-pie -o tests/test_kthread_attach tests/test_kthread_attach.o libruntime.a libnet.a libbase.a -lpthread -lrdmacm -libverbs
+gcc -T base/base.ld -no-pie -o tests/test_runtime_timer tests/test_runtime_timer.o libruntime.a libnet.a libbase.a -lpthread -lrdmacm -libverbs
+gcc -T base/base.ld -no-pie -o tests/test_ping tests/test_ping.o libruntime.a libnet.a libbase.a -lpthread -lrdmacm -libverbs
+gcc -T base/base.ld -no-pie -o tests/test_runtime_rcu tests/test_runtime_rcu.o libruntime.a libnet.a libbase.a -lpthread -lrdmacm -libverbs
+/usr/bin/ld: libruntime.a(preempt.o): in function `backend_get_data_channel':
+/home/ayelam/shenango/./inc/rmem/backend.h:110: multiple definition of `backend_get_data_channel'; libruntime.a(init.o):/home/ayelam/shenango/./inc/rmem/backend.h:110: first defined here
+/usr/bin/ld: libruntime.a(rcu.o): in function `backend_get_data_channel':
+/home/ayelam/shenango/./inc/rmem/backend.h:110: multiple definition of `backend_get_data_channel'; libruntime.a(init.o):/home/ayelam/shenango/./inc/rmem/backend.h:110: first defined here
+/usr/bin/ld: libruntime.a(sync.o): in function `backend_get_data_channel':
+/home/ayelam/shenango/./inc/rmem/backend.h:110: multiple definition of `backend_get_data_channel'; libruntime.a(init.o):/home/ayelam/shenango/./inc/rmem/backend.h:110: first defined here
+/usr/bin/ld: libruntime.a(kthread.o): in function `backend_get_data_channel':
+/home/ayelam/shenango/./inc/rmem/backend.h:110: multiple definition of `backend_get_data_channel'; libruntime.a(init.o):/home/ayelam/shenango/./inc/rmem/backend.h:110: first defined here
+/usr//binusr//ldbin:/ ldlibruntime.a:( sched.olibruntime.a)(:preempt.o )in:  functionin  `functionbackend_get_data_channel '`:backend_get_data_channel
+'/:home
+//ayelamhome//shenangoayelam//.shenango//inc.//rmeminc//backend.hrmem:/110backend.h::/ 110usrmultiple:/  bindefinitionmultiple/  ldofdefinition:   `oflibruntime.abackend_get_data_channel ('`preempt.o;backend_get_data_channel) ':libruntime.a; ( ininit.olibruntime.a )(function:init.o /)`home:backend_get_data_channel//'ayelamhome://
+shenangoayelam///home.shenango///ayelaminc.///shenangormeminc///.backend.hrmem/:/inc110backend.h/::rmem 110/first:backend.h  :definedfirst110  :heredefined 
+ multiple/here usr
+definition// binusrof// ldbin`:/backend_get_data_channel ld'libruntime.a:;(  smalloc.olibruntime.alibruntime.a)((:rcu.oinit.o ))in::  /functioninhome/ayelam/shenango/.  /`functionincbackend_get_data_channel /'`rmem:backend_get_data_channel/
+'backend.h/::home
+110//:ayelamhome ///firstshenangousrayelam ///defined .binshenangohere///
+incld./usr/://rmem incbin/libruntime.a//backend.h(rmemld/:preempt.o/:usr110)backend.h /:::libruntime.abin  110(/multiplein:/rcu.old   usr):definitionfunctionmultiple/:    bin libruntime.aof`definition/in( backend_get_data_channel ld preempt.o`'of:function)backend_get_data_channel:   :'
+`libruntime.a` ;/backend_get_data_channel(backend_get_data_channelin home'/preempt.o' libruntime.a/;usr):function `backend_get_data_channel'(ayelam /:
+:init.o/libruntime.abin /
+)shenango(/inhome/:/init.old /home/.):functionayelam/home/:  /ayelam//inc/libruntime.a`shenango/ayelamusr/home(backend_get_data_channel/shenango//rmem/preempt.o'./shenangobin/ayelam):/.//backend.h/:
+inc/.ld:shenango //inc/:110/inhomermem/inc :. //rmem/libruntime.a /functionayelambackend.h/rmem(multipleinc /:backend.h/preempt.o /`shenango110:backend.h)definitionrmembackend_get_data_channel/:110:: /'. :110 ofbackend.h:/multiple :in :
+inc multiple  `110//definition firstfunctionbackend_get_data_channel:homermem definition  ' //of defined`;firstayelambackend.h of backend_get_data_channel  /:` here'libruntime.adefinedshenango110backend_get_data_channel`
+:( /:'backend_get_data_channel/
+init.ohere. ;'usr/)
+/multiple ;/home:/inc libruntime.a bin//usr/definition(libruntime.a/ayelamhome/rmem init.o(ld//bin/of)init.o:shenangoayelam/backend.h :) //ld:`/:libruntime.a.shenango:110backend_get_data_channelhome/(// :'/homesoftirq.oinc.libruntime.a ;ayelam/)//(multiple /ayelam/shenango/.:rmeminckthread.o libruntime.ashenango/ //)definition(/incinbackend.hrmem: init.o./ :/ of)/rmem/backend.hfunction110backend.hin /:inc: :: `usr///110` 110functionbackend_get_data_channel/homermemusr:backend_get_data_channelmultiple: 'bin/// '  `/;/ayelambackend.hbinfirst:definitionfirstbackend_get_data_channelusr ld/:/ 
+  '/libruntime.a:shenango110lddefined/ofdefined:bin( /:: home  
+/init.olibruntime.a.  here/`here/ld)(/firstlibruntime.a
+ayelambackend_get_data_channel
+home::preempt.oinc (//'// /)/definedpreempt.ousrshenango;usrayelamlibruntime.ahome:rmem )// //(/ /here:bin.libruntime.abinshenangopreempt.oayelaminbackend.h
+ //(//)/ :/inldincinit.old.:shenangofunction110usr :/):/ / :/function rmem: incin.` bin libruntime.a//libruntime.a/ /backend_get_data_channelfirst/`(backend.hhome(rmemfunctioninc' ldbackend_get_data_channelrcu.o:/rcu.o/ /:defined:')110ayelam)backend.h`rmem
+  :::/::backend_get_data_channel//herelibruntime.a
+  shenango 110'backend.hhome
+(/inmultiple/in::://sync.ohome  .  
+110ayelamusr)/functiondefinition/functionmultiple/://:ayelam  inc  home shenangobin /`of/`definition/first//inshenangobackend_get_data_channel rmembackend_get_data_channel ayelam .ld /'`/'of/defined/:function.:backend_get_data_channelbackend.h:: shenango inc  /
+'110:
+`/here/libruntime.a`inc/; /backend_get_data_channel.
+rmem(backend_get_data_channel/home firsthome'///rcu.o'rmem/libruntime.a /;incusrbackend.h):/ayelam(definedayelam //::
+backend.h/init.o /libruntime.armembin110 /:shenango)hereshenango(//:inhome110/:
+/init.obackend.hld  /:.//.)::multiplefunctionayelam /homeusr/:110   /multipleinc//bininc/:libruntime.adefinition`shenango /ayelam//home ( backend_get_data_channel/definitionrmem/ldrmem/multiplercu.oof'. /shenango:/ayelam ) :/ofbackend.h/ backend.h:/110shenangodefinition:/:  `. 
+ofincmultiple backend_get_data_channel/:in./ libruntime.a/ `'inc110 /home`(rmemdefinitionbackend_get_data_channel;/:functioninc/backend_get_data_channelrcu.o/ ' rmem  /ayelam')backend.hof;libruntime.a/multiple`rmem/;::  (backend.h backend_get_data_channel/shenango  110`libruntime.ainit.o:definition'backend.h/libruntime.ain:backend_get_data_channel()110 ::.(  'init.o::of
+110/init.ofunctionmultiple;)/  /:inc)   :homefirst`home /:`definitionlibruntime.a// backend_get_data_channel/firstrmem/backend_get_data_channel (homeayelamdefined'ayelam /home'ofinit.o// ;/definedbackend.h/: )ayelamshenangohere shenango :ayelam
+`://
+libruntime.a/here110//backend_get_data_channel/shenango./(.
+:shenangohome'home//usrinit.o// //;/.inc/)incusrmultiple.ayelam ayelam//bin:// //libruntime.a/incrmem//rmembindefinitionincshenango(shenango//ldhome// //init.o/rmembackend.h:/backend.hldofrmem.)./: ayelam:: //:/backend.h110libruntime.a/110 `backend.hinc/inc::(shenango:libruntime.abackend_get_data_channel:/home/110 sched.o/ ('110rmem/rmem:first).multiplecfg.o;:/ayelam/  :/ )  backend.h/backend.hfirstdefined incdefinition:libruntime.afirst:shenango:  in/  ( 110/110definedhere rmemofininit.odefined:.: 
+function/  )  / here/ backend.h`function:heremultipleincfirst
+usr`:backend_get_data_channel /
+ / //backend_get_data_channel110'`home/definitionrmemdefinedusrbin':;backend_get_data_channel/usr / //:  'ayelam/ofbackend.hherebinld
+firstlibruntime.a:/bin :
+/:/ (
+shenango/`110/ld homedefinedinit.o//ldbackend_get_data_channel:usr:libruntime.a/ )home.:' / (ayelamhere:// ;firstbinlibruntime.arcu.o/
+/ayelaminclibruntime.a  /()shenango/home//(libruntime.adefinedldrcu.o:/usr/shenangormemrcu.o( :) ./ayelam//)init.ohere :in/bin/.backend.h:)
+libruntime.a  inc/shenango/: :/(infunction/ld/inc110in/usrkthread.o  rmem:./: home/)function`/ /rmem function/bin: backend_get_data_channelbackend.hlibruntime.ainc/first ayelam/ `':(/backend.h `/ldinbackend_get_data_channel:110kthread.ormem:definedbackend_get_data_channelshenango: '
+:)/110 '/ function:/ :backend.h:here:.libruntime.a 
+homemultiple : 
+
+/(`// in110multiple//inckthread.obackend_get_data_channelhomeayelamdefinition : usrhome/)'// function definition//rmem::ayelamshenangoof first binayelam/ 
+// ` of//backend.hin/shenango.`backend_get_data_channeldefined ldshenango: home//backend_get_data_channel' `:/110function/.inc':herebackend_get_data_channel .: ayelam//;
+
+'libruntime.a/ `/incrmem //;(incfirstbackend_get_data_channelshenango//libruntime.ahomeusr sync.o/ '/rmembackend.h(//libruntime.a)rmemdefined:./:init.oayelambin(:/ 
+/backend.h110)//init.o backend.hhere/inc:::shenangold)in:
+home/110 //:: 110//rmem:multiplehome. /function:usrayelam/  //libruntime.ahome  //backend.hmultipledefinitionayelaminc(/`multiplebinshenango:  //sync.oayelambackend_get_data_channel //110definitionofshenangormem)/'definitionld.:  //:shenango: :/ of`.backend.h /
+of incmultiple backend_get_data_channel/:in./ libruntime.a/ `backend_get_data_channel''inc110 /home`(rmemdefinition;;/:functioninc/backend_get_data_channelsync.o/   rmem  /ayelam')backend.hoflibruntime.alibruntime.a/multiple`rmem/;:: ((backend.h backend_get_data_channel/shenango  110`init.oinit.o:definition'backend.h/libruntime.ain:backend_get_data_channel))110 ::.(  ':::of
+110/init.ofunctionmultiple;//  /:inc)   homehomefirst`home /:`definitionlibruntime.a// backend_get_data_channel/firstrmem/backend_get_data_channel (ayelamayelamdefined'ayelam /home'ofinit.o// ;/definedbackend.h/: )shenangoshenangohere shenango :ayelam
+`://
+libruntime.a/here110//backend_get_data_channel/../(.
+:shenangohome'home//usrinit.o// //;/incinc/)incusrmultiple.ayelam ayelam//bin:// //libruntime.a/rmemrmem//rmembindefinitionincshenango(shenango//ldhome// //init.o/backend.hbackend.h:/backend.hldofrmem.).:: ayelam:: //:/110110libruntime.a/110 `backend.hinc/inc::(shenango:libruntime.abackend_get_data_channel:/home/  smalloc.o/ ('110rmem/rmemfirstfirst).multipletimer.o;:/ayelam/  :/ )  backend.h/backend.hdefineddefined incdefinition:libruntime.afirst:shenango:  in/  ( 110/110herehere rmemofininit.odefined:.:
+
+function/  )  / // backend.h`function:heremultipleincfirstusrusr`:backend_get_data_channel /
+ / //backend_get_data_channel110'`home/definitionrmemdefinedbinbin':;backend_get_data_channel/usr / //:  'ayelam/ofbackend.hhereldld
+firstlibruntime.a:/bin :
+::/ (
+shenango/`110/  homedefinedinit.o//ldbackend_get_data_channel:usrlibruntime.alibruntime.a/ )home.:' /((ayelamhere:// ;firstbinsync.osync.o/
+/ayelaminclibruntime.a  /))shenango/home//(libruntime.adefinedld::/usr/shenangormemsync.o( :  ./ayelam//)init.ohere inin/bin/.backend.h:)
+libruntime.a  inc/shenango/: :/(functionfunction/ld/inc110in/usrsched.o  rmem:./: home/)``/ /rmem function/bin:backend_get_data_channelbackend_get_data_channelbackend.hlibruntime.ainc/first ayelam/ '':(/backend.h `/ldin::110sched.ormem:definedbackend_get_data_channelshenango: 
+
+:)/110 '/ function// :backend.h:here:.libruntime.a homehomemultiple : 
+
+/(`// in110multiple//incsched.obackend_get_data_channelayelamayelamdefinition : usrhome/)'// function definition//rmem::shenangoshenangoof first binayelam/ 
+// ` of//backend.hin/..`backend_get_data_channeldefined ldshenango: home//backend_get_data_channel' `:/110function/incinc':herebackend_get_data_channel .: ayelam//;
+
+'libruntime.a/ `/rmemrmem //;(incfirstbackend_get_data_channelshenango//libruntime.ahomeusr kthread.o/ '/backend.hbackend.h(//libruntime.a)rmemdefined:.::init.oayelambin(:/ 
+/110110)//init.o backend.hhere/inc:::shenangold)in:
+home/  //:: 110//rmemmultiplemultiplehome. /function:usrayelam/  //libruntime.ahome  //backend.hdefinitiondefinitionayelaminc(/`multiplebinshenango:  //kthread.oayelambackend_get_data_channel //110ofofshenangormem)/'definitionld.:  //:shenango: :/ ``.backend.h /
+of incmultiplebackend_get_data_channelbackend_get_data_channel/:in./ libruntime.a/ ''inc110 /home`(rmemdefinition;;/:functioninc/backend_get_data_channelkthread.o/   rmem  /ayelam')backend.hoflibruntime.alibruntime.a/multiple`rmem/;:: ((backend.h backend_get_data_channel/shenango  110`init.oinit.o:definition'backend.h/libruntime.ain:backend_get_data_channel))110 ::.(  ':::of
+110/init.ofunctionmultiple;//  /:inc)   homehomefirst`home /:`definitionlibruntime.a// backend_get_data_channel/firstrmem/backend_get_data_channel (ayelamayelamdefined'ayelam /home'ofinit.o// ;/definedbackend.h/: )shenangoshenangohere shenango :ayelam
+`://
+libruntime.a/here110//backend_get_data_channel/../(.
+:shenangohome'home//usrinit.o// //;/incinc/)incusrmultiple.ayelam ayelam//bin:// //libruntime.a/rmemrmem//rmembindefinitionincshenango(shenango//ldhome// //init.o/backend.hbackend.h:/backend.hldofrmem.).:: ayelam:: //:/110110libruntime.a/110 `backend.hinc/inc::(shenango:libruntime.abackend_get_data_channel:/home/  softirq.o/ ('110rmem/rmemfirstfirst).multiplermem.o;:/ayelam/  :/ )  backend.h/backend.hdefineddefined incdefinition:libruntime.afirst:shenango:  in/  ( 110/110herehere rmemofininit.odefined:.:
+
+function/  )  / // backend.h`function:heremultipleincfirstusrusr`:backend_get_data_channel /
+ / //backend_get_data_channel110'`home/definitionrmemdefinedbinbin':;backend_get_data_channel/usr / //:  'ayelam/ofbackend.hhereldld
+firstlibruntime.a:/bin :
+::/ (
+shenango/`110/  homedefinedinit.o//ldbackend_get_data_channel:usrlibruntime.alibruntime.a/ )home.:' /((ayelamhere:// ;firstbinkthread.okthread.o/
+/ayelaminclibruntime.a  /))shenango/home//(libruntime.adefinedld::/usr/shenangormemkthread.o( :  ./ayelam//)init.ohere inin/bin/.backend.h:)
+libruntime.a  inc/shenango/: :/(functionfunction/ld/inc110in/usrsmalloc.o  rmem:./: home/)``/ /rmem function/bin:backend_get_data_channelbackend_get_data_channelbackend.hlibruntime.ainc/first ayelam/ '':(/backend.h `/ldin::110smalloc.ormem:definedbackend_get_data_channelshenango: 
+
+:)/110 '/ function// :backend.h:here:.libruntime.a homehomemultiple : 
+
+/(`// in110multiple//incsmalloc.obackend_get_data_channelayelamayelamdefinition : usrhome/)'// function definition//rmem::shenangoshenangoof first binayelam/ 
+// ` of//backend.hin/..`backend_get_data_channeldefined ldshenango: home//backend_get_data_channel' `:/110function/incinc':herebackend_get_data_channel .: ayelam//;
+
+'libruntime.a/ `/rmemrmem //;(incfirstbackend_get_data_channelshenango//libruntime.ahomeusr sched.o/ '/backend.hbackend.h(//libruntime.a)rmemdefined:.::init.oayelambin(:/ 
+/110110)//init.o backend.hhere/inc:::shenangold)in:
+home/  //:: 110//rmemmultiplemultiplehome. /function:usrayelam/  //libruntime.ahome  //backend.hdefinitiondefinitionayelaminc(/`multiplebinshenango:  //sched.oayelambackend_get_data_channel //110ofofshenangormem)/'definitionld.:  //:shenango: :/ ``.backend.h /
+of incmultiplebackend_get_data_channelbackend_get_data_channel/:in./ libruntime.a/ ''inc110 /home`(rmemdefinition;;/:functioninc/backend_get_data_channelsched.o/   rmem  /ayelam')backend.hoflibruntime.alibruntime.a/multiple`rmem/;:: ((backend.h backend_get_data_channel/shenango  110`init.oinit.o:definition'backend.h/libruntime.ain:backend_get_data_channel))110 ::.(  ':::of
+110/init.ofunctionmultiple;//  /:inc)   homehomefirst`home /:`definitionlibruntime.a// backend_get_data_channel/firstrmem/backend_get_data_channel (ayelamayelamdefined'ayelam /home'ofinit.o// ;/definedbackend.h/: )shenangoshenangohere shenango :ayelam
+`://
+libruntime.a/here110//backend_get_data_channel/../(.
+:shenangohome'home//usrinit.o// //;/incinc/)incusrmultiple.ayelam ayelam//bin:// //libruntime.a/rmemrmem//rmembindefinitionincshenango(shenango//ldhome// //init.o/backend.hbackend.h:/backend.hldofrmem.).:: ayelam:: //:/110110libruntime.a/110 `backend.hinc/inc::(shenango:libruntime.abackend_get_data_channel:/home/  cfg.o/ ('110rmem/rmemfirstfirst).multipletcp.o;:/ayelam/  :/ )  backend.h/backend.hdefineddefined incdefinition:libruntime.afirst:shenango:  in/  ( 110/110herehere rmemofininit.odefined:.:
+
+function/  )  / // backend.h`function:heremultipleincfirstusrusr`:backend_get_data_channel /
+ / //backend_get_data_channel110'`home/definitionrmemdefinedbinbin':;backend_get_data_channel/usr / //:  'ayelam/ofbackend.hhereldld
+firstlibruntime.a:/bin :
+::/ (
+shenango/`110/  homedefinedinit.o//ldbackend_get_data_channel:usrlibruntime.alibruntime.a/ )home.:' /((ayelamhere:// ;firstbinsched.osched.o/
+/ayelaminclibruntime.a  /))shenango/home//(libruntime.adefinedld::/usr/shenangormemsched.o( :  ./ayelam//)init.ohere inin/bin/.backend.h:)
+libruntime.a  inc/shenango/: :/(functionfunction/ld/inc110in/usrsoftirq.o  rmem:./: home/)``/ /rmem function/bin:backend_get_data_channelbackend_get_data_channelbackend.hlibruntime.ainc/first ayelam/ '':(/backend.h `/ldin::110softirq.ormem:definedbackend_get_data_channelshenango: 
+
+:)/110 '/ function// :backend.h:here:.libruntime.a homehomemultiple : 
+
+/(`// in110multiple//incsoftirq.obackend_get_data_channelayelamayelamdefinition : usrhome/)'// function definition//rmem::shenangoshenangoof first binayelam/ 
+// ` of//backend.hin/..`backend_get_data_channeldefined ldshenango: home//backend_get_data_channel' `:/110function/incinc':herebackend_get_data_channel .: ayelam//;
+
+'libruntime.a/ `/rmemrmem //;(incfirstbackend_get_data_channelshenango//libruntime.ahomeusr smalloc.o/ '/backend.hbackend.h(//libruntime.a)rmemdefined:.::init.oayelambin(:/ 
+/110110)//init.o backend.hhere/inc:::shenangold)in:
+home/  //:: 110//rmemmultiplemultiplehome. /function:usrayelam/  //libruntime.ahome  //backend.hdefinitiondefinitionayelaminc(/`multiplebinshenango:  //smalloc.oayelambackend_get_data_channel //110ofofshenangormem)/'definitionld.:  //:shenango: :/ ``.backend.h /
+of incmultiplebackend_get_data_channelbackend_get_data_channel/:in./ libruntime.a/ ''inc110 /home`(rmemdefinition;;/:functioninc/backend_get_data_channelsmalloc.o/   rmem  /ayelam')backend.hoflibruntime.alibruntime.a/multiple`rmem/;:: ((backend.h backend_get_data_channel/shenango  110`init.oinit.o:definition'backend.h/libruntime.ain:backend_get_data_channel))110 ::.(  ':::of
+110/init.ofunctionmultiple;//  /:inc)   homehomefirst`home /:`definitionlibruntime.a// backend_get_data_channel/firstrmem/backend_get_data_channel (ayelamayelamdefined'ayelam /home'ofinit.o// ;/definedbackend.h/: )shenangoshenangohere shenango :ayelam
+`://
+libruntime.a/here110//backend_get_data_channel/../(.
+:shenangohome'home//usrinit.o// //;/incinc/)incusrmultiple.ayelam ayelam//bin:// //libruntime.a/rmemrmem//rmembindefinitionincshenango(shenango//ldhome// //init.o/backend.hbackend.h:/backend.hldofrmem.).:: ayelam:: //:/110110libruntime.a/110 `backend.hinc/inc::(shenango:libruntime.abackend_get_data_channel:/home/  timer.o/ ('110rmem/rmemfirstfirst).multiplecore.o;:/ayelam/  :/ )  backend.h/backend.hdefineddefined incdefinition:libruntime.afirst:shenango:  in/  ( 110/110herehere rmemofininit.odefined:.:
+
+function/  )  / // backend.h`function:heremultipleincfirstusrusr`:backend_get_data_channel /
+ / //backend_get_data_channel110'`home/definitionrmemdefinedbinbin':;backend_get_data_channel/usr / //:  'ayelam/ofbackend.hhereldld
+firstlibruntime.a:/bin :
+::/ (
+shenango/`110/  homedefinedinit.o//ldbackend_get_data_channel:usrlibruntime.alibruntime.a/ )home.:' /((ayelamhere:// ;firstbinsmalloc.osmalloc.o/
+/ayelaminclibruntime.a  /))shenango/home//(libruntime.adefinedld::/usr/shenangormemsmalloc.o( :  ./ayelam//)init.ohere inin/bin/.backend.h:)
+libruntime.a  inc/shenango/: :/(functionfunction/ld/inc110in/usrcfg.o  rmem:./: home/)``/ /rmem function/bin:backend_get_data_channelbackend_get_data_channelbackend.hlibruntime.ainc/first ayelam/ '':(/backend.h `/ldin:
+:110cfg.ormem:definedbackend_get_data_channelshenango: /
+:)/110 '/ functionhome/ :backend.h:here:.libruntime.a /homemultiple : 
+
+/(`ayelam/ in110multiple//inccfg.obackend_get_data_channel/ayelamdefinition : usrhome/)'shenango/ function definition//rmem::/shenangoof first binayelam/ 
+./ ` of//backend.hin//.`backend_get_data_channeldefined ldshenango: homeinc/backend_get_data_channel' `:/110function//inc':herebackend_get_data_channel .: ayelamrmem/;
+
+'libruntime.a/ `//rmem //;(incfirstbackend_get_data_channelshenangobackend.h/libruntime.ahomeusr softirq.o/ '/:backend.h(//libruntime.a)rmemdefined:.110:init.oayelambin(:/ 
+/:110)//init.o backend.hhere/inc ::shenangold)in:
+home/multiple //:: 110//rmem multiplehome. /function:usrayelam/definition //libruntime.ahome  //backend.h definitionayelaminc(/`multiplebinshenango:of //softirq.oayelambackend_get_data_channel //110 ofshenangormem)/'definitionld.:` //:shenango: :/ backend_get_data_channel`.backend.h /
+of incmultiple'backend_get_data_channel/:in./ libruntime.a/ ;'inc110 /home`(rmemdefinition ;/:functioninc/backend_get_data_channelsoftirq.o/ libruntime.a rmem  /ayelam')backend.hof(libruntime.a/multiple`rmem/;:: init.o(backend.h backend_get_data_channel/shenango  110`)init.o:definition'backend.h/libruntime.ain:backend_get_data_channel:)110 ::.(  '/::of
+110/init.ofunctionmultiple;home/  /:inc)   /homefirst`home /:`definitionlibruntime.aayelam/ backend_get_data_channel/firstrmem/backend_get_data_channel (/ayelamdefined'ayelam /home'ofinit.oshenango/ ;/definedbackend.h/: )/shenangohere shenango :ayelam
+`:./
+libruntime.a/here110//backend_get_data_channel//./(.
+:shenangohome'homeinc/usrinit.o// //;//inc/)incusrmultiple.ayelam ayelamrmem/bin:// //libruntime.a//rmem//rmembindefinitionincshenango(shenangobackend.h/ldhome// //init.o/:backend.h:/backend.hldofrmem.).110: ayelam:: //:/:110libruntime.a/110 `backend.hinc/inc :(shenango:libruntime.abackend_get_data_channel:/home/first rmem.o/ ('110rmem/rmem first).multiplearp.o;:/ayelam/defined :/ )  backend.h/backend.h defined incdefinition:libruntime.afirst:shenango:here in/  ( 110/110
+here rmemofininit.odefined:.:/
+function/  )  / usr/ backend.h`function:heremultipleincfirst/usr`:backend_get_data_channel /
+ / bin/backend_get_data_channel110'`home/definitionrmemdefined/bin':;backend_get_data_channel/usr / ld/:  'ayelam/ofbackend.hhere:ld
+firstlibruntime.a:/bin :
+ :/ (
+shenango/`110/libruntime.a homedefinedinit.o//ldbackend_get_data_channel:usr(libruntime.a/ )home.:' /softirq.o(ayelamhere:// ;firstbin)softirq.o/
+/ayelaminclibruntime.a  /:)shenango/home//(libruntime.adefinedld :/usr/shenangormemsoftirq.o( :in ./ayelam//)init.ohere  in/bin/.backend.h:)
+libruntime.afunction inc/shenango/: :/( function/ld/inc110in/usrtimer.o` rmem:./: home/)backend_get_data_channel`/ /rmem function/bin:'backend_get_data_channelbackend.hlibruntime.ainc/first ayelam/ :':(/backend.h `/ldin
+:110timer.ormem:definedbackend_get_data_channelshenango: /
+:)/110 '/ functionhome/ :backend.h:here:.libruntime.a /homemultiple : 
+
+/(`ayelam/ in110multiple//inctimer.obackend_get_data_channel/ayelamdefinition : usrhome/)'shenango/ function definition//rmem::/shenangoof first binayelam/ 
+./ ` of//backend.hin//.`backend_get_data_channeldefined ldshenango: homeinc/backend_get_data_channel' `:/110function//inc':herebackend_get_data_channel .: ayelamrmem/;
+
+'libruntime.a/ `//rmem //;(incfirstbackend_get_data_channelshenangobackend.h/libruntime.ahomeusr cfg.o/ '/:backend.h(//libruntime.a)rmemdefined:.110:init.oayelambin(:/ 
+/:110)//init.o backend.hhere/inc ::shenangold)in:
+home/multiple //:: 110//rmem multiplehome. /function:usrayelam/definition //libruntime.ahome  //backend.h definitionayelaminc(/`multiplebinshenango:of //cfg.oayelambackend_get_data_channel //110 ofshenangormem)/'definitionld.:` //:shenango: :/ backend_get_data_channel`.backend.h /
+of incmultiple'backend_get_data_channel/:in./ libruntime.a/ ;'inc110 /home`(rmemdefinition ;/:functioninc/backend_get_data_channelcfg.o/ libruntime.a rmem  /ayelam')backend.hof(libruntime.a/multiple`rmem/;:: init.o(backend.h backend_get_data_channel/shenango  110`)init.o:definition'backend.h/libruntime.ain:backend_get_data_channel:)110 ::.(  '/::of
+110/init.ofunctionmultiple;home/  /:inc)   /homefirst`home /:`definitionlibruntime.aayelam/ backend_get_data_channel/firstrmem/backend_get_data_channel (/ayelamdefined'ayelam /home'ofinit.oshenango/ ;/definedbackend.h/: )/shenangohere shenango :ayelam
+`:./
+libruntime.a/here110//backend_get_data_channel//./(.
+:shenangohome'homeinc/usrinit.o// //;//inc/)incusrmultiple.ayelam ayelamrmem/bin:// //libruntime.a//rmem//rmembindefinitionincshenango(shenangobackend.h/ldhome// //init.o/:backend.h:/backend.hldofrmem.).110: ayelam:: //:/: 110libruntime.a/110 `backend.hinc/incfirst:(shenango:libruntime.abackend_get_data_channel:/home/  tcp.o/ ('110rmem/rmemdefinedfirst).multipletransport.o;:/ayelam/  :/ )  backend.h/backend.hheredefined incdefinition:libruntime.afirst:shenango:
+ in/  ( 110/110/here rmemofininit.odefined:.:usr
+function/  )  / // backend.h`function:heremultipleincfirstbinusr`:backend_get_data_channel /
+ / //backend_get_data_channel110'`home/definitionrmemdefinedldbin':;backend_get_data_channel/usr / :/:  'ayelam/ofbackend.hhere ld
+firstlibruntime.a:/bin :
+libruntime.a:/ (
+shenango/`110/( homedefinedinit.o//ldbackend_get_data_channel:usrcfg.olibruntime.a/ )home.:' /)(ayelamhere:// ;firstbin:cfg.o/
+/ayelaminclibruntime.a  / )shenango/home//(libruntime.adefinedldin:/usr/shenangormemcfg.o( :  ./ayelam//)init.ohere functionin/bin/.backend.h:)
+libruntime.a  inc/shenango/: :/(`function/ld/inc110in/usrrmem.obackend_get_data_channel rmem:./: home/)'`/ /rmem function/bin::backend_get_data_channelbackend.hlibruntime.ainc/first ayelam/ 
+':(/backend.h `/ldin/:110rmem.ormem:definedbackend_get_data_channelshenango: home
+:)/110 '/ function// :backend.h:here:.libruntime.a ayelamhomemultiple : 
+
+/(`// in110multiple//incrmem.obackend_get_data_channelshenangoayelamdefinition : usrhome/)'// function definition//rmem::.shenangoof first binayelam/ 
+// ` of//backend.hin/inc.`backend_get_data_channeldefined ldshenango: home//backend_get_data_channel' `:/110function/rmeminc':herebackend_get_data_channel .: ayelam//;
+
+'libruntime.a/ `/backend.hrmem //;(incfirstbackend_get_data_channelshenango:/libruntime.ahomeusr timer.o/ '/110backend.h(//libruntime.a)rmemdefined:.::init.oayelambin(:/ 
+/ 110)//init.o backend.hhere/incmultiple::shenangold)in:
+home/  //:: 110//rmemdefinitionmultiplehome. /function:usrayelam/  //libruntime.ahome  //backend.hofdefinitionayelaminc(/`multiplebinshenango:  //timer.oayelambackend_get_data_channel //110`ofshenangormem)/'definitionld.:backend_get_data_channel //:shenango: :/ '`.backend.h /
+of incmultiple;backend_get_data_channel/:in./ libruntime.a/  'inc110 /home`(rmemdefinitionlibruntime.a;/:functioninc/backend_get_data_channeltimer.o/ ( rmem  /ayelam')backend.hofinit.olibruntime.a/multiple`rmem/;:: )(backend.h backend_get_data_channel/shenango  110`:init.o:definition'backend.h/libruntime.ain:backend_get_data_channel/)110 ::.(  'home::of
+110/init.ofunctionmultiple;//  /:inc)   ayelamhomefirst`home /:`definitionlibruntime.a// backend_get_data_channel/firstrmem/backend_get_data_channel (shenangoayelamdefined'ayelam /home'ofinit.o// ;/definedbackend.h/: ).shenangohere shenango :ayelam
+`://
+libruntime.a/here110//backend_get_data_channel/inc./(.
+:shenangohome'home//usrinit.o// //;/rmeminc/)incusrmultiple.ayelam ayelam//bin:// //libruntime.a/backend.hrmem//rmembindefinitionincshenango(shenango:/ldhome// //init.o/110backend.h:/backend.hldofrmem.).:: ayelam:: //:/ 110libruntime.a/110 `backend.hinc/incfirst:(shenango:libruntime.abackend_get_data_channel:/home/  ping.o/ ('110rmem/rmemdefinedfirst).multipletcp_in.o;:/ayelam/  :/ )  backend.h/backend.hheredefined incdefinition:libruntime.afirst:shenango:
+ in/  ( 110/110/here rmemofininit.odefined:.:usr
+function/  )  / // backend.h`function:heremultipleincfirstbinusr`:backend_get_data_channel /
+ / //backend_get_data_channel110'`home/definitionrmemdefinedldbin':;backend_get_data_channel/usr / :/:  'ayelam/ofbackend.hhere ld
+firstlibruntime.a:/bin :
+libruntime.a:/ (
+shenango/`110/( homedefinedinit.o//ldbackend_get_data_channel:usrtimer.olibruntime.a/ )home.:' /)(ayelamhere:// ;firstbin:timer.o/
+/ayelaminclibruntime.a  / )shenango/home//(libruntime.adefinedldin:/usr/shenangormemtimer.o( :  ./ayelam//)init.ohere functionin/bin/.backend.h:)
+libruntime.a  inc/shenango/: :/(`function/ld/inc110in/usrtcp.obackend_get_data_channel rmem:./: home/)'`/ /rmem function/bin::backend_get_data_channelbackend.hlibruntime.ainc/first ayelam/ 
+':(/backend.h `/ldin/:110tcp.ormem:definedbackend_get_data_channelshenango: home
+:)/110 '/ function// :backend.h:here:.libruntime.a ayelamhomemultiple : 
+
+/(`// in110multiple//inctcp.obackend_get_data_channelshenangoayelamdefinition : usrhome/)'// function definition//rmem::.shenangoof first binayelam/ 
+// ` of//backend.hin/inc.`backend_get_data_channeldefined ldshenango: home//backend_get_data_channel' `:/110function/rmeminc':herebackend_get_data_channel .: ayelam//;
+
+'libruntime.a/ `/backend.hrmem //;(incfirstbackend_get_data_channelshenango:/libruntime.ahomeusr rmem.o/ '/110backend.h(//libruntime.a)rmemdefined:.::init.oayelambin(:/ 
+/ 110)//init.o backend.hhere/incmultiple::shenangold)in:
+home/  //:: 110//rmemdefinitionmultiplehome. /function:usrayelam/  //libruntime.ahome  //backend.hofdefinitionayelaminc(/`multiplebinshenango:  //rmem.oayelambackend_get_data_channel //110`ofshenangormem)/'definitionld.:backend_get_data_channel //:shenango: :/ '`.backend.h /
+of incmultiple;backend_get_data_channel/:in./ libruntime.a/  'inc110 /home`(rmemdefinitionlibruntime.a;/:functioninc/backend_get_data_channelrmem.o/ ( rmem  /ayelam')backend.hofinit.olibruntime.a/multiple`rmem/;:: )(backend.h backend_get_data_channel/shenango  110`:init.o:definition'backend.h/libruntime.ain:backend_get_data_channel/)110 ::.(  'home::of
+110/init.ofunctionmultiple;//  /:inc)   ayelamhomefirst`home /:`definitionlibruntime.a// backend_get_data_channel/firstrmem/backend_get_data_channel (shenangoayelamdefined'ayelam /home'ofinit.o// ;/definedbackend.h/: ).shenangohere shenango :ayelam
+`://
+libruntime.a/here110//backend_get_data_channel/inc./(.
+:shenangohome'home//usrinit.o// //;/rmeminc/)incusrmultiple.ayelam ayelam//bin:// //libruntime.a/backend.hrmem//rmembindefinitionincshenango(shenango:/ldhome// //init.o/110backend.h:/backend.hldofrmem.).:: ayelam:: //:/ 110libruntime.a/110 `backend.hinc/incfirst:(shenango:libruntime.abackend_get_data_channel:/home/  core.o/ ('110rmem/rmemdefinedfirst).multipleicmp.o;:/ayelam/  :/ )  backend.h/backend.hheredefined incdefinition:libruntime.afirst:shenango:
+ in/  ( 110/110/here rmemofininit.odefined:.:usr
+function/  )  / // backend.h`function:heremultipleincfirstbinusr`:backend_get_data_channel /
+ / //backend_get_data_channel110'`home/definitionrmemdefinedldbin':;backend_get_data_channel/usr / :/:  'ayelam/ofbackend.hhere ld
+firstlibruntime.a:/bin :
+libruntime.a:/ (
+shenango/`110/( homedefinedinit.o//ldbackend_get_data_channel:usrrmem.olibruntime.a/ )home.:' /)(ayelamhere:// ;firstbin:rmem.o/
+/ayelaminclibruntime.a  / )shenango/home//(libruntime.adefinedldin:/usr/shenangormemrmem.o( :  ./ayelam//)init.ohere functionin/bin/.backend.h:)
+libruntime.a  inc/shenango/: :/(`function/ld/inc110in/usrcore.obackend_get_data_channel rmem:./: home/)'`/ /rmem function/bin::backend_get_data_channelbackend.hlibruntime.ainc/first ayelam/ 
+':(/backend.h `/ldin/:110core.ormem:definedbackend_get_data_channelshenango: home
+:)/110 '/ function// :backend.h:here:.libruntime.a ayelamhomemultiple : 
+
+/(`// in110multiple//inccore.obackend_get_data_channelshenangoayelamdefinition : usrhome/)'// function definition//rmem::.shenangoof first binayelam/ 
+// ` of//backend.hin/inc.`backend_get_data_channeldefined ldshenango: home//backend_get_data_channel' `:/110function/rmeminc':herebackend_get_data_channel .: ayelam//;
+
+'libruntime.a/ `/backend.hrmem //;(incfirstbackend_get_data_channelshenango:/libruntime.ahomeusr tcp.o/ '/110backend.h(//libruntime.a)rmemdefined:.::init.oayelambin(:/ 
+/ 110)//init.o backend.hhere/incmultiple::shenangold)in:
+home/  //:: 110//rmemdefinitionmultiplehome. /function:usrayelam/  //libruntime.ahome  //backend.hofdefinitionayelaminc(/`multiplebinshenango:  //tcp.oayelambackend_get_data_channel //110`ofshenangormem)/'definitionld.:backend_get_data_channel //:shenango: :/ '`.backend.h /
+of incmultiple;backend_get_data_channel/:in./ libruntime.a/  'inc110 /home`(rmemdefinitionlibruntime.a;/:functioninc/backend_get_data_channeltcp.o/ ( rmem  /ayelam')backend.hofinit.olibruntime.a/multiple`rmem/;:: )(backend.h backend_get_data_channel/shenango  110`:init.o:definition'backend.h/libruntime.ain:backend_get_data_channel/)110 ::.(  'home::of
+110/init.ofunctionmultiple;//  /:inc)   ayelamhomefirst`home /:`definitionlibruntime.a// backend_get_data_channel/firstrmem/backend_get_data_channel (shenangoayelamdefined'ayelam /home'ofinit.o// ;/definedbackend.h/: ).shenangohere shenango :ayelam
+`://
+libruntime.a/here110//backend_get_data_channel/inc./(.
+:shenangohome'home//usrinit.o// //;/rmeminc/)incusrmultiple.ayelam ayelam//bin:// //libruntime.a/backend.hrmem//rmembindefinitionincshenango(shenango:/ldhome// //init.o/110backend.h:/backend.hldofrmem.).:: ayelam:: //:/ 110libruntime.a/110 `backend.hinc/incfirst:(shenango:libruntime.abackend_get_data_channel:/home/  arp.o/ ('110rmem/rmemdefinedfirst).multipletcp_out.o;:/ayelam/  :/ )  backend.h/backend.hheredefined incdefinition:libruntime.afirst:shenango:
+ in/  ( 110/110/here rmemofininit.odefined:.:usr
+function/  )  / // backend.h`function:heremultipleincfirstbinusr`:backend_get_data_channel /
+ / //backend_get_data_channel110'`home/definitionrmemdefinedldbin':;backend_get_data_channel/usr / :/:  'ayelam/ofbackend.hhere ld
+firstlibruntime.a:/bin :
+libruntime.a:/ (
+shenango/`110/( homedefinedinit.o//ldbackend_get_data_channel:usrtcp.olibruntime.a/ )home.:' /)(ayelamhere:// ;firstbin:tcp.o/
+/ayelaminclibruntime.a  / )shenango/home//(libruntime.adefinedldin:/usr/shenangormemtcp.o( :  ./ayelam//)init.ohere functionin/bin/.backend.h:)
+libruntime.a  inc/shenango/: :/(`function/ld/inc110in/usrarp.obackend_get_data_channel rmem:./: home/)'`/ /rmem function/bin::backend_get_data_channelbackend.hlibruntime.ainc/first ayelam/ 
+':(/backend.h `/ldin/:110arp.ormem:definedbackend_get_data_channelshenango: home
+:)/110 '/ function// :backend.h:here:.libruntime.a ayelamhomemultiple : 
+
+/(`// in110multiple//incarp.obackend_get_data_channelshenangoayelamdefinition : usrhome/)'// function definition//rmem::.shenangoof first binayelam/ 
+// ` of//backend.hin/inc.`backend_get_data_channeldefined ldshenango: home//backend_get_data_channel' `:/110function/rmeminc':herebackend_get_data_channel .: ayelam//;
+
+'libruntime.a/ `/backend.hrmem //;(incfirstbackend_get_data_channelshenango:/libruntime.ahomeusr core.o/ '/110backend.h(//libruntime.a)rmemdefined:.::init.oayelambin(:/ 
+/ 110)//init.o backend.hhere/incmultiple::shenangold)in:
+home/  //:: 110//rmemdefinitionmultiplehome. /function:usrayelam/  //libruntime.ahome  //backend.hofdefinitionayelaminc(/`multiplebinshenango:  //core.oayelambackend_get_data_channel //110`ofshenangormem)/'definitionld.:backend_get_data_channel //:shenango: :/ '`.backend.h /
+of incmultiple;backend_get_data_channel/:in./ libruntime.a/  'inc110 /home`(rmemdefinitionlibruntime.a;/:functioninc/backend_get_data_channelcore.o/ ( rmem  /ayelam')backend.hofinit.olibruntime.a/multiple`rmem/;:: )(backend.h backend_get_data_channel/shenango  110`:init.o:definition'backend.h/libruntime.ain:backend_get_data_channel/)110 ::.(  'home::of
+110/init.ofunctionmultiple;//  /:inc)   ayelamhomefirst`home /:`definitionlibruntime.a// backend_get_data_channel/firstrmem/backend_get_data_channel (shenangoayelamdefined'ayelam /home'ofinit.o// ;/definedbackend.h/: ).shenangohere shenango :ayelam
+`://
+libruntime.a/here110//backend_get_data_channel/inc./(.
+:shenangohome'home//usrinit.o// //;/rmeminc/)incusrmultiple.ayelam ayelam//bin:// //libruntime.a/backend.hrmem//rmembindefinitionincshenango(shenango:/ldhome// //init.o/110backend.h:/backend.hldofrmem.).:: ayelam:: //:/ 110libruntime.a/110 `backend.hinc/incfirst:(shenango:libruntime.abackend_get_data_channel:/home/  transport.o/ ('110rmem/rmemdefinedfirst).multiplefault_tcache.o;:/ayelam/  :/ )  backend.h/backend.hheredefined incdefinition:libruntime.afirst:shenango:
+ in/  ( 110/110/here rmemofininit.odefined:.:usr
+function/  )  / // backend.h`function:heremultipleincfirstbinusr`:backend_get_data_channel /
+ / //backend_get_data_channel110'`home/definitionrmemdefinedldbin':;backend_get_data_channel/usr / :/:  'ayelam/ofbackend.hhere ld
+firstlibruntime.a:/bin :
+libruntime.a:/ (
+shenango/`110/( homedefinedinit.o//ldbackend_get_data_channel:usrcore.olibruntime.a/ )home.:' /)(ayelamhere:// ;firstbin:core.o/
+/ayelaminclibruntime.a  / )shenango/home//(libruntime.adefinedldin:/usr/shenangormemcore.o( :  ./ayelam//)init.ohere functionin/bin/.backend.h:)
+libruntime.a  inc/shenango/: :/(`function/ld/inc110in/usrtransport.obackend_get_data_channel rmem:./: home/)'`/ /rmem function/bin::backend_get_data_channelbackend.hlibruntime.ainc/first ayelam/ 
+':(/backend.h `/ldin/:110transport.ormem:definedbackend_get_data_channelshenango: home
+:)/110 '/ function// :backend.h:here:.libruntime.a ayelamhomemultiple : 
+
+/(`// in110multiple//inctransport.obackend_get_data_channelshenangoayelamdefinition : usrhome/)'// function definition//rmem::.shenangoof first binayelam/ 
+// ` of//backend.hin/inc.`backend_get_data_channeldefined ldshenango: home//backend_get_data_channel' `:/110function/rmeminc':herebackend_get_data_channel .: ayelam//;
+
+'libruntime.a/ `/backend.hrmem //;(incfirstbackend_get_data_channelshenango:/libruntime.ahomeusr arp.o/ '/110backend.h(//libruntime.a)rmemdefined:.::init.oayelambin(:/ 
+/ 110)//init.o backend.hhere/incmultiple::shenangold)in:
+home/  //:: 110//rmemdefinitionmultiplehome. /function:usrayelam/ of //libruntime.ahome  //backend.h definitionayelaminc(/`multiplebinshenango:` //arp.oayelambackend_get_data_channel //110backend_get_data_channelofshenangormem)/'definitionld.:' //:shenango: :/ ;`.backend.h /
+of incmultiple backend_get_data_channel/:in./ libruntime.a/ libruntime.a'inc110 /home`(rmemdefinition(;/:functioninc/backend_get_data_channelarp.o/ init.o rmem  /ayelam')backend.hof)libruntime.a/multiple`rmem/;:: :(backend.h backend_get_data_channel/shenango  110`/init.o:definition'backend.h/libruntime.ain:backend_get_data_channelhome)110 ::.(  '/::of
+110/init.ofunctionmultiple;ayelam/  /:inc)   /homefirst`home /:`definitionlibruntime.ashenango/ backend_get_data_channel/firstrmem/backend_get_data_channel (/ayelamdefined'ayelam /home'ofinit.o./ ;/definedbackend.h/: )/shenangohere shenango :ayelam
+`:inc/
+libruntime.a/here110//backend_get_data_channel//./(.
+:shenangohome'homermem/usrinit.o// //;//inc/)incusrmultiple.ayelam ayelambackend.h/bin:// //libruntime.a/:rmem//rmembindefinitionincshenango(shenango110/ldhome// //init.o/:backend.h:/backend.hldofrmem.). : ayelam:: //:/first110libruntime.a/110 `backend.hinc/inc :(shenango:libruntime.abackend_get_data_channel:/home/defined tcp_in.o/ ('110rmem/rmem first).multiplefault.o;:/ayelam/here :/ )  backend.h/backend.h
+defined incdefinition:libruntime.afirst:shenango:/ in/  ( 110/110usrhere rmemofininit.odefined:.:/
+function/  )  / bin/ backend.h`function:heremultipleincfirst/usr`:backend_get_data_channel /
+ / ld/backend_get_data_channel110'`home/definitionrmemdefined:bin':;backend_get_data_channel/usr /  /:  'ayelam/ofbackend.hherelibruntime.ald
+firstlibruntime.a:/bin :
+(:/ (
+shenango/`110/arp.o homedefinedinit.o//ldbackend_get_data_channel:usr)libruntime.a/ )home.:' /:(ayelamhere:// ;firstbin arp.o/
+/ayelaminclibruntime.a  /in)shenango/home//(libruntime.adefinedld :/usr/shenangormemarp.o( :function ./ayelam//)init.ohere  in/bin/.backend.h:)
+libruntime.a` inc/shenango/: :/(backend_get_data_channelfunction/ld/inc110in/usrtcp_in.o' rmem:./: home/):`/ /rmem function/bin:
+backend_get_data_channelbackend.hlibruntime.ainc/first ayelam/ /':(/backend.h `/ldinhome:110tcp_in.ormem:definedbackend_get_data_channelshenango: /
+:)/110 '/ functionayelam/ :backend.h:here:.libruntime.a /homemultiple : 
+
+/(`shenango/ in110multiple//inctcp_in.obackend_get_data_channel/ayelamdefinition : usrhome/)'./ function definition//rmem::/shenangoof first binayelam/ 
+inc/ ` of//backend.hin//.`backend_get_data_channeldefined ldshenango: homermem/backend_get_data_channel' `:/110function//inc':herebackend_get_data_channel .: ayelambackend.h/;
+
+'libruntime.a/ `/:rmem //;(incfirstbackend_get_data_channelshenango110/libruntime.ahomeusr transport.o/ '/:backend.h(//libruntime.a)rmemdefined:. :init.oayelambin(:/ 
+/multiple110)//init.o backend.hhere/inc ::shenangold)in:
+home/definition //:: 110//rmem multiplehome. /function:usrayelam/of //libruntime.ahome  //backend.h definitionayelaminc(/`multiplebinshenango:` //transport.oayelambackend_get_data_channel //110backend_get_data_channelofshenangormem)/'definitionld.:' //:shenango: :/ ;`.backend.h /
+of incmultiple backend_get_data_channel/:in./ libruntime.a/ libruntime.a'inc110 /home`(rmemdefinition(;/:functioninc/backend_get_data_channeltransport.o/ init.o rmem  /ayelam')backend.hof)libruntime.a/multiple`rmem/;:: :(backend.h backend_get_data_channel/shenango  110`/init.o:definition'backend.h/libruntime.ain:backend_get_data_channelhome)110 ::.(  '/::of
+110/init.ofunctionmultiple;ayelam/  /:inc)   /homefirst`home /:`definitionlibruntime.ashenango/ backend_get_data_channel/firstrmem/backend_get_data_channel (/ayelamdefined'ayelam /home'ofinit.o./ ;/definedbackend.h/: )/shenangohere shenango :ayelam
+`:inc/
+libruntime.a/here110//backend_get_data_channel//./(.
+:shenangohome'homermem/usrinit.o// //;//inc/)incusrmultiple.ayelam ayelambackend.h/bin:// //libruntime.a/:rmem//rmembindefinitionincshenango(shenango110/ldhome// //init.o/:backend.h:/backend.hldofrmem.). : ayelam:: //:/first110libruntime.a/110 `backend.hinc/inc :(shenango:libruntime.abackend_get_data_channel:/home/defined icmp.o/ ('110rmem/rmem first).multiplehandler.o;:/ayelam/here :/ )  backend.h/backend.h
+defined incdefinition:libruntime.afirst:shenango:/ in/  ( 110/110usrhere rmemofininit.odefined:.:/
+function/  )  / bin/ backend.h`function:heremultipleincfirst/usr`:backend_get_data_channel /
+ / ld/backend_get_data_channel110'`home/definitionrmemdefined:bin':;backend_get_data_channel/usr /  /:  'ayelam/ofbackend.hherelibruntime.ald
+firstlibruntime.a:/bin :
+(:/ (
+shenango/`110/transport.o homedefinedinit.o//ldbackend_get_data_channel:usr)libruntime.a/ )home.:' /:(ayelamhere:// ;firstbin transport.o/
+/ayelaminclibruntime.a  /in)shenango/home//(libruntime.adefinedld :/usr/shenangormemtransport.o( :function ./ayelam//)init.ohere  in/bin/.backend.h:)
+libruntime.a` inc/shenango/: :/(backend_get_data_channelfunction/ld/inc110in/usricmp.o' rmem:./: home/):`/ /rmem function/bin:
+backend_get_data_channelbackend.hlibruntime.ainc/first ayelam/ /':(/backend.h `/ldinhome:110icmp.ormem:definedbackend_get_data_channelshenango: /
+:)/110 '/ functionayelam/ :backend.h:here:.libruntime.a /homemultiple : 
+
+/(`shenango/ in110multiple//incicmp.obackend_get_data_channel/ayelamdefinition : usrhome/)'./ function definition//rmem::/shenangoof first binayelam/ 
+inc/ ` of//backend.hin//.`backend_get_data_channeldefined ldshenango: homermem/backend_get_data_channel' `:/110function//inc':herebackend_get_data_channel .: ayelambackend.h/;
+
+'libruntime.a/ `/:rmem //;(incfirstbackend_get_data_channelshenango110/libruntime.ahomeusr tcp_in.o/ '/:backend.h(//libruntime.a)rmemdefined:. :init.oayelambin(:/ 
+/multiple110)//init.o backend.hhere/inc ::shenangold)in:
+home/definition //:: 110//rmem multiplehome. /function:usrayelam/of //libruntime.ahome  //backend.h definitionayelaminc(/`multiplebinshenango:` //tcp_in.oayelambackend_get_data_channel //110backend_get_data_channelofshenangormem)/'definitionld.:' //:shenango: :/ ;`.backend.h /
+of incmultiple backend_get_data_channel/:in./ libruntime.a/ libruntime.a'inc110 /home`(rmemdefinition(;/:functioninc/backend_get_data_channeltcp_in.o/ init.o rmem  /ayelam')backend.hof)libruntime.a/multiple`rmem/;:: :(backend.h backend_get_data_channel/shenango  110`/init.o:definition'backend.h/libruntime.ain:backend_get_data_channelhome)110 ::.(  '/::of
+110/init.ofunctionmultiple;ayelam/  /:inc)   /homefirst`home /:`definitionlibruntime.ashenango/ backend_get_data_channel/firstrmem/backend_get_data_channel (/ayelamdefined'ayelam /home'ofinit.o./ ;/definedbackend.h/: )/shenangohere shenango :ayelam
+`:inc/
+libruntime.a/here110//backend_get_data_channel//./(.
+:shenangohome'homermem/usrinit.o// //;//inc/)incusrmultiple.ayelam ayelambackend.h/bin:// //libruntime.a/:rmem//rmembindefinitionincshenango(shenango110/ldhome// //init.o/:backend.h:/backend.hldofrmem.). : ayelam:: //:/first110libruntime.a/110 `backend.hinc/inc :(shenango:libruntime.abackend_get_data_channel:/home/defined tcp_out.o/ ('110rmem/rmem first).multipleregion.o;:/ayelam/here :/ )  backend.h/backend.h
+defined incdefinition:libruntime.afirst:shenango:/ in/  ( 110/110usrhere rmemofininit.odefined:.:/
+function/  )  / bin/ backend.h`function:heremultipleincfirst/usr`:backend_get_data_channel /
+ / ld/backend_get_data_channel110'`home/definitionrmemdefined:bin':;backend_get_data_channel/usr /  /:  'ayelam/ofbackend.hherelibruntime.ald
+firstlibruntime.a:/bin :
+(:/ (
+shenango/`110/tcp_in.o homedefinedinit.o//ldbackend_get_data_channel:usr)libruntime.a/ )home.:' /:(ayelamhere:// ;firstbin tcp_in.o/
+/ayelaminclibruntime.a  /in)shenango/home//(libruntime.adefinedld :/usr/shenangormemtcp_in.o( :function ./ayelam//)init.ohere  in/bin/.backend.h:)
+libruntime.a` inc/shenango/: :/(backend_get_data_channelfunction/ld/inc110in/usrtcp_out.o' rmem:./: home/):`/ /rmem function/bin:
+backend_get_data_channelbackend.hlibruntime.ainc/first ayelam/ /':(/backend.h `/ldinhome:110tcp_out.ormem:definedbackend_get_data_channelshenango: /
+:)/110 '/ functionayelam/ :backend.h:here:.libruntime.a /homemultiple : 
+
+/(`shenango/ in110multiple//inctcp_out.obackend_get_data_channel/ayelamdefinition : usrhome/)'./ function definition//rmem::/shenangoof first binayelam/ 
+inc/ ` of//backend.hin//.`backend_get_data_channeldefined ldshenango: homermem/backend_get_data_channel' `:/110function//inc':herebackend_get_data_channel .: ayelambackend.h/;
+
+'libruntime.a/ `/:rmem //;(incfirstbackend_get_data_channelshenango110/libruntime.ahomeusr icmp.o/ '/:backend.h(//libruntime.a)rmemdefined:. :init.oayelambin(:/ 
+/multiple110)//init.o backend.hhere/inc ::shenangold)in:
+home/definition //:: 110//rmem multiplehome. /function:usrayelam/of //libruntime.ahome  //backend.h definitionayelaminc(/`multiplebinshenango:` //icmp.oayelambackend_get_data_channel //110backend_get_data_channelofshenangormem)/'definitionld.:' //:shenango: :/ ;`.backend.h /
+of incmultiple backend_get_data_channel/:in./ libruntime.a/ libruntime.a'inc110 /home`(rmemdefinition(;/:functioninc/backend_get_data_channelicmp.o/ init.o rmem  /ayelam')backend.hof)libruntime.a/multiple`rmem/;:: :(backend.h backend_get_data_channel/shenango  110`/init.o:definition'backend.h/libruntime.ain:backend_get_data_channelhome)110 ::.(  '/::of
+110/init.ofunctionmultiple;ayelam/  /:inc)   /homefirst`home /:`definitionlibruntime.ashenango/ backend_get_data_channel/firstrmem/backend_get_data_channel (/ayelamdefined'ayelam /home'ofinit.o./ ;/definedbackend.h/: )/shenangohere shenango :ayelam
+`:inc/
+libruntime.a/here110//backend_get_data_channel//./(.
+:shenangohome'homermem/usrinit.o// //;//backend.hinc/)incusrmultiple.ayelam ayelam:/bin:// //libruntime.a/110rmem//rmembindefinitionincshenango(shenango:/ldhome// //init.o/ backend.h:/backend.hldofrmem.).first: ayelam:: //:/ 110libruntime.a/110 `backend.hbackend_get_data_channelinc/incdefined:(shenango:libruntime.a:'/home/  fault_tcache.o/ (110;rmem/rmemherefirst).multipleeviction.o: /ayelam/
+ :/ ) libruntime.abackend.h/backend.h/defined incdefinition:first(:shenango:usr in/   init.o110/110/here rmemofindefined):.:bin
+function/   : / // backend.h`functionhere/multipleincfirstldusr`:backend_get_data_channel 
+home / :/backend_get_data_channel110'`//definitionrmemdefined bin':;backend_get_data_channelusrayelam / libruntime.a/:  '//ofbackend.hhere(ld
+firstlibruntime.a:binshenango :
+icmp.o:/ (
+//`110/) homedefinedinit.o/ld.backend_get_data_channel:usr:libruntime.a/ )home:/' / (ayelamhere:/ inc;firstbininicmp.o/
+/ayelamlibruntime.a/  / )shenango/home/(rmemlibruntime.adefinedldfunction:/usr/shenangoicmp.o/( :  ./ayelam/)backend.hinit.ohere `in/bin/.::)
+libruntime.abackend_get_data_channel inc/shenango/ 110:/('function/ld/incin:/usrfault_tcache.o: rmem:./  home/)
+`/ /rmemfunctionfirst/bin:/backend_get_data_channelbackend.hlibruntime.ainc/  ayelam/ home':(/backend.h`defined/ldin/:110fault_tcache.ormem:backend_get_data_channel shenango: ayelam
+:)/110'here/ function// :backend.h::
+.libruntime.a shenangohomemultiple : 
+//(`// in110multiple/usrincfault_tcache.obackend_get_data_channel.ayelamdefinition : home//)'// function definition/binrmem::incshenangoof first ayelam// 
+// ` of/ldbackend.hin/rmem.`backend_get_data_channeldefined shenango:: home/backend.h/backend_get_data_channel' `/ 110function/:inc':herebackend_get_data_channel.libruntime.a: ayelam110/;
+
+'/( `/:rmem //;inctcp_out.ofirstbackend_get_data_channelshenango /libruntime.ahomeusr /) '/multiplebackend.h(//libruntime.armem:defined:. :init.oayelambin(/  
+/definition110)//init.obackend.hinhere/inc ::shenangold): 
+home/of //::110function//rmem `multiplehome. /: usrayelam/backend_get_data_channel //libruntime.ahome `//backend.h'definitionayelaminc(/multiplebackend_get_data_channelbinshenango:; //tcp_out.oayelam '//110 ofshenangormem)/definition:ld.:libruntime.a //:shenango 
+:/ (`.backend.h /of/ incmultipleinit.obackend_get_data_channel/:in. homelibruntime.a/ )'inc110 /`/(rmemdefinition:;/:functionincbackend_get_data_channelayelamtcp_out.o/ / rmem  /'/)backend.hofhomelibruntime.a/multiple`rmem;shenango:: /(backend.h backend_get_data_channel/ / 110`ayelaminit.o:definition'backend.hlibruntime.a.in:backend_get_data_channel/)110 ::(/  'shenango::of
+110init.oincfunctionmultiple;//  /:)/   .homefirst`home :rmem`definitionlibruntime.a// backend_get_data_channel/first//backend_get_data_channel (incayelamdefined'ayelam homebackend.h'ofinit.o// ;/defined/:: )rmemshenangohere shenango ayelam110
+`://
+libruntime.a/here/:/backend_get_data_channel/backend.h./(.
+shenango home'home:/usrinit.o///multiple/;/110inc/)incusr. ayelam ayelam:/bin:///definition/libruntime.a/ rmem//rmembininc shenango(shenangofirst/ldhome///of/init.o/ backend.h:/backend.hldrmem .).defined: ayelam::/`/:/ 110libruntime.a/110 backend.hbackend_get_data_channelinc/inchere:(shenango:libruntime.a:'/home/
+ fault.o/ (110;rmem/rmem/first).multiplestat.o: /ayelam/usr :/ ) libruntime.abackend.h/backend.h/defined incdefinition:first(:shenango:bin in/   init.o110/110/here rmemofindefined):.:ld
+function/   : / :/ backend.h`functionhere/multipleincfirst usr`:backend_get_data_channel 
+home / libruntime.a/backend_get_data_channel110'`//definitionrmemdefined(bin':;backend_get_data_channelusrayelam / tcp_out.o/:  '//ofbackend.hhere)ld
+firstlibruntime.a:binshenango :
+::/ (
+//`110/  homedefinedinit.o/ld.backend_get_data_channel:usrinlibruntime.a/ )home:/' / (ayelamhere:/ inc;firstbinfunctiontcp_out.o/
+/ayelamlibruntime.a/  / )shenango/home/(rmemlibruntime.adefinedld`:/usr/shenangotcp_out.o/( :backend_get_data_channel ./ayelam/)backend.hinit.ohere 'in/bin/.::)
+libruntime.a: inc/shenango/ 110:/(
+function/ld/incin:/usrfault.o/ rmem:./  home/)home`/ /rmemfunctionfirst/bin:/backend_get_data_channelbackend.hlibruntime.ainc/  ayelam/ ayelam':(/backend.h`defined/ldin/:110fault.ormem:backend_get_data_channel shenango: shenango
+:)/110'here/ function// :backend.h::
+.libruntime.a .homemultiple : 
+//(`// in110multiple/usrincfault.obackend_get_data_channelincayelamdefinition : home//)'// function definition/binrmem::rmemshenangoof first ayelam// 
+// ` of/ldbackend.hin/backend.h.`backend_get_data_channeldefined shenango:: home:/backend_get_data_channel' `/ 110function/110inc':herebackend_get_data_channel.libruntime.a: ayelam:/;
+
+'/( `/ rmem //;incfault_tcache.ofirstbackend_get_data_channelshenangomultiple/libruntime.ahomeusr /) '/ backend.h(//libruntime.armem:defined:.definition:init.oayelambin(/  
+/ 110)//init.obackend.hinhere/incof::shenangold): 
+home/  //::110function//rmem`multiplehome. /: usrayelam/backend_get_data_channel //libruntime.ahome `//backend.h'definitionayelaminc(/multiplebackend_get_data_channelbinshenango:; //fault_tcache.oayelam '//110 ofshenangormem)/definition:ld.:libruntime.a //:shenango 
+:/ (`.backend.h /of/ incmultipleinit.obackend_get_data_channel/:in. homelibruntime.a/ )'inc110 /`/(rmemdefinition:;/:functionincbackend_get_data_channelayelamfault_tcache.o/ / rmem  /'/)backend.hofhomelibruntime.a/multiple`rmem;shenango:: /(backend.h backend_get_data_channel/ / 110`ayelaminit.o:definition'backend.hlibruntime.a.in:backend_get_data_channel/)110 ::(/  'shenango::of
+110init.oincfunctionmultiple;//  /:)/   .homefirst`home :rmem`definitionlibruntime.a// backend_get_data_channel/first//backend_get_data_channel (incayelamdefined'ayelam homebackend.h'ofinit.o// ;/defined/:: )rmemshenangohere shenango ayelam110
+`://
+libruntime.a/here/:/backend_get_data_channel/backend.h./(.
+shenango home'home:/usrinit.o///multiple/;/110inc/)incusr. ayelam ayelam:/bin:///definition/libruntime.a/ rmem//rmembininc shenango(shenangofirst/ldhome///of/init.o/ backend.h:/backend.hldrmem .).defined: ayelam::/`/:/ 110libruntime.a/110 backend.hbackend_get_data_channelinc/inchere:(shenango:libruntime.a:'/home/
+ handler.o/ (110;rmem/rmem/first).multiplestack.o: /ayelam/usr :/ ) libruntime.abackend.h/backend.h/defined incdefinition:first(:shenango:bin in/   init.o110/110/here rmemofindefined):.:ld
+function/   : / :/ backend.h`functionhere/multipleincfirst usr`:backend_get_data_channel 
+home / libruntime.a/backend_get_data_channel110'`//definitionrmemdefined(bin':;backend_get_data_channelusrayelam / fault_tcache.o/:  '//ofbackend.hhere)ld
+firstlibruntime.a:binshenango :
+::/ (
+//`110/  homedefinedinit.o/ld.backend_get_data_channel:usrinlibruntime.a/ )home:/' / (ayelamhere:/ inc;firstbinfunctionfault_tcache.o/
+/ayelamlibruntime.a/  / )shenango/home/(rmemlibruntime.adefinedld`:/usr/shenangofault_tcache.o/( :backend_get_data_channel ./ayelam/)backend.hinit.ohere 'in/bin/.::)
+libruntime.a: inc/shenango/ 110:/(
+function/ld/incin:/usrhandler.o/ rmem:./  home/)home`/ /rmemfunctionfirst/bin:/backend_get_data_channelbackend.hlibruntime.ainc/  ayelam/ ayelam':(/backend.h`defined/ldin/:110handler.ormem:backend_get_data_channel shenango: shenango
+:)/110'here/ function// :backend.h::
+.libruntime.a .homemultiple : 
+//(`// in110multiple/usrinchandler.obackend_get_data_channelincayelamdefinition : home//)'// function definition/binrmem::rmemshenangoof first ayelam// 
+// ` of/ldbackend.hin/backend.h.`backend_get_data_channeldefined shenango:: home:/backend_get_data_channel' `/ 110function/110inc':herebackend_get_data_channel.libruntime.a: ayelam:/;
+
+'/( `/ rmem //;incfault.ofirstbackend_get_data_channelshenangomultiple/libruntime.ahomeusr /) '/ backend.h(//libruntime.armem:defined:.definition:init.oayelambin(/  
+/ 110)//init.obackend.hinhere/incof::shenangold): 
+home/  //::110function//rmem`multiplehome. /: usrayelam/backend_get_data_channel //libruntime.ahome `//backend.h'definitionayelaminc(/multiplebackend_get_data_channelbinshenango:; //fault.oayelam '//110 ofshenangormem)/definition:ld.:libruntime.a //:shenango 
+:/ (`.backend.h /of/ incmultipleinit.obackend_get_data_channel/:in. homelibruntime.a/ )'inc110 /`/(rmemdefinition:;/:functionincbackend_get_data_channelayelamfault.o/ / rmem  /'/)backend.hofhomelibruntime.a/multiple`rmem;shenango:: /(backend.h backend_get_data_channel/ / 110`ayelaminit.o:definition'backend.hlibruntime.a.in:backend_get_data_channel/)110 ::(/  'shenango::of
+110init.oincfunctionmultiple;//  /:)/   .homefirst`home :rmem`definitionlibruntime.a// backend_get_data_channel/first//backend_get_data_channel (incayelamdefined'ayelam homebackend.h'ofinit.o// ;/defined/:: )rmemshenangohere shenango ayelam110
+`://
+libruntime.a/here/:/backend_get_data_channel/backend.h./(.
+shenango home'home:110/usrinit.o///multiple/;/:inc/)incusr. ayelam ayelam /bin:///definition/libruntime.a/firstrmem//rmembininc shenango(shenango /ldhome///of/init.o/definedbackend.h:/backend.hldrmem .). : ayelam::/`/:/here110libruntime.a/110 backend.hbackend_get_data_channelinc/inc
+:(shenango:libruntime.a:'/home// region.o/ (110;rmem/rmemusrfirst).multipleioqueues.o: /ayelam// :/ ) libruntime.abackend.h/backend.hbindefined incdefinition:first(:shenango:/ in/   init.o110/110ldhere rmemofindefined):.::
+function/   : /  / backend.h`functionhere/multipleincfirstlibruntime.ausr`:backend_get_data_channel 
+home / (/backend_get_data_channel110'`//definitionrmemdefinedfault.obin':;backend_get_data_channelusrayelam / )/:  '//ofbackend.hhere:ld
+firstlibruntime.a:binshenango :
+ :/ (
+//`110/in homedefinedinit.o/ld.backend_get_data_channel:usr libruntime.a/ )home:/' /function(ayelamhere:/ inc;firstbin fault.o/
+/ayelamlibruntime.a/  /`)shenango/home/(rmemlibruntime.adefinedldbackend_get_data_channel:/usr/shenangofault.o/( :' ./ayelam/)backend.hinit.ohere :in/bin/.::)
+libruntime.a
+ inc/shenango/ 110:/(/function/ld/incin:/usrregion.ohome rmem:./  home/)/`/ /rmemfunctionfirst/bin:ayelambackend_get_data_channelbackend.hlibruntime.ainc/  ayelam/ /':(/backend.h`defined/ldinshenango:110region.ormem:backend_get_data_channel shenango: /
+:)/110'here/ function./ :backend.h::
+.libruntime.a /homemultiple : 
+//(`inc/ in110multiple/usrincregion.obackend_get_data_channel/ayelamdefinition : home//)'rmem/ function definition/binrmem::/shenangoof first ayelam// 
+backend.h/ ` of/ldbackend.hin/:.`backend_get_data_channeldefined shenango:: home110/backend_get_data_channel' `/ 110function/:inc':herebackend_get_data_channel.libruntime.a: ayelam /;
+
+'/( `/multiplermem //;inchandler.ofirstbackend_get_data_channelshenango /libruntime.ahomeusr /) '/definitionbackend.h(//libruntime.armem:defined:. :init.oayelambin(/  
+/of110)//init.obackend.hinhere/inc ::shenangold): 
+home/` //::110function//rmembackend_get_data_channelmultiplehome. /: usrayelam/' //libruntime.ahome `//backend.h;definitionayelaminc(/multiplebackend_get_data_channelbinshenango:  //handler.oayelam '//110libruntime.aofshenangormem)/definition:ld.:( //:shenango 
+:/ init.o`.backend.h /of/ incmultiple)backend_get_data_channel/:in. homelibruntime.a/ :'inc110 /`/(rmemdefinition/;/:functionincbackend_get_data_channelayelamhandler.o/ home rmem  /'/)backend.hof/libruntime.a/multiple`rmem;shenango:: ayelam(backend.h backend_get_data_channel/ / 110`/init.o:definition'backend.hlibruntime.a.in:backend_get_data_channelshenango)110 ::(/  '/::of
+110init.oincfunctionmultiple;./  /:)/   /inchomefirst`home :rmem`definitionlibruntime.a// backend_get_data_channel/first//backend_get_data_channel (rmemayelamdefined'ayelam homebackend.h'ofinit.o// ;/defined/:: )backend.hshenangohere shenango ayelam110
+`::/
+libruntime.a/here/:/backend_get_data_channel/110./(.
+shenango home'home:/usrinit.o///multiple/;/ inc/)incusr. ayelam ayelamfirst/bin:///definition/libruntime.a/ rmem//rmembininc shenango(shenangodefined/ldhome///of/init.o/ backend.h:/backend.hldrmem .).here: ayelam::/`/:/
+110libruntime.a/110 backend.hbackend_get_data_channelinc/inc/:(shenango:libruntime.a:'/home/usr eviction.o/ (110;rmem/rmem/first).multiplermem_rdma.o: /ayelam/bin :/ ) libruntime.abackend.h/backend.h/defined incdefinition:first(:shenango:ld in/   init.o110/110:here rmemofindefined):.: 
+function/   : / libruntime.a/ backend.h`functionhere/multipleincfirst(usr`:backend_get_data_channel 
+home / handler.o/backend_get_data_channel110'`//definitionrmemdefined)bin':;backend_get_data_channelusrayelam / : /:  '//ofbackend.hhereinld
+firstlibruntime.a:binshenango :
+ :/ (
+//`110/function homedefinedinit.o/ld.backend_get_data_channel:usr libruntime.a/ )home:/' /`(ayelamhere:/ inc;firstbinbackend_get_data_channelhandler.o/
+/ayelamlibruntime.a/  /')shenango/home/(rmemlibruntime.adefinedld::/usr/shenangohandler.o/( :
+ ./ayelam/)backend.hinit.ohere /in/bin/.::)
+libruntime.ahome inc/shenango/ 110:/(/function/ld/incin:/usreviction.oayelam rmem:./  home/)/`/ /rmemfunctionfirst/bin:shenangobackend_get_data_channelbackend.hlibruntime.ainc/  ayelam/ /':(/backend.h`defined/ldin.:110eviction.ormem:backend_get_data_channel shenango: /
+:)/110'here/ functioninc/ :backend.h::
+.libruntime.a /homemultiple : 
+//(`rmem/ in110multiple/usrinceviction.obackend_get_data_channel/ayelamdefinition : home//)'backend.h/ function definition/binrmem:::shenangoof first ayelam// 
+110/ ` of/ldbackend.hin/:.`backend_get_data_channeldefined shenango:: home /backend_get_data_channel' `/ 110function/multipleinc':herebackend_get_data_channel.libruntime.a: ayelam /;
+
+'/( `/definitionrmem //;incregion.ofirstbackend_get_data_channelshenango /libruntime.ahomeusr /) '/ofbackend.h(//libruntime.armem:defined:. :init.oayelambin(/  
+/`110)//init.obackend.hinhere/incbackend_get_data_channel::shenangold): 
+home/' //::110function//rmem;multiplehome. /: usrayelam/  //libruntime.ahome `//backend.hlibruntime.adefinitionayelaminc(/multiplebackend_get_data_channelbinshenango:( //region.oayelam '//110init.oofshenangormem)/definition:ld.:) //:shenango 
+:/ :`.backend.h /of/ incmultiple/backend_get_data_channel/:in. homelibruntime.a/ home'inc110 /`/(rmemdefinition/;/:functionincbackend_get_data_channelayelamregion.o/ ayelam rmem  /'/)backend.hof/libruntime.a/multiple`rmem;shenango:: shenango(backend.h backend_get_data_channel/ / 110`/init.o:definition'backend.hlibruntime.a.in:backend_get_data_channel.)110 ::(/  '/::of
+110init.oincfunctionmultiple;inc/  /:)/   /homefirst`home :rmem`definitionlibruntime.armem/ backend_get_data_channel/first//backend_get_data_channel (/ayelamdefined'ayelam homebackend.h'ofinit.obackend.h/ ;/defined/:: ):shenangohere shenango ayelam110
+`:110/
+libruntime.a/here/:/backend_get_data_channel/:./(.
+shenango home'home /usrinit.o///multiple/;/firstinc/)incusr. ayelam ayelam /bin:///definition/libruntime.a/definedrmem//rmembininc shenango(shenango /ldhome///of/init.o/herebackend.h:/backend.hldrmem .).
+: ayelam::/`/://110libruntime.a/110 backend.hbackend_get_data_channelinc/incusr:(shenango:libruntime.a:'/home// stat.o/ (110;rmem/rmembinfirst).multiplepgfault.o: /ayelam// :/ ) libruntime.abackend.h/backend.hlddefined incdefinition:first(:shenango:: in/   init.o110/110 here rmemofindefined):.:libruntime.a
+function/   : / (/ backend.h`functionhere/multipleincfirstregion.ousr`:backend_get_data_channel 
+home / )/backend_get_data_channel110'`//definitionrmemdefined:bin':;backend_get_data_channelusrayelam /  /:  '//ofbackend.hhereinld
+firstlibruntime.a:binshenango :
+ :/ (
+//`110/function homedefinedinit.o/ld.backend_get_data_channel:usr libruntime.a/ )home:/' /`(ayelamhere:/ inc;firstbinbackend_get_data_channelregion.o/
+/ayelamlibruntime.a/  /')shenango/home/(rmemlibruntime.adefinedld::/usr/shenangoregion.o/( :
+ ./ayelam/)backend.hinit.ohere /in/bin/.::)
+libruntime.ahome inc/shenango/ 110:/(/function/ld/incin:/usrstat.oayelam rmem:./  home/)/`/ /rmemfunctionfirst/bin:shenangobackend_get_data_channelbackend.hlibruntime.ainc/  ayelam/ /':(/backend.h`defined/ldin.:110stat.ormem:backend_get_data_channel shenango: /
+:)/110'here/ functioninc/ :backend.h::
+.libruntime.a /homemultiple : 
+//(`rmem/ in110multiple/usrincstat.obackend_get_data_channel/ayelamdefinition : home//)'backend.h/ function definition/binrmem:::shenangoof first ayelam// 
+110/ ` of/ldbackend.hin/:.`backend_get_data_channeldefined shenango:: home /backend_get_data_channel' `/ 110function/multipleinc':herebackend_get_data_channel.libruntime.a: ayelam /;
+
+'/( `/definitionrmem //;inceviction.ofirstbackend_get_data_channelshenango /libruntime.ahomeusr /) '/ofbackend.h(//libruntime.armem:defined:. :init.oayelambin(/  
+/`110)//init.obackend.hinhere/incbackend_get_data_channel::shenangold): 
+home/' //::110function//rmem;multiplehome. /: usrayelam/  //libruntime.ahome `//backend.hlibruntime.adefinitionayelaminc(/multiplebackend_get_data_channelbinshenango:( //eviction.oayelam '//110init.oofshenangormem)/definition:ld.:) //:shenango 
+:/ :`.backend.h /of/ incmultiple/backend_get_data_channel/:in. homelibruntime.a/ home'inc110 /`/(rmemdefinition/;/:functionincbackend_get_data_channelayelameviction.o/ ayelam rmem  /'/)backend.hof/libruntime.a/multiple`rmem;shenango:: shenango(backend.h backend_get_data_channel/ / 110`/init.o:definition'backend.hlibruntime.a.in:backend_get_data_channel.)110 ::(/  '/::of
+110init.oincfunctionmultiple;inc/  /:)/   /homefirst`home :rmem`definitionlibruntime.armem/ backend_get_data_channel/first//backend_get_data_channel (/ayelamdefined'ayelam homebackend.h'ofinit.obackend.h/ ;/defined/:: ):shenangohere shenango ayelam110
+`:110/
+libruntime.a/here/:/backend_get_data_channel/:./(.
+shenango home'home /usrinit.o///multiple/;/firstinc/)incusr. ayelam ayelam /bin:///definition/libruntime.a/definedrmem//rmembininc shenango(shenango /ldhome///of/init.o/herebackend.h:/backend.hldrmem .).
+: ayelam::/`/://110libruntime.a/110 backend.hbackend_get_data_channelinc/incusr:(shenango:libruntime.a:'/home// stack.o/ (110;rmem/rmembinfirst).multiplermem_local.o: /ayelam// :/ ) libruntime.abackend.h/backend.hlddefined incdefinition:first(:shenango:: in/   init.o110/110 here rmemofindefined):.:libruntime.a
+function/   : / (/ backend.h`functionhere/multipleincfirsteviction.ousr`:backend_get_data_channel 
+home / )/backend_get_data_channel110'`//definitionrmemdefined:bin':;backend_get_data_channelusrayelam /  /:  '//ofbackend.hhereinld
+firstlibruntime.a:binshenango :
+ :/ (
+//`110/function homedefinedinit.o/ld.backend_get_data_channel:usr libruntime.a/ )home:/' /`(ayelamhere:/ inc;firstbinbackend_get_data_channeleviction.o/
+/ayelamlibruntime.a/  /')shenango/home/(rmemlibruntime.adefinedld::/usr/shenangoeviction.o/( :
+ ./ayelam/)backend.hinit.ohere /in/bin/.::)
+libruntime.ahome inc/shenango/ 110:/(/function/ld/incin:/usrstack.oayelam rmem:./  home/)/`/ /rmemfunctionfirst/bin:shenangobackend_get_data_channelbackend.hlibruntime.ainc/  ayelam/ /':(/backend.h`defined/ldin.:110stack.ormem:backend_get_data_channel shenango: /
+:)/110'here/ functioninc/ :backend.h::
+.libruntime.a /homemultiple : 
+//(`rmem/ in110multiple/usrincstack.obackend_get_data_channel/ayelamdefinition : home//)'backend.h/ function definition/binrmem:::shenangoof first ayelam// 
+110/ ` of/ldbackend.hin/:.`backend_get_data_channeldefined shenango:: home /backend_get_data_channel' `/ 110function/multipleinc':herebackend_get_data_channel.libruntime.a: ayelam /;
+
+'/( `/definitionrmem //;incstat.ofirstbackend_get_data_channelshenango /libruntime.ahomeusr /) '/ofbackend.h(//libruntime.armem:defined:. :init.oayelambin(/  
+/`110)//init.obackend.hinhere/incbackend_get_data_channel::shenangold): 
+home/' //::110function//rmem;multiplehome. /: usrayelam/  //libruntime.ahome `//backend.hlibruntime.adefinitionayelaminc(/multiplebackend_get_data_channelbinshenango:( //stat.oayelam '//110init.oofshenangormem)/definition:ld.:) //:shenango 
+:/ :`.backend.h /of/ incmultiple/backend_get_data_channel/:in. homelibruntime.a/ home'inc110 /`/(rmemdefinition/;/:functionincbackend_get_data_channelayelamstat.o/ ayelam rmem  /'/)backend.hof/libruntime.a/multiple`rmem;shenango:: shenango(backend.h backend_get_data_channel/ / 110`/init.o:definition'backend.hlibruntime.a.in:backend_get_data_channel.)110 ::(/  '/::of
+110init.oincfunctionmultiple;inc/  /:)/   /homefirst`home :rmem`definitionlibruntime.armem/ backend_get_data_channel/first//backend_get_data_channel (/ayelamdefined'ayelam homebackend.h'ofinit.obackend.h/ ;/defined/:: ):shenangohere shenango ayelam110
+`:110/
+libruntime.a/here/:/backend_get_data_channel/:./(.
+shenango home'home /usrinit.o///multiple/;/firstinc/)incusr. ayelam ayelam /bin:///definition/libruntime.a/definedrmem//rmembininc shenango(shenango /ldhome///of/init.o/herebackend.h:/backend.hldrmem .).
+: ayelam::/`/://110libruntime.a/110 backend.hbackend_get_data_channelinc/incusr:(shenango:libruntime.a:'/home// ioqueues.o/ (110;rmem/rmembinfirst).multipleping.o: /ayelam// :/ ) libruntime.abackend.h/backend.hlddefined incdefinition:first(:shenango:: in/   init.o110/110 here rmemofindefined):.:libruntime.a
+function/   : / (/ backend.h`functionhere/multipleincfirststat.ousr`:backend_get_data_channel 
+home / )/backend_get_data_channel'110'`//definitionrmemdefined:bin::;backend_get_data_channelusrayelam /  /
+  '//ofbackend.hhereinld/firstlibruntime.a:binshenango :
+ :home (
+//`110/function /definedinit.o/ld.backend_get_data_channel:usr libruntime.aayelam )home:/' /`(/here:/ inc;firstbinbackend_get_data_channelstat.oshenango
+/ayelamlibruntime.a/  /')//home/(rmemlibruntime.adefinedld::.usr/shenangostat.o/( :
+ //ayelam/)backend.hinit.ohere /inincbin/.::)
+libruntime.ahome //shenango/ 110:/(/functionrmemld/incin:/usrioqueues.oayelam /:./  home/)/`backend.h /rmemfunctionfirst/bin:shenangobackend_get_data_channel:libruntime.ainc/  ayelam/ /'110(/backend.h`defined/ldin.::ioqueues.ormem:backend_get_data_channel shenango: /
+ )/110'here/ functioninc/multiple:backend.h::
+.libruntime.a /home  : 
+//(`rmem/definitionin110multiple/usrincioqueues.obackend_get_data_channel/ayelam  : home//)'backend.h/offunction definition/binrmem:::shenango  first ayelam// 
+110/`` of/ldbackend.hin/:.backend_get_data_channelbackend_get_data_channeldefined shenango:: home /'' `/ 110function/multiple inc;:herebackend_get_data_channel.libruntime.a: ayelamdefinition/ 
+
+'/( `/ rmemlibruntime.a//;incstack.ofirstbackend_get_data_channelshenangoof/(homeusr /) '/ backend.hinit.o//libruntime.armem:defined:.`:)ayelambin(/  
+/backend_get_data_channel110://init.obackend.hinhere/inc':/shenangold): 
+home/; home/::110function//rmem multiple/. /: usrayelam/libruntime.a ayelam/libruntime.ahome `//backend.h(definition/inc(/multiplebackend_get_data_channelbinshenango:init.o shenango/stack.oayelam '//110)of/rmem)/definition:ld.:: ./:shenango 
+:/ /`/backend.h /of/ incmultiplehomebackend_get_data_channelinc:in. homelibruntime.a/ /'/110 /`/(rmemdefinitionayelam;rmem:functionincbackend_get_data_channelayelamstack.o/ / /  /'/)backend.hofshenangolibruntime.abackend.hmultiple`rmem;shenango:: /(: backend_get_data_channel/ / 110`.init.o110definition'backend.hlibruntime.a.in:backend_get_data_channel/): ::(/  'inc: of
+110init.oincfunctionmultiple;//first /:)/   rmemhome `home :rmem`definitionlibruntime.a//definedbackend_get_data_channel/first//backend_get_data_channel (backend.hayelam 'ayelam homebackend.h'ofinit.o:/here;/defined/:: )110shenango
+ shenango ayelam110
+`:://libruntime.a/here/:/backend_get_data_channel/ first.usr(.
+shenango home'home //init.o///multiple/;/definedincbin)incusr. ayelam ayelam //:///definition/libruntime.a/herermemld/rmembininc shenango(shenango
+/:home///of/init.o//backend.h /backend.hldrmem .).usr:libruntime.aayelam::/`/://110(/110 backend.hbackend_get_data_channelinc/incbin:rmem_rdma.oshenango:libruntime.a:'/home// )/ (110;rmem/rmemldfirst:.multipleudp.o: /ayelam/:  / ) libruntime.abackend.h/backend.h definedinincdefinition:first(:shenango:libruntime.a  /   init.o110/110(herefunctionrmemofindefined):.:stack.o
+ /   : / )/`backend.h`functionhere/multipleincfirst:usrbackend_get_data_channel:backend_get_data_channel 
+home /  /'110'`//definitionrmemdefinedinbin::;backend_get_data_channelusrayelam /  /
+  '//ofbackend.hherefunctionld/firstlibruntime.a:binshenango :
+ :home (
+//`110/` /definedinit.o/ld.backend_get_data_channel:usrbackend_get_data_channellibruntime.aayelam )home:/' /'(/here:/ inc;firstbin:stack.oshenango
+/ayelamlibruntime.a/  /
+)//home/(rmemlibruntime.adefinedld/:.usr/shenangostack.o/( :home //ayelam/)backend.hinit.ohere /inincbin/.::)
+libruntime.aayelam //shenango/ 110:/(/functionrmemld/incin:/usrrmem_rdma.oshenango /:./  home/)/`backend.h /rmemfunctionfirst/bin:.backend_get_data_channel:libruntime.ainc/  ayelam/ /'110(/backend.h`defined/ldininc::rmem_rdma.ormem:backend_get_data_channel shenango: /
+ )/110'here/ functionrmem/multiple:backend.h::
+.libruntime.a /home  : 
+//(`backend.h/definitionin110multiple/usrincrmem_rdma.obackend_get_data_channel:ayelam  : home//)'110/offunction definition/binrmem:::shenango  first ayelam// 
+ /`` of/ldbackend.hin/multiple.backend_get_data_channelbackend_get_data_channeldefined shenango:: home /'' `/ 110function/definitioninc;:herebackend_get_data_channel.libruntime.a: ayelam / 
+
+'/( `/of rmemlibruntime.a//;incioqueues.ofirstbackend_get_data_channelshenango`/(homeusr /) '/backend_get_data_channelbackend.hinit.o//libruntime.armem:defined:.':)ayelambin(/  
+/;110://init.obackend.hinhere/inc :/shenangold): 
+home/libruntime.a home/::110function//rmem(multiple/. /: usrayelam/init.o ayelam/libruntime.ahome `//backend.h)definition/inc(/multiplebackend_get_data_channelbinshenango:: shenango/ioqueues.oayelam '//110/homeof/rmem)/definition:ld.:/ ./:shenango 
+:/ ayelam`/backend.h /of/ incmultiple/backend_get_data_channelinc:in. homelibruntime.a/ shenango'/110 /`/(rmemdefinition/;rmem:functionincbackend_get_data_channelayelamioqueues.o/ . /  /'/)backend.hof/libruntime.abackend.hmultiple`rmem;shenango:: inc/(: backend_get_data_channel/ / 110`rmeminit.o110definition'backend.hlibruntime.a.in:backend_get_data_channel/): ::(/  'backend.h: of
+110init.oincfunctionmultiple;:/first /:)/   110home `home :rmem`definitionlibruntime.a:/definedbackend_get_data_channel/first//backend_get_data_channel ( ayelam 'ayelam homebackend.h'ofinit.ofirst/here;/defined/:: ) shenango
+ shenango ayelam110
+`:defined//libruntime.a/here/:/backend_get_data_channel/ .usr(.
+shenango home'homehere//init.o//multiple/;/
+incbin)inc. ayelam ayelam///://definition/collect2: error: ld returned 1 exit status
+libruntime.a/usrrmemld/rmeminc shenango(shenango//:home//of/init.o/binbackend.h /backend.hrmem .)./:libruntime.aayelam:/`/:/ld110(/110backend.hbackend_get_data_channelinc/inc::pgfault.oshenango::'/home/  )/ 110;rmem/rmemlibruntime.afirst:.multiple: /ayelam/(  /  libruntime.abackend.h/backend.hioqueues.odefinedinincdefinitionfirst(:shenango:)  /  init.o110/110:herefunctionrmemofdefined):.: 
+ /  : / in/`backend.h`heremake: *** [Makefile:166: tests/test_kthread_wakeup] Error 1
+/multipleincfirst usrbackend_get_data_channel:backend_get_data_channel
+home /make: *** Waiting for unfinished jobs....
+ function/'110'//definitionrmemdefined bin::;usrayelam / `/
+  //ofbackend.hherebackend_get_data_channelld/firstlibruntime.abinshenango :
+':home (//`110/: /definedinit.old.backend_get_data_channel:usr
+libruntime.aayelam ):/' //(/here: inc;firstbinhomeioqueues.oshenango
+/libruntime.a/  //)//home(rmemlibruntime.adefinedldayelam:.usr/ioqueues.o/( :/ //ayelam)backend.hinit.ohere shenangoinincbin/::)
+libruntime.a/ //shenango 110:/(.functionrmemld/in:/usrpgfault.o/ /:.  home/)inc`backend.h /functionfirst/bin:/backend_get_data_channel:libruntime.ainc  ayelam/ rmem'110(/`defined/ldin/::pgfault.ormembackend_get_data_channel shenango: backend.h
+ )/'here/ function:/multiple:backend.h:
+.libruntime.a 110home  :
+//(`:/definitionin110/usrincpgfault.obackend_get_data_channel ayelam  :home//)'multiple/offunction /binrmem:: shenango  firstayelam// 
+definition/`` /ldbackend.hin/ .backend_get_data_channelbackend_get_data_channeldefinedshenango:: homeof/'' / 110function/ inc;:here.libruntime.a: ayelam`/ 
+
+/( `/backend_get_data_channelrmemlibruntime.a//incrmem_rdma.ofirstbackend_get_data_channelshenango'/(homeusr/) '/;backend.hinit.o//rmem:defined:. :)ayelambin/  
+/libruntime.a110://backend.hinhere/inc(:/shenangold: 
+home/init.o home/:110function//rmem)multiple/. : usrayelam/: ayelam/libruntime.a `//backend.h/definition/inc(multiplebackend_get_data_channelbinshenango:home shenango/rmem_rdma.o '//110/of/rmem)definition:ld.:ayelam ./: 
+:/ /`/backend.h of/ incmultipleshenangobackend_get_data_channelinc:in homelibruntime.a/ /'/110 `/(rmemdefinition.;rmem:functionbackend_get_data_channelayelamrmem_rdma.o/ / /  '/)backend.hofinclibruntime.abackend.hmultiple`;shenango:: /(: backend_get_data_channel / 110`rmeminit.o110definition'libruntime.a.in:backend_get_data_channel/): :(/  'backend.h: of
+init.oincfunctionmultiple;:/first /)/   110home `home:rmem`definitionlibruntime.a:/definedbackend_get_data_channel///backend_get_data_channel ( ayelam 'ayelamhomebackend.h'ofinit.ofirst/here;//:: ) shenango
+ shenangoayelam110
+`:defined//libruntime.a//:/backend_get_data_channel/ .usr(.shenango home'homehere//init.o//multiple/;/
+incbin)inc. ayelam ayelam///://definition/libruntime.a/usrrmemld/rmeminc shenango(shenango//:home//of/init.o/binbackend.h /backend.hrmem .)./:libruntime.aayelam:/`/:/ld110(/110backend.hbackend_get_data_channelinc/inc::rmem_local.oshenango::'/home/  )/ 110;rmem/rmemlibruntime.afirst:.multiple: /ayelam/(  /  libruntime.abackend.h/backend.hrmem_rdma.odefinedinincdefinitionfirst(:shenango:)  /  init.o110/110:herefunctionrmemofdefined):.: 
+ /  : / in/`backend.h`here/multipleincfirst usrbackend_get_data_channel:backend_get_data_channel
+home / function/'110'//definitionrmemdefined bin::;usrayelam / `/
+  //ofbackend.hherebackend_get_data_channelld/firstlibruntime.abinshenango :
+':home (//`110/: /definedinit.old.backend_get_data_channel:usr
+libruntime.aayelam ):/' //(/here: inc;firstbinhomermem_rdma.oshenango
+/libruntime.a/  //)//home(rmemlibruntime.adefinedldayelam:.usr/rmem_rdma.o/( :/ //ayelam)backend.hinit.ohere shenangoinincbin/::)
+libruntime.a/ //shenango 110:/(.functionrmemld/in:/usrrmem_local.o/ /:.  home/)inc`backend.h /functionfirst/bin:/backend_get_data_channel:libruntime.ainc  ayelam/ rmem'110(/`defined/ldin/::rmem_local.ormembackend_get_data_channel shenango: backend.h
+ )/'here/ function:/multiple:backend.h:
+.libruntime.a 110:home  :
+//(` /definitionin110/usrincrmem_local.obackend_get_data_channelmultipleayelam  :home//)' /offunction /binrmem::definitionshenango  firstayelam// 
+ /`` /ldbackend.hin/of.backend_get_data_channelbackend_get_data_channeldefinedshenango:: home /'' / 110function/`inc;:here.libruntime.a: ayelambackend_get_data_channel/ 
+
+/( `/'rmemlibruntime.a//incpgfault.ofirstbackend_get_data_channelshenango;/(homeusr/) '/ backend.hinit.o//rmem:defined:.libruntime.a:)ayelambin/  
+/(110://backend.hinhere/incinit.o:/shenangold: 
+home/) home/:110function//rmem:multiple/. : usrayelam// ayelam/libruntime.a `//backend.hhomedefinition/inc(multiplebackend_get_data_channelbinshenango:/ shenango/pgfault.o '//110ayelamof/rmem)definition:ld.:/ ./: 
+:/ shenango`/backend.h of/ incmultiple/backend_get_data_channelinc:in homelibruntime.a/ .'/110 `/(rmemdefinition/;rmem:functionbackend_get_data_channelayelampgfault.o/ inc /  '/)backend.hof/libruntime.abackend.hmultiple`;shenango:: rmem(: backend_get_data_channel / 110`/init.o110definition'libruntime.a.in:backend_get_data_channelbackend.h): :(/  ':: of
+init.oincfunctionmultiple;110/first /)/   :home `home:rmem`definitionlibruntime.a /definedbackend_get_data_channel///backend_get_data_channel (firstayelam 'ayelamhomebackend.h'ofinit.o /here;//:: )definedshenango
+ shenangoayelam110
+`: //libruntime.a//:/backend_get_data_channel/here.usr(.shenango home'home
+//init.o//multiple/;//incbin)inc. ayelam ayelamusr//://definition/libruntime.a//rmemld/rmeminc shenango(shenangobin/:home//of/init.o//backend.h /backend.hrmem .).ld:libruntime.aayelam:/`/:/:110(/110backend.hbackend_get_data_channelinc/inc :udp.oshenango::'/home/libruntime.a )/ 110;rmem/rmem(first:.multiple: /ayelam/pgfault.o  /  libruntime.abackend.h/backend.h)definedinincdefinitionfirst(:shenango::  /  init.o110/110 herefunctionrmemofdefined):.:in
+ /  : /  /`backend.h`here/multipleincfirstfunctionusrbackend_get_data_channel:backend_get_data_channel
+home /  /'110'//definitionrmemdefined`bin::;usrayelam / backend_get_data_channel/
+  //ofbackend.hhere'ld/firstlibruntime.abinshenango :
+::home (//`110/
+ /definedinit.old.backend_get_data_channel:usr/libruntime.aayelam ):/' /home(/here: inc;firstbin/pgfault.oshenango
+/libruntime.a/  /ayelam)//home(rmemlibruntime.adefinedld/:.usr/pgfault.o/( :shenango //ayelam)backend.hinit.ohere /inincbin/::)
+libruntime.a. //shenango 110:/(/functionrmemld/in:/usrping.oinc /:.  home/)/`backend.h /functionfirst/bin:rmembackend_get_data_channel:libruntime.ainc  ayelam/ /'110(/`defined/ldinbackend.h::ping.ormembackend_get_data_channel shenango: :
+ )/'here/ function110/multiple:backend.h:
+.libruntime.a :home  :
+//(` /definitionin110/usrincping.obackend_get_data_channelmultipleayelam  :home//)' /offunction /binrmem::definitionshenango  firstayelam// 
+ /`` /ldbackend.hin/of.backend_get_data_channelbackend_get_data_channeldefinedshenango:: home /'' / 110function/`inc;:here.libruntime.a: ayelambackend_get_data_channel/ 
+
+/( `/'rmemlibruntime.a//incrmem_local.ofirstbackend_get_data_channelshenango;/(homeusr/) '/ backend.hinit.o//rmem:defined:.libruntime.a:)ayelambin/  
+/(110://backend.hinhere/incinit.o:/shenangold: 
+home/) home/:110function//rmem:multiple/. : usrayelam// ayelam/libruntime.a `//backend.hhomedefinition/inc(multiplebackend_get_data_channelbinshenango:/ shenango/rmem_local.o '//110ayelamof/rmem)definition:ld.:/ ./: 
+:/ shenango`/backend.h of/ incmultiple/backend_get_data_channelinc:in homelibruntime.a/ .'/110 `/(rmemdefinition/;rmem:functionbackend_get_data_channelayelamrmem_local.o/ inc /  '/)backend.hof/libruntime.abackend.hmultiple`;shenango:: rmem(: backend_get_data_channel / 110`/init.o110definition'libruntime.a.in:backend_get_data_channelbackend.h): :(/  ':: of
+init.oincfunctionmultiple;110/first /)/   :home `home:rmem`definitionlibruntime.a /definedbackend_get_data_channel///backend_get_data_channel (firstayelam 'ayelamhomebackend.h'ofinit.o /here;//:: )definedshenango
+ shenangoayelam110
+`: /libruntime.a//:/backend_get_data_channel/here.(.shenango home'homecollect2: error: ld returned 1 exit status
+
+/init.o//multiple/;//inc)inc. ayelam ayelamusr/://definition/libruntime.a//rmem/rmeminc shenango(shenangobin/home//of/init.o//backend.h/backend.hrmem .).ld:ayelam:/`/:/:110/110backend.hbackend_get_data_channelinc/inc :shenango::'/home/libruntime.a / 110;rmem/rmem(first.multiple: /ayelam/rmem_local.o /make: *** [Makefile:166: tests/test_ping] Error 1
+  libruntime.abackend.h/backend.h)definedincdefinitionfirst(:shenango:: /  init.o110/110 herermemofdefined):.:in
+/  : /  /backend.h`here/multipleincfirstfunctionusr:backend_get_data_channel
+home /  /110'//definitionrmemdefined`bin:;usrayelam / backend_get_data_channel/  //ofbackend.hhere'ldfirstlibruntime.abinshenango :
+:: (//`110/
+ definedinit.old.backend_get_data_channel:usr/libruntime.a ):/' /home(here: inc;firstbin/rmem_local.o
+/libruntime.a/  /ayelam)/home(rmemlibruntime.adefinedld/:usr/rmem_local.o/( :shenango /ayelam)backend.hinit.ohere /inbin/::)
+libruntime.a. /shenango 110:/(/functionld/in:/usrudp.oinc :.  home/)/` /functionfirst/bin:rmembackend_get_data_channellibruntime.ainc  ayelam/ /'(/`defined/ldinbackend.h:udp.ormembackend_get_data_channel shenango: :
+)/'here/ function110/:backend.h:
+.libruntime.a :home :
+//(` /in110/usrincudp.obackend_get_data_channelmultipleayelam :home//)' /function /binrmem::definitionshenango firstayelam// 
+ /` /ldbackend.hin/of.backend_get_data_channeldefinedshenango:: home /' / 110function/`inc:here.libruntime.a: ayelambackend_get_data_channel/
+
+/( `/'rmem//incping.ofirstbackend_get_data_channelshenango;/homeusr/) '/ backend.h//rmem:defined:.libruntime.a:ayelambin/  
+/(110//backend.hinhere/incinit.o:shenangold: 
+home/) /:110function//rmem:multiple. : usrayelam// /libruntime.a `//backend.hhomedefinitioninc(multiplebackend_get_data_channelbinshenango:/ /ping.o '//110ayelamofrmem)definition:ld.:/ /: 
+:/ shenango`backend.h of/ incmultiple/backend_get_data_channel:in homelibruntime.a/ .'110 `/(rmemdefinition/;:functionbackend_get_data_channelayelamping.o/ inc   '/)backend.hof/libruntime.amultiple`;shenango:: rmem( backend_get_data_channel / 110`/init.odefinition'libruntime.a.in:backend_get_data_channelbackend.h) :(/  '::of
+init.oincfunctionmultiple;110/ /)/   :home`home:rmem`definitionlibruntime.a /backend_get_data_channel///backend_get_data_channel (firstayelam'ayelamhomebackend.h'ofinit.o /;//:: )definedshenango shenangoayelam110
+`: /libruntime.a//:/backend_get_data_channel/here.(.shenango home'home
+/init.o//multiple/;//inc)inc. ayelam ayelamusr/://definition/libruntime.a//rmem/rmeminc shenango(shenangobin/home//of/init.o//backend.h/backend.hrmem .).ld:ayelam:/`/:/:110/110backend.hbackend_get_data_channelinc/inc :shenango::'/home/libruntime.a / 110;rmem/rmem(first.multiple: /ayelam/ping.o /  libruntime.abackend.h/backend.h)definedincdefinitionfirst(:shenango:: /  init.o110/110 herermemofdefined):.:in
+/  : /  /backend.h`here/multipleincfirstfunctionusr:backend_get_data_channel
+home /  /110'//definitionrmemdefined`bin:;usrayelam / backend_get_data_channel/  //ofbackend.hhere'ldfirstlibruntime.abinshenango :
+:: (//`110
+ definedinit.old.backend_get_data_channel:/libruntime.a ):/' home(herecollect2: error: ld returned 1 exit status
+: inc;first/ping.o
+/libruntime.a/  ayelam)home(rmemlibruntime.adefined/:/ping.o/( shenangocollect2: error: ld returned 1 exit status
+ ayelam)backend.hinit.ohere/in/::)
+. shenango 110:/function/in:/inc .  home/`/functioncollect2: error: ld returned 1 exit status
+first/rmembackend_get_data_channelinc  ayelam/'/`defined/backend.h:rmembackend_get_data_channel shenango:
+/'here/110/backend.h:
+.:home:
+// /110/usrincmultipleayelammake: *** [Makefile:166: tests/test_runtime_smalloc] Error 1
+:home// / /binrmemdefinitionshenangofirstmake: *** [Makefile:166: tests/test_multiple_runtimes] Error 1
+ayelam// / /ldbackend.hof.definedshenango:: / / 110`inchere.libruntime.a:backend_get_data_channel/
+/( 'rmem/incudp.ofirst;/usr/)  backend.hmake: *** [Makefile:166: tests/test_many_threads] Error 1
+/rmem:definedlibruntime.a:bin/  (110/backend.hinhereinit.o:ld: 
+) :110function/:multiple : usr/ libruntime.a `/homedefinition(multiplebackend_get_data_channelbin/ udp.o '/ayelamof)definition:ld/ : 
+:shenango` of/ /backend_get_data_channelin homelibruntime.a.' `/(/;functionbackend_get_data_channelayelamudp.oinc  '/)/libruntime.a`;shenango:rmem(backend_get_data_channel / /init.o'libruntime.a.inbackend.h):(/ ::
+init.oincfunction110//)/ :homehome:rmem` ////backend_get_data_channelfirstayelamayelamhomebackend.h' ///::definedshenangoshenangoayelam110
+ ///:/here..shenango home
+///multiple//incinc. ayelamusr///definition//rmemrmeminc shenangobin///of//backend.hbackend.hrmem .ld::/`/:110110backend.hbackend_get_data_channelinc :::'/libruntime.a  110;rmem(firstmultiple: /udp.o   libruntime.abackend.h)defineddefinitionfirst(::   init.o110 hereofdefined):in
+  :  /`here/multiplefunctionusrbackend_get_data_channel
+home  /'//definition`bin;usrayelam backend_get_data_channel/ //of'ldlibruntime.abinshenango ::(//`
+ init.old.backend_get_data_channel/libruntime.a):/'home(: inc;/udp.o/libruntime.a/ ayelam)home(rmemlibruntime.a/:/udp.o/(shenango ayelam)backend.hinit.o/in/::). shenango 110:/function/in:/inc .  home/`/functionfirst/rmembackend_get_data_channelinc  ayelam/'/`defined/backend.h:rmembackend_get_data_channel shenango:
+/'here/110/backend.h:
+.:home:
+/ /110/incmultipleayelam:home/ / /rmemcollect2: error: ld returned 1 exit status
+definitionshenangofirstayelam/ / /backend.hof.definedshenango: / /110`inchere.:backend_get_data_channel/
+/ 'rmemincfirst;//  backend.hrmemdefinedlibruntime.a:/ collect2: error: ld returned 1 exit status
+(110backend.hhereinit.o::
+) 110:multiple:/  homedefinitionmultiple/  ayelamofdefinitioncollect2: error: ld returned 1 exit status
+/  shenango`of/backend_get_data_channel .'`/;backend_get_data_channelmake: *** [Makefile:166: tests/test_runtime_mutexes] Error 1
+inc '/libruntime.a;rmem( /init.olibruntime.abackend.h)(::init.o110/):home: //firstayelamhome //definedshenangoayelam //here.shenango
+//inc.//rmeminc//backend.hrmem:/collect2: error: ld returned 1 exit status
+110backend.h::make: *** [Makefile:166: tests/test_runtime_rcu] Error 1
+ 110first:  definedfirst  heredefined
+ here
+make: *** [Makefile:166: tests/netperf] Error 1
+collect2: error: ld returned 1 exit status
+collect2: error: ld returned 1 exit status
+make: *** [Makefile:166: tests/test_runtime_timer] Error 1
+make: *** [Makefile:166: tests/test_runtime_threads] Error 1
+make: *** [Makefile:166: tests/test_kthread_attach] Error 1

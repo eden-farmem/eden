@@ -9,6 +9,15 @@
 #include "rmem/fault.h"
 #include "rmem/region.h"
 
+/* default settings */
+#define MAX_CONNECTIONS         RMEM_MAX_REGIONS         
+#define MAX_R_REQS_PER_CONN_CHAN 32
+#define MAX_W_REQS_PER_CONN_CHAN 32
+#define MAX_R_REQS_PER_CHAN     (MAX_R_REQS_PER_CONN_CHAN * MAX_CONNECTIONS)
+#define MAX_W_REQS_PER_CHAN     (MAX_W_REQS_PER_CONN_CHAN * MAX_CONNECTIONS)
+#define MAX_REQS_PER_CHAN       (MAX_R_REQS_PER_CHAN + MAX_W_REQS_PER_CHAN)
+#define MAX_REQS_TOTAL          (RMEM_MAX_CHANNELS * MAX_REQS_PER_CHAN)
+
 /* forward declarations */
 struct region_t;
 struct fault;
@@ -88,5 +97,11 @@ extern struct rmem_backend_ops rdma_backend_ops;
 
 /* current backend */
 extern struct rmem_backend_ops* rmbackend;
+
+/**
+ * Common backend functions 
+ **/
+extern atomic_int nchans_bkend;
+int backend_get_data_channel();
 
 #endif    // __BACKEND_H__
