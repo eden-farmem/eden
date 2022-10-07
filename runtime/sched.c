@@ -146,8 +146,6 @@ static bool steal_work(struct kthread *l, struct kthread *r)
 {
 	thread_t *th;
 	uint32_t i, avail, rq_tail;
-	int nthr_ready;
-	struct fault *fault, *next;
 
 	assert_spin_lock_held(&l->lock);
 	assert(l->rq_head == 0 && l->rq_tail == 0);
@@ -187,6 +185,10 @@ static bool steal_work(struct kthread *l, struct kthread *r)
 		goto done;
 	}
 
+#if defined (REMOTE_MEMORY) && defined(FAULT_HINTS2)
+	int nthr_ready;
+	struct fault *fault, *next;
+	
 	/* steal completed and waiting faults */
 	if (spin_try_lock(&r->pf_lock)) {
 		nthr_ready = kthr_check_for_completions(r, RMEM_MAX_COMP_PER_OP);
@@ -198,14 +200,14 @@ static bool steal_work(struct kthread *l, struct kthread *r)
 		}
 
 		/* otherwise, steal half from the wait queue */
-		fault = TAILQ_FIRST(&r->fault_wait_q);
-		avail = r->n_wait_q > 0 ? div_up(r->n_wait_q, 2) : 0;
+		avail = div_up(r->n_wait_q, 2);
 		if (avail > 0) {
+			fault = TAILQ_FIRST(&r->fault_wait_q);
 			while (fault != NULL && avail > 0) {
 				next = TAILQ_NEXT(fault, link);
 				TAILQ_REMOVE(&r->fault_wait_q, fault, link);
+				assert(r->pf_pending > 0 && r->n_wait_q > 0);
 				r->pf_pending--;
-				assert(r->n_wait_q > 0);
 				r->n_wait_q--;
 				TAILQ_INSERT_TAIL(&l->fault_wait_q, fault, link);
 				l->pf_pending++;
@@ -219,6 +221,7 @@ static bool steal_work(struct kthread *l, struct kthread *r)
 		}
 		spin_unlock(&r->pf_lock);
 	}
+#endif
 
 	/* check for softirqs */
 	th = softirq_run_thread(r, RUNTIME_SOFTIRQ_BUDGET);
@@ -313,10 +316,16 @@ again:
 	l->rq_head = l->rq_tail = 0;
 
 	/* then handle remote memory */
+#if defined (REMOTE_MEMORY) && defined(FAULT_HINTS)
+	int nthr_ready = 0;
 	spin_lock(&l->pf_lock);
-	kthr_check_for_completions(l, RMEM_MAX_COMP_PER_OP);
-	kthr_handle_waiting_faults(l);
+	nthr_ready += kthr_check_for_completions(l, RMEM_MAX_COMP_PER_OP);
+	nthr_ready += kthr_handle_waiting_faults(l);
 	spin_unlock(&l->pf_lock);
+	if (nthr_ready > 0)
+		/* we now have some completed threads to our ready queue */
+		goto done;
+#endif
 
 	/* then check for local softirqs */
 	th = softirq_run_thread(l, RUNTIME_SOFTIRQ_BUDGET);

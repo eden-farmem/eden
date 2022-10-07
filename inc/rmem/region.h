@@ -58,6 +58,7 @@ void remove_memory_region(struct region_t *mr);
  * For internal-use. Unsafe unless used from within the regions_lock */
 static inline bool __get_mr(struct region_t *mr) 
 {
+    log_debug("adding ref_cnt for mr %p", mr);
     int r = atomic_fetch_add_explicit(&mr->ref_cnt, 1, memory_order_acquire);
     BUG_ON(r < 0);
     return (r > 0);

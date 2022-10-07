@@ -77,10 +77,10 @@ static inline void fault_free(struct fault *f) {
 /*
  * Fault request utils
  */
-static inline void fault_upgrade_to_write(fault_t* f) {
+static inline void fault_upgrade_to_write(fault_t* f, const char* reason) {
     f->is_read = f->is_wrprotect = false;
     f->is_write = true;
-    log_debug("%s - upgraded to WRITE as no WP_ON_READ", FSTR(f));
+    log_debug("%s - upgraded to WRITE. Reason: %s", FSTR(f), reason);
 }
 
 /**

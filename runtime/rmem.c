@@ -39,7 +39,8 @@ atomic_ullong memory_used;
 int rmem_init()
 {
     int ret;
-    log_debug("rmem_init");
+    log_debug("rmem_init with %.2lf GB local memory", 
+        local_memory * 1.0 / (1 << 30));
 
     /* init global data structures */
     CIRCLEQ_INIT(&region_list);
@@ -79,6 +80,10 @@ int rmem_init()
     nhandlers = 1;
     handlers = malloc(nhandlers*sizeof(hthread_t*));
     handlers[0] = new_rmem_handler_thread(PIN_RMEM_HANDLER_CORE);
+    /* note that these extra cores are not excluded from shenango core list */
+    // handlers[1] = new_rmem_handler_thread(PIN_RMEM_HANDLER_CORE-1);
+    // handlers[2] = new_rmem_handler_thread(PIN_RMEM_HANDLER_CORE-2);
+    // handlers[3] = new_rmem_handler_thread(PIN_RMEM_HANDLER_CORE-3);
 
 #ifdef USE_VDSO_CHECKS
     /* init vdso objects */

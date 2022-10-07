@@ -58,6 +58,7 @@ static struct kthread *allock(void)
 	k->park_efd = eventfd(0, 0);
 	BUG_ON(k->park_efd < 0);
 	k->detached = true;
+	k->pf_pending = 0;
 	return k;
 }
 

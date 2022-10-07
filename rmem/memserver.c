@@ -695,14 +695,14 @@ int on_connect_request(struct rdma_cm_id *id) {
 }
 
 int on_connection(struct rdma_cm_id *id) {
-    log_info("connected.\n");
+    log_debug("connected.\n");
     struct connection *conn = (struct connection *)id->context;
     conn->connected = 1;
     return 0;
 }
 
 int on_disconnect(struct rdma_cm_id *id) {
-    log_info("disconnected.\n");
+    log_debug("disconnected.\n");
     struct connection *conn = (struct connection *)id->context;
 
     conn->connected = 0;

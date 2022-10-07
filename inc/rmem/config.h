@@ -10,6 +10,9 @@
 #include "base/log.h"
 #include "base/mem.h"
 
+/* Default configs */
+#define WP_ON_READ      /* not available on kernel v < 5.0? */
+
 /* memory backend */
 typedef enum {
     RMEM_BACKEND_LOCAL = 0,
@@ -21,7 +24,6 @@ typedef enum {
 #define RMEM_MAX_CHANNELS       32
 #define RMEM_MAX_CHUNKS_PER_OP  5
 #define RMEM_MAX_COMP_PER_OP    16
-
 
 /********* Cluster *******************************************/
 #define VRG_SC2             // Intel Skylake - CX5

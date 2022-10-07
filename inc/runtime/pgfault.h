@@ -14,7 +14,7 @@
  * Pagefault API
  * hint the scheduler to check for an impending fault and take over if so
  */
-#ifdef REMOTE_MEMORY
+#if defined(REMOTE_MEMORY) && defined(FAULT_HINTS)
 #define hint_fault(addr,write,rd)                           \
     do {                                                    \
         if (__is_fault_pending(addr, write))                \
@@ -44,7 +44,7 @@ typedef long (*vdso_check_page_t)(const void *p);
 extern vdso_check_page_t __is_page_mapped_vdso;
 extern vdso_check_page_t __is_page_mapped_and_readonly_vdso;
 extern __thread struct region_t* __cached_mr;
-void send_fault_to_scheduler(void* address, bool write, int rdahead);
+void kthr_send_fault_to_scheduler(void* address, bool write, int rdahead);
 
 /* checks if a page at an address is in a state that results in page fault
  * (inlining in header file for low-overhead access) */
@@ -73,5 +73,6 @@ static inline bool __is_fault_pending(void* address, bool write)
         ? __is_page_mapped_vdso(address)
         : __is_page_mapped_and_readonly_vdso(address);
 #endif
+    // log_debug("fault hinted on %p. faulting? %d", address, !nofault);
     return !nofault;
 }

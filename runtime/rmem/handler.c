@@ -69,6 +69,7 @@ static inline fault_t* read_uffd_fault() {
                     read_size, errno);
                 BUG();
             }
+            fault_free(fault);
             return NULL;
         }
 
@@ -79,7 +80,7 @@ static inline fault_t* read_uffd_fault() {
                 flags = message.arg.pagefault.flags;
                 log_debug("uffd pagefault event %d: addr=%llx, flags=0x%llx",
                     message.event, addr, flags);
-                fault->page = addr & CHUNK_MASK;
+                fault->page = addr & ~CHUNK_MASK;
                 fault->is_write = !!(flags & UFFD_PAGEFAULT_FLAG_WRITE);
                 fault->is_wrprotect = !!(flags & UFFD_PAGEFAULT_FLAG_WP);
                 assert(!(fault->is_write && fault->is_wrprotect));
@@ -108,7 +109,7 @@ static inline fault_t* read_uffd_fault() {
                     (void *)message.arg.remove.start,
                     (void *)(message.arg.remove.end - 1),
                     message.arg.remove.end - message.arg.remove.start);
-                addr = message.arg.remove.start & CHUNK_MASK;
+                addr = message.arg.remove.start & ~CHUNK_MASK;
                 size = message.arg.remove.end - message.arg.remove.start;
 
                 /* mark pages not present and adjust memory counters */
@@ -129,7 +130,7 @@ static inline fault_t* read_uffd_fault() {
                     (void *)message.arg.remove.start,
                     (void *)(message.arg.remove.end - 1),
                     message.arg.remove.end - message.arg.remove.start);
-                addr = message.arg.remove.start & CHUNK_MASK;
+                addr = message.arg.remove.start & ~CHUNK_MASK;
                 size = message.arg.remove.end - message.arg.remove.start;
 
                 /* deregister pages (we will adjust memory after eviction) */

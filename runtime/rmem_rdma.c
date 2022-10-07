@@ -628,7 +628,7 @@ int rdma_add_regions(struct region_t **reg, int nslabs) {
     return 1;
 }
 
-/* add more backend memory (in slabs) and return new regions */
+/* remove a memory region from backend */
 int rdma_free_region(struct region_t *reg) {
     /* TODO: shall we save the backend region for future allocs? */
     remote_client_slab_rem(reg);
@@ -673,6 +673,7 @@ int rdma_post_read(int chan_id, fault_t* f)
     conn->read_reqs[req_id].size = size;
     conn->read_reqs[req_id].mode = M_READ;
     conn->read_reqs[req_id].conn = conn;
+    conn->read_reqs[req_id].fault = f;
 
     /* post read */
     log_debug("%s - READ remote_addr %lx into local_addr %lx, size %lu", FSTR(f), 
@@ -754,19 +755,23 @@ int rdma_check_cq(int chan_id, struct completion_cbs* cbs, int max_cqe,
     int ncqe, r, i;
     enum ibv_wc_opcode opcode;
     
-    /* get CQ to poll */
     assert(max_cqe > 0 && max_cqe <= RMEM_MAX_COMP_PER_OP);
     assert(chan_id >= 0 && chan_id < nchannels);
+    if(nread)   *nread = 0;
+    if(nwrite)  *nwrite = 0;
+
+    /* get CQ to poll */
     cq = global_ctx->dp_cq[chan_id];
 
     /* poll */
     ncqe = ibv_poll_cq(cq, max_cqe, wc);
     for (i = 0; i < ncqe; i++) {
         /* check status */
-        opcode = wc->opcode;
-        if (wc->status != IBV_WC_SUCCESS) {
-            log_err("RDMA request failed with status %d: %s", wc->status,
-                ibv_wc_status_str(wc->status));
+        opcode = wc[i].opcode;
+        log_debug("received completion on chan %d, op %d", chan_id, opcode);
+        if (wc[i].status != IBV_WC_SUCCESS) {
+            log_err("RDMA request failed with status %d: %s", wc[i].status,
+                ibv_wc_status_str(wc[i].status));
             BUG();
         }
 
@@ -776,7 +781,7 @@ int rdma_check_cq(int chan_id, struct completion_cbs* cbs, int max_cqe,
             BUG();
         } else if (opcode == IBV_WC_RDMA_READ) {
             /* handle read completion */
-            req = (struct request*)(uintptr_t)wc->wr_id;
+            req = (struct request*)(uintptr_t) wc[i].wr_id;
             assert(req && req->fault);
             log_debug("%s - RDMA READ completed successfully", FSTR(req->fault));
            
@@ -791,7 +796,7 @@ int rdma_check_cq(int chan_id, struct completion_cbs* cbs, int max_cqe,
         } else {
             /* handle write completion */
             assert(opcode == IBV_WC_RDMA_WRITE);
-            req = (struct request*)(uintptr_t)wc->wr_id;
+            req = (struct request*)(uintptr_t) wc[i].wr_id;
             assert(req && req->conn && req->conn->server); 
             assert(req->conn->server->reg);
             log_debug("RDMA WRITE completed on chan %d: index=%d, addr=%lx", 

@@ -121,8 +121,8 @@ enum fault_status handle_page_fault(int chan_id, fault_t* fault,
     pflags_t pflags, oldflags;
     pflags_t flags[FAULT_MAX_RDAHEAD_SIZE+1];
     struct region_t* mr;
-    bool page_present, was_locked, no_wake, wrprotect;
-    int i, ret, n_retries, nchunks = 0;
+    bool page_present, was_locked, no_wake;
+    int i, ret, n_retries, nchunks;
     unsigned long addr;
     unsigned long long pressure;
     *nevicts_needed = 0;
@@ -170,25 +170,28 @@ enum fault_status handle_page_fault(int chan_id, fault_t* fault,
             }
             else {
                 /* upgrade to write fault */
-                fault_upgrade_to_write(fault);
+                fault_upgrade_to_write(fault, "from wrprotect on no page");
                 RSTAT(WP_UPGRADES)++;
             }
 
 #ifndef WP_ON_READ
             /* no WP on READ means every fault is a write fault */
             if (fault->is_read)
-                fault_upgrade_to_write(fault);
+                fault_upgrade_to_write(fault, "no WP_ON_READ");
 #endif
 
             /* first time adding page, use zero page */
+            nchunks = 1;
             if (!(pflags & PFLAG_REGISTERED)) {
                 assert(nchunks == 1);
                 log_debug("%s - serving zero page", FSTR(fault));
                 
                 /* first time should naturally be a write */
-                fault_upgrade_to_write(fault);
+                fault_upgrade_to_write(fault, "fresh serving");
 
+#ifndef NO_ZERO_PAGE
                 /* copy zero page. TODO; Use UFFD_ZERO instead? */
+                bool wrprotect;
                 n_retries = 0;
                 wrprotect = !fault->is_write;
                 no_wake = !fault->from_kernel;
@@ -197,17 +200,17 @@ enum fault_status handle_page_fault(int chan_id, fault_t* fault,
                 assertz(ret);
                 RSTAT(UFFD_RETRIES) += n_retries;
                 RSTAT(FAULTS_ZP)++;
+                log_debug("%s - added zero page", FSTR(fault));
                 
                 /* done */
-                log_debug("%s - added zero page", FSTR(fault));
                 set_page_flags(mr, fault->page, PFLAG_REGISTERED, NULL);
                 return FAULT_DONE;
+#endif
             }
 
             /* at this point, we can support read-ahead. see if we can get 
                 * a lock on the next few pages that are missing */
             flags[0] = pflags;
-            nchunks = 1;
             for (i = 1; i <= fault->rdahead_max; i++) {
                 addr = fault->page + i * CHUNK_SIZE;
                 if(!is_in_memory_region_unsafe(mr, addr))

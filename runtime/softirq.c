@@ -49,6 +49,7 @@ static void softirq_gather_work(struct softirq_work *w, struct kthread *k,
 	local_budget_left = SOFTIRQ_MAX_BUDGET;
 
 #ifdef REMOTE_MEMORY
+	/* TODO: Is this really needed? */
 	/* supress new work when it gets congested. NOTE(TODO): we assume that 
 	 * supressing RX means supressing new work, which is not always true. Also, 
 	 * we're supressing other events for IO core like TX completions due to the 
@@ -56,8 +57,6 @@ static void softirq_gather_work(struct softirq_work *w, struct kthread *k,
 	int active_threads = (k->rq_head - k->rq_tail) + k->rq_overflow_len; 
 	local_budget_left = CONGESTION_THRESHOLD - (active_threads + k->pf_pending);
 #endif
-
-
 
 	while (budget_left > 0 && local_budget_left > 0) {
 		budget_left--; local_budget_left--;

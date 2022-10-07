@@ -93,7 +93,7 @@ int kthr_fault_read_done(fault_t* f, unsigned long buf_addr, size_t size)
     return 0;
 }
 
-/* kthread check for completions. returns the number of read completions 
+/* kthread check for completions. returns the number of completions 
  * that serviced faults (at this point, threads associated with those 
  * faults will have been added to the ready queue */
 int kthr_check_for_completions(struct kthread* k, int max_budget)
@@ -103,7 +103,7 @@ int kthr_check_for_completions(struct kthread* k, int max_budget)
         max_budget, &nfaults_done, NULL);
     assert(k->pf_pending >= nfaults_done);
     k->pf_pending -= nfaults_done;
-    log_debug("handled %d completions on chan %d", k->bkend_chan_id, ntotal);
+    log_debug("handled %d completions on chan %d", ntotal, k->bkend_chan_id);
     return nfaults_done;
 }
 
@@ -111,7 +111,7 @@ int kthr_check_for_completions(struct kthread* k, int max_budget)
 int kthr_handle_waiting_faults(struct kthread* k)
 {
     struct fault *fault, *next;
-    int nevicts_needed, nevicts = 0;  
+    int nevicts_needed, nevicts = 0, faults_done = 0;  
     enum fault_status fstatus;
     fault = TAILQ_FIRST(&k->fault_wait_q);
     while (fault != NULL) {
@@ -126,6 +126,7 @@ int kthr_handle_waiting_faults(struct kthread* k)
                 k->pf_pending--;
                 assert(k->n_wait_q > 0);
                 k->n_wait_q--;
+                faults_done++;
                 break;
             case FAULT_READ_POSTED:
                 log_debug("%s - done, released from wait", FSTR(fault));
@@ -146,7 +147,7 @@ int kthr_handle_waiting_faults(struct kthread* k)
         }
         fault = next;
     }
-    return 0;
+    return faults_done;
 }
 
 /**
@@ -171,20 +172,21 @@ void kthr_send_fault_to_scheduler(void* address, bool write, int rdahead)
     spin_lock(&k->pf_lock);
 
     /* alloc fault object */
-    page = ((unsigned long) address) & CHUNK_MASK;
+    page = ((unsigned long) address) & ~CHUNK_MASK;
     fault = fault_alloc();
     if (unlikely(!fault)) {
         log_debug("couldn't get a fault object");
         BUG();
     }
     memset(fault, 0, sizeof(fault_t));
-    fault->page = page & CHUNK_MASK;
+    fault->page = page;
     fault->is_read = !write;
     fault->is_write = write;
     fault->from_kernel = false;
     fault->rdahead_max = rdahead;
     fault->rdahead = 0;
     fault->thread = thread_self();
+    log_debug("fault posted at %lx write %d", page, write);
 
     /* accounting */
     if (fault->is_read)         RSTAT(FAULTS_R)++;
@@ -228,7 +230,6 @@ eviction:
 
 yield_thread_and_wait:
     k->pf_pending++;
-    putk();
     thread_park_and_unlock_np(&k->pf_lock); /* yield */
 
     /* fault serviced if we get here */

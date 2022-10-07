@@ -41,13 +41,12 @@ ifneq ($(PAGE_FAULTS),)
 CFLAGS += -DPAGE_FAULTS_$(PAGE_FAULTS)
 endif
 
-ifneq ($(WITH_KONA),)
-INC += -I../backends/kona/pbmem/
-CFLAGS += -DWITH_KONA
+ifneq ($(REMOTE_MEMORY),)
+CFLAGS += -DREMOTE_MEMORY
 endif
 
-ifneq ($(WITH_KONA_PAGE_CHECKS),)
-CFLAGS += -DKONA_PAGE_CHECKS
+ifneq ($(FAULT_HINTS),)
+CFLAGS += -DFAULT_HINTS
 endif
 
 ifneq ($(STATS_CORE),)

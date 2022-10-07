@@ -105,7 +105,6 @@ struct server_conn_t {
 /* RDMA request */
 struct request {
     volatile int busy;
-    volatile int ready;
     int index;
     struct connection *conn;
     struct fault* fault;
