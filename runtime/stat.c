@@ -10,6 +10,7 @@
 #include <base/stddef.h>
 #include <base/log.h>
 #include <base/time.h>
+#include <rmem/common.h>
 #include <runtime/thread.h>
 #include <runtime/udp.h>
 #include <runtime/timer.h>
@@ -22,6 +23,7 @@
 #define STAT_REPORT_LOCAL
 #define STAT_INTERVAL_SECS 	1
 static const char statsfile[] = "runtime.out";
+static const char rstatsfile[] = "rmem-stats.out";
 #endif
 
 static const char *stat_names[] = {
@@ -52,11 +54,54 @@ static const char *stat_names[] = {
 /* must correspond exactly to STAT_* enum definitions in defs.h */
 BUILD_ASSERT(ARRAY_SIZE(stat_names) == STAT_NR);
 
+static const char *rstat_names[] = {
+	/* fault stats */
+    "faults",
+    "faults_r",
+    "faults_w",
+    "faults_wp",
+    "wp_upgrades",
+    "faults_zp",
+    "faults_done",
+    "uffd_notif",
+    "uffd_retries",
+    "rdahead_ops",
+    "rdahead_pages",
+
+    /* eviction stats */
+    "evict_ops",
+    "evict_pages",
+    "evict_retries",
+    "evict_writes",
+    "evict_wp_retries",
+    "evict_madv",
+    "evict_ops_done",
+    "evict_pages_done",
+
+    /* network read/writes */
+    "net_reads",
+    "net_writes",
+
+    /* rmem work stealing */
+    "steals_ready",
+    "steals_wait",
+    "wait_retries",
+
+    /* rmem memory accounting */
+    "rmalloc_size",
+    "rmunmap_size",
+    "rmadv_size",
+};
+
+/* must correspond exactly to RSTAT_* enum definitions in rmem/stats.h */
+BUILD_ASSERT(ARRAY_SIZE(rstat_names) == RSTAT_NR);
+
 static int append_stat(char *pos, size_t len, const char *name, uint64_t val)
 {
 	return snprintf(pos, len, "%s:%ld,", name, val);
 }
 
+/* gather all kthr sched stats and write to the buffer */
 static ssize_t stat_write_buf(char *buf, size_t len)
 {
 	uint64_t stats[STAT_NR];
@@ -95,6 +140,65 @@ static ssize_t stat_write_buf(char *buf, size_t len)
 	pos += ret;
 	pos[-1] = '\0'; /* clip off last ',' */
 	return pos - buf;
+}
+
+/* gather all rmem stats and write to the buffer */
+static int rstat_write_buf(char *buf, char *buf_hthr, size_t len)
+{
+	uint64_t rstats_all[RSTAT_NR];
+	uint64_t rstats_hthr[RSTAT_NR];
+	char *pos, *end;
+	int i, j, ret;
+
+	memset(rstats_all, 0, sizeof(rstats_all));
+	memset(rstats_hthr, 0, sizeof(rstats_hthr));
+
+	/* gather rstats from each kthread */
+	/* FIXME: not correct when parked kthreads removed from @ks */
+	for (i = 0; i < maxks; i++) {
+		for (j = 0; j < RSTAT_NR; j++)
+			rstats_all[j] += allks[i]->rstats[j];
+	}
+
+	/* gather also from each rmem handler thread */
+	assert(nhandlers > 0);
+	for (i = 0; i < nhandlers; i++) {
+		assert(handlers[i]);
+		for (j = 0; j < RSTAT_NR; j++) {
+			rstats_all[j] += handlers[i]->rstats[j];
+			rstats_hthr[j] += handlers[i]->rstats[j];
+		}
+	}
+
+	/* write out all thr stats to the buffer */
+	pos = buf;
+	end = buf + len;
+	for (j = 0; j < RSTAT_NR; j++) {
+		ret = append_stat(pos, end - pos, rstat_names[j], rstats_all[j]);
+		if (ret < 0) {
+			return -EINVAL;
+		} else if (ret >= end - pos) {
+			return -E2BIG;
+		}
+		pos += ret;
+	}
+	pos[-1] = '\0'; /* clip off last ',' */
+
+
+	/* write out just handler hthr stats to the buffer */
+	pos = buf_hthr;
+	end = buf_hthr + len;
+	for (j = 0; j < RSTAT_NR; j++) {
+		ret = append_stat(pos, end - pos, rstat_names[j], rstats_hthr[j]);
+		if (ret < 0) {
+			return -EINVAL;
+		} else if (ret >= end - pos) {
+			return -E2BIG;
+		}
+		pos += ret;
+	}
+	pos[-1] = '\0'; /* clip off last ',' */
+	return 0;
 }
 
 // static ssize_t thread_state_buf(char *buf, size_t len) {
@@ -138,13 +242,16 @@ static void* stat_worker_local(void *arg)
 	}
 
 	char buf[UDP_MAX_PAYLOAD];
+	char buf_hthr[UDP_MAX_PAYLOAD];
 	ssize_t len;
 	unsigned long now;
 	FILE* fp = fopen(statsfile, "w");
+	FILE* rfp = fopen(rstatsfile, "w");
 
 	while (true) {
 		sleep(STAT_INTERVAL_SECS);
 
+		/* print scheduler stats */
 		now = time(NULL);
 		len = stat_write_buf(buf, UDP_MAX_PAYLOAD);
 		if (len < 0) {
@@ -154,6 +261,17 @@ static void* stat_worker_local(void *arg)
 		fprintf(fp, "%lu %s\n", now, buf);
 		fflush(fp);
 
+		/* print remote memory stats */
+		ret = rstat_write_buf(buf, buf_hthr, UDP_MAX_PAYLOAD);
+		if (ret < 0) {
+			log_err("rstat err %d: couldn't generate rmem stat buffer", ret);
+			continue;
+		}
+		fprintf(rfp, "%lu total-%s\n", now, buf);
+		fprintf(rfp, "%lu handler-%s\n", now, buf_hthr);
+		fflush(rfp);
+
+		// /* print thread state */
 		// len = thread_state_buf(buf, UDP_MAX_PAYLOAD);
 		// if (len < 0) {
 		// 	log_err("stat: couldn't generate thread state buffer");
@@ -163,6 +281,7 @@ static void* stat_worker_local(void *arg)
 	}
 
 	fclose(fp);
+	fclose(rfp);
 	return NULL;
 }
 #endif

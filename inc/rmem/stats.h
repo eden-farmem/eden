@@ -10,6 +10,7 @@
  * Don't use these enums directly. Instead, use the RSTAT() macro in defs.h
  */
 enum {
+    /* fault stats */
     RSTAT_FAULTS = 0,
     RSTAT_FAULTS_R,
     RSTAT_FAULTS_W,
@@ -22,6 +23,7 @@ enum {
     RSTAT_RDAHEADS,
     RSTAT_RDAHEAD_PAGES,
 
+    /* eviction stats */
     RSTAT_EVICTS,
     RSTAT_EVICT_PAGES,
     RSTAT_EVICT_RETRIES,
@@ -31,13 +33,16 @@ enum {
     RSTAT_EVICT_DONE,
     RSTAT_EVICT_PAGES_DONE,
 
+    /* network read/writes */
     RSTAT_NET_READ,
     RSTAT_NET_WRITE,
 
+    /* rmem work stealing */
     RSTAT_READY_STEALS,
     RSTAT_WAIT_STEALS,
     RSTAT_WAIT_RETRIES,
 
+    /* rmem memory accounting */
     RSTAT_MALLOC_SIZE,
     RSTAT_MUNMAP_SIZE,
     RSTAT_MADV_SIZE,

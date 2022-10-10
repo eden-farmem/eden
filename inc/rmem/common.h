@@ -7,6 +7,7 @@
 
 #include <stdatomic.h>
 #include "base/types.h"
+#include "rmem/handler.h"
 
 /* global remote memory settings */
 extern bool rmem_enabled;
@@ -15,6 +16,8 @@ extern double eviction_threshold;
 extern double eviction_done_threshold;
 
 /* global state */
+extern int nhandlers;
+extern hthread_t** handlers;
 extern atomic_ullong memory_booked;
 extern atomic_ullong memory_used;
 
