@@ -58,6 +58,10 @@ int __vdso_init()
     return 0;
 }
 
+/**
+ * Fault handling after read completions
+ */
+
 /* finish handling fault - the page is in the state required by the fault */
 int kthr_fault_done(fault_t* f)
 {
@@ -70,20 +74,34 @@ int kthr_fault_done(fault_t* f)
     return 0;
 }
 
-/* handler fault after fetched pages are ready */
-int kthr_fault_read_done(fault_t* f, unsigned long buf_addr, size_t size)
+/* called when the faults are being stolen after backend read completions */
+int kthr_fault_read_steal_done(fault_t* f)
+{
+    struct kthread *stealer;
+    
+    /* we expect the lock to be taken when stealing completions */
+    stealer = myk();
+    assert(stealer->bkend_chan_id != f->posted_chan_id);  /* assert steal */
+    assert(f && f->bkend_buf);  /* expecting read buffer */
+    RSTAT(READY_STEALS)++;
+
+    /* add to stolen completions queue */
+    TAILQ_INSERT_TAIL(&stealer->fault_cq_steals_q, f, link);
+    stealer->n_cq_steals_q++;
+
+    /* add to stealer pending */
+    assert_spin_lock_held(&stealer->pf_lock);
+    stealer->pf_pending++;
+    return 0;
+}
+
+/* handle fault after the fetched pages are ready */
+int kthr_fault_read_done(fault_t* f)
 {
     int r;
-    struct kthread *k;
-    
-    /* we expect the lock to be taken before calling completions */
-    k = myk();
-    assert_spin_lock_held(&k->pf_lock);
-    if (k->bkend_chan_id != f->posted_chan_id)
-        RSTAT(TOTAL_STEALS)++;
 
     /* finish up page mapping */
-    r = fault_read_done(f, buf_addr, size);
+    r = fault_read_done(f);
     assertz(r);
 
     /* release thread & fault */
@@ -99,55 +117,185 @@ int kthr_fault_read_done(fault_t* f, unsigned long buf_addr, size_t size)
 int kthr_check_for_completions(struct kthread* k, int max_budget)
 {
     int nfaults_done, ntotal; 
-    ntotal = rmbackend->check_for_completions(k->bkend_chan_id, &kthr_cbs, 
-        max_budget, &nfaults_done, NULL);
+    ntotal = rmbackend->check_for_completions(k->bkend_chan_id, 
+        &kthr_owner_cbs, max_budget, &nfaults_done, NULL);
+    spin_lock(&k->pf_lock);
     assert(k->pf_pending >= nfaults_done);
     k->pf_pending -= nfaults_done;
+    spin_unlock(&k->pf_lock);
     log_debug("handled %d completions on chan %d", ntotal, k->bkend_chan_id);
     return nfaults_done;
+}
+
+/* kthread steal completions. returns the number of stolen READ completions
+ * that are now waiting in the cq_steals_q; write completions are handled 
+ * synchronously as they require minimal work that doesn't require thread-local
+ * state */
+int kthr_steal_completions(struct kthread* owner, int max_budget)
+{
+    struct kthread* stealer;
+    int nfaults_stolen, ntotal;
+
+    /* check completions with stealer callbacks; stealer will have to be much 
+     * faster as we hold the owner thread hostage so we use a much lighter 
+     * callback that just adds completed faults to the queue rather than handle 
+     * them inside it */
+    stealer = myk();
+    assert_spin_lock_held(&stealer->pf_lock);
+    ntotal = rmbackend->check_for_completions(owner->bkend_chan_id, 
+        &kthr_stealer_cbs, max_budget, &nfaults_stolen, NULL);
+
+    /* remove them from owner kthead count, we will add to the stealer 
+     * count in the callback */
+    spin_lock(&owner->pf_lock);
+    assert(owner->pf_pending >= nfaults_stolen);
+    owner->pf_pending -= nfaults_stolen;
+    spin_unlock(&owner->pf_lock);
+    log_debug("handled %d completions on chan %d, stolen %d reads", 
+        ntotal, owner->bkend_chan_id, nfaults_stolen);
+    return nfaults_stolen;
+}
+
+/* kthread run through stolen read completions and finish serving them */
+int kthr_handle_stolen_completed_faults(struct kthread* k)
+{
+    struct fault *fault, *next;
+    int faults_done;
+    
+    /* no need to take the pf_lock as fault_cq_steals_q is never accessed by 
+     * another kthread */
+    faults_done = k->n_cq_steals_q;
+    fault = TAILQ_FIRST(&k->fault_cq_steals_q);
+    while (fault != NULL) {
+        next = TAILQ_NEXT(fault, link);
+        TAILQ_REMOVE(&k->fault_cq_steals_q, fault, link);
+        kthr_fault_read_done(fault);
+        assert(k->n_cq_steals_q > 0);
+        k->n_cq_steals_q--;
+        fault = next;
+    }
+
+    /* accounting */
+    assertz(k->n_cq_steals_q);
+    spin_lock(&k->pf_lock);
+    assert(k->pf_pending >= faults_done);
+    k->pf_pending -= faults_done;
+    spin_unlock(&k->pf_lock);
+    return faults_done;
+}
+
+/**
+ * Fault handling for waiting faults
+ */
+
+/* kthread steal waiting faults. returns the number of stolen READ completions
+ * that are now waiting in the cq_steals_q; write completions are handled 
+ * synchronously as they require minimal work that doesn't require thread-local
+ * state */
+int kthr_steal_waiting_faults(struct kthread* stealer, struct kthread* owner)
+{
+    int avail, nstolen = 0;
+    struct fault *f, *next;
+
+    /* we take owner's pf_lock as necessary but stealer's pf_lock must be 
+     * locked while stealing */
+    assert_spin_lock_held(&stealer->pf_lock);
+
+    /* steal upto half from the wait queue */
+    spin_lock(&owner->pf_lock);
+    avail = div_up(owner->n_wait_q, 2);
+    if (avail > 0) {
+        f = TAILQ_FIRST(&owner->fault_wait_q);
+        while (f != NULL && avail > 0) {
+            next = TAILQ_NEXT(f, link);
+            /* remove from owner's queue */
+            TAILQ_REMOVE(&owner->fault_wait_q, f, link);
+            assert(owner->pf_pending > 0 && owner->n_wait_q > 0);
+            owner->pf_pending--;
+            owner->n_wait_q--;
+            /* add to stealer's queue */
+            TAILQ_INSERT_TAIL(&stealer->fault_wait_q, f, link);
+            stealer->pf_pending++;
+            stealer->n_wait_q++;
+            RSTAT(WAIT_STEALS)++;
+            /* move to next */
+            f = next;
+            avail--;
+            nstolen++;
+        }
+    }
+    spin_unlock(&owner->pf_lock);
+    return nstolen;
+}
+
+/* pop the next waiting fault from the wait queue  */
+static inline struct fault* kthr_pop_next_waiting_fault(struct kthread* k)
+{
+    struct fault* f;
+    spin_lock(&k->pf_lock);
+    f = TAILQ_FIRST(&k->fault_wait_q);
+    if (f != NULL) {
+        TAILQ_REMOVE(&k->fault_wait_q, f, link);
+        assert(k->n_wait_q > 0);
+        k->n_wait_q--;
+    }
+    spin_unlock(&k->pf_lock);
+    return f;
 }
 
 /* kthread run through waiting faults to see if they are ready to go */
 int kthr_handle_waiting_faults(struct kthread* k)
 {
-    struct fault *fault, *next;
-    int nevicts_needed, nevicts = 0, faults_done = 0;  
+    struct fault *fault;
+    int nevicts_needed, nevicts;
+    int nwaiting, ndone = 0;
     enum fault_status fstatus;
-    fault = TAILQ_FIRST(&k->fault_wait_q);
+
+    /* harmless without lock; doesn't have to be correct */
+    nwaiting = k->n_wait_q; 
+
+    /* get the first fault out */
+    fault = kthr_pop_next_waiting_fault(k);
+
     while (fault != NULL) {
-        next = TAILQ_NEXT(fault, link);
+        /* try handling the fault */
         fstatus = handle_page_fault(k->bkend_chan_id, fault, &nevicts_needed, 
-            &kthr_cbs);
+            &kthr_owner_cbs);
         switch (fstatus) {
             case FAULT_DONE:
-                log_debug("%s - done, released from wait", FSTR(fault));
-                TAILQ_REMOVE(&k->fault_wait_q, fault, link);
+                log_debug("%s - released from wait, done", FSTR(fault));
                 kthr_fault_done(fault);
-                k->pf_pending--;
-                assert(k->n_wait_q > 0);
-                k->n_wait_q--;
-                faults_done++;
+                ndone++;
                 break;
             case FAULT_READ_POSTED:
-                log_debug("%s - done, released from wait", FSTR(fault));
-                TAILQ_REMOVE(&k->fault_wait_q, fault, link);
-                assert(k->n_wait_q > 0);
-                k->n_wait_q--;
+                log_debug("%s - released from wait, posted read", FSTR(fault));
                 if (nevicts_needed > 0) {
                     nevicts = 0;
                     while(nevicts < nevicts_needed)
-                        nevicts += do_eviction(k->bkend_chan_id, &kthr_cbs, 
+                        nevicts += do_eviction(k->bkend_chan_id, &kthr_owner_cbs, 
                             min(nevicts_needed, EVICTION_MAX_BATCH_SIZE));
-                    /* TODO: shall we break after one eviction or continue? */
                 }
                 break;
             case FAULT_AGAIN:
+                /* fault not ready to handle, add it back to tail */
                 log_debug("%s - not released from wait", FSTR(fault));
+                spin_lock(&k->pf_lock);
+                TAILQ_INSERT_TAIL(&k->fault_wait_q, fault, link);
+                k->n_wait_q++;
+                RSTAT(WAIT_RETRIES)++;
+                spin_unlock(&k->pf_lock);
                 break;
         }
-        fault = next;
+
+        nwaiting--;
+        if (nwaiting == 0)
+            break;
+
+        /* get next fault */
+        fault = kthr_pop_next_waiting_fault(k);
     }
-    return faults_done;
+
+    return ndone;
 }
 
 /**
@@ -166,10 +314,8 @@ void kthr_send_fault_to_scheduler(void* address, bool write, int rdahead)
     int nevicts_needed = 0, nevicts = 0;
     enum fault_status fstatus;
 
-    /* disable preempt and get fault lock. If we're spending too much time 
-     * getting this lock, we may have to do more fine-grained locking */
+    /* disable preempt */
     k = getk();
-    spin_lock(&k->pf_lock);
 
     /* alloc fault object */
     page = ((unsigned long) address) & ~CHUNK_MASK;
@@ -200,17 +346,19 @@ void kthr_send_fault_to_scheduler(void* address, bool write, int rdahead)
     fault->mr = mr;
 
     /* start handling fault */
-    fstatus = handle_page_fault(k->bkend_chan_id, fault, &nevicts_needed, &kthr_cbs);
+    fstatus = handle_page_fault(k->bkend_chan_id, fault, &nevicts_needed, 
+        &kthr_owner_cbs);
     switch (fstatus) {
         case FAULT_DONE:
             fault_done(fault);
-            spin_unlock(&k->pf_lock);
             putk();
             return;
         case FAULT_AGAIN:
             /* add to wait and yield to run another thread */
+            spin_lock(&k->pf_lock);
             TAILQ_INSERT_TAIL(&k->fault_wait_q, fault, link);
             k->n_wait_q++;
+            spin_unlock(&k->pf_lock);
             log_debug("%s - added to wait", FSTR(fault));
             goto yield_thread_and_wait;
             break;
@@ -225,10 +373,11 @@ void kthr_send_fault_to_scheduler(void* address, bool write, int rdahead)
 eviction:
     /* start eviction; evict only as much as necessary on shenango cores */
     while(nevicts < nevicts_needed)
-        nevicts += do_eviction(k->bkend_chan_id, &kthr_cbs, 
+        nevicts += do_eviction(k->bkend_chan_id, &kthr_owner_cbs, 
             min(nevicts_needed - nevicts, EVICTION_MAX_BATCH_SIZE));
 
 yield_thread_and_wait:
+    spin_lock(&k->pf_lock);
     k->pf_pending++;
     thread_park_and_unlock_np(&k->pf_lock); /* yield */
 
@@ -237,8 +386,14 @@ yield_thread_and_wait:
     assert(!__is_fault_pending(address, write));
 }
 
-/* kthread backend read/write completion ops */
-struct completion_cbs kthr_cbs = {
+/* kthread backend read/write completion ops for owner thread */
+struct bkend_completion_cbs kthr_owner_cbs = {
     .read_completion = kthr_fault_read_done,
+    .write_completion = write_back_completed
+};
+
+/* kthread backend read/write completion ops for stealer thread */
+struct bkend_completion_cbs kthr_stealer_cbs = {
+    .read_completion = kthr_fault_read_steal_done,
     .write_completion = write_back_completed
 };

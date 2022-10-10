@@ -122,7 +122,7 @@ int local_post_write(int chan_id, struct region_t* mr, unsigned long addr,
 }
 
 /* backend check for read & write completions on a channel */
-int local_check_cq(int chan_id, struct completion_cbs* cbs, int max_cqe, 
+int local_check_cq(int chan_id, struct bkend_completion_cbs* cbs, int max_cqe, 
     int* nread, int* nwrite)
 {
     BUG();  /* not supported yet */

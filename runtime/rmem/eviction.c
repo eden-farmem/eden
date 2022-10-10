@@ -209,7 +209,7 @@ bool needs_write_back(pflags_t flags)
 
 /* write-back a region of pages to the backend */
 static unsigned int write_pages_to_backend(int chan_id, struct region_t *mr, 
-    unsigned long addr, int nchunks, struct completion_cbs* cbs) 
+    unsigned long addr, int nchunks, struct bkend_completion_cbs* cbs) 
 {
     int r, n_retries, ncompletions = 0;    
     log_debug("writing back contiguous region at [%lx, %d)", addr, nchunks);
@@ -245,7 +245,7 @@ static unsigned int write_pages_to_backend(int chan_id, struct region_t *mr,
  * monitored for completions */
 static bool flush_pages(int chan_id, struct region_t *mr, 
     unsigned long base_addr, int nchunks, pflags_t* pflags, 
-    bitmap_ptr write_map, bool remove, struct completion_cbs* cbs)
+    bitmap_ptr write_map, bool remove, struct bkend_completion_cbs* cbs)
 {
     int i, r;
     pflags_t flags;
@@ -323,7 +323,7 @@ int write_back_completed(struct region_t* mr, unsigned long addr, size_t size)
 /**
  * Main function for eviction. Returns number of pages evicted.
  */
-int do_eviction(int chan_id, struct completion_cbs* cbs, int max_batch_size) 
+int do_eviction(int chan_id, struct bkend_completion_cbs* cbs, int max_batch_size) 
 {
     unsigned long base_addr, new_base_addr, addr, size;
     pflags_t oldflags;

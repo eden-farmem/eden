@@ -22,7 +22,7 @@ typedef enum {
 #define RMEM_BACKEND_DEFAULT    1
 #define RMEM_SLAB_SIZE          (128 * 1024L)
 #define RMEM_MAX_CHANNELS       32
-#define RMEM_MAX_CHUNKS_PER_OP  5
+#define RMEM_MAX_CHUNKS_PER_OP  4
 #define RMEM_MAX_COMP_PER_OP    16
 
 /********* Cluster *******************************************/
@@ -113,7 +113,7 @@ BUILD_ASSERT(EVICTION_MAX_BATCH_SIZE <= RMEM_MAX_CHUNKS_PER_OP);
 #define FAULT_MAX_RDAHEAD_SIZE      1
 BUILD_ASSERT((1 + FAULT_MAX_RDAHEAD_SIZE) <= RMEM_MAX_CHUNKS_PER_OP);
 
-/* Region settings */
-#define RMEM_MAX_REGIONS    10
+/* Region settings  */
+#define RMEM_MAX_REGIONS            1
 
 #endif  // __CONFIG_H__

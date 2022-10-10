@@ -26,10 +26,10 @@
 __thread struct hthread *my_hthr = NULL;
 
 /* handler fault after fetched pages are ready */
-int hthr_fault_read_done(fault_t* f, unsigned long buf_addr, size_t size)
+int hthr_fault_read_done(fault_t* f)
 {
     int r;
-    r = fault_read_done(f, buf_addr, size);
+    r = fault_read_done(f);
     assertz(r);
 
     /* release fault */
@@ -164,7 +164,7 @@ static void* rmem_handler(void *arg)
     assert(arg != NULL);        /* expecting a hthread_t */
     my_hthr = (hthread_t*) arg; /* save our hthread_t */
 
-    static struct completion_cbs hthr_cbs = {
+    static struct bkend_completion_cbs hthr_cbs = {
         .read_completion = hthr_fault_read_done,
         .write_completion = write_back_completed
     };
@@ -173,6 +173,7 @@ static void* rmem_handler(void *arg)
     r = thread_init_perthread();    /* for tcache support */
 	assertz(r);
     fault_tcache_init_thread();
+    bkend_buf_tcache_init_thread();
     zero_page_init_thread();
     dne_q_init_thread();
     TAILQ_INIT(&my_hthr->fault_wait_q);

@@ -29,6 +29,7 @@ struct request;
 struct context {
     struct ibv_context *ctx;
     struct ibv_pd *pd;
+    struct ibv_mr *bkend_buf_pool_mr;
     struct ibv_cq *cq_recv;
     struct ibv_cq *cq_send;
     struct ibv_comp_channel *cc;
@@ -66,11 +67,7 @@ struct connection {
     struct message *recv_msg;
     struct message *send_msg;
 
-    /* memory buf for read/write (only for datapath qps) */
-    void *read_buf;
-    void *write_buf;
-    struct ibv_mr *read_mr;
-    struct ibv_mr *write_mr;
+    /* requests for read/write (only for datapath qps) */
     struct request *read_reqs;
     struct request *write_reqs;
     volatile int read_req_idx;

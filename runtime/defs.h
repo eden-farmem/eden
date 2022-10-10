@@ -310,8 +310,10 @@ struct kthread {
 	unsigned int 		pf_pending;
 	unsigned int		bkend_chan_id;
     struct fault_wait_q_head fault_wait_q;
+    struct fault_wait_q_head fault_cq_steals_q;
     unsigned int 		n_wait_q;
-	unsigned int		pad3[6];
+    unsigned int 		n_cq_steals_q;
+	unsigned int		pad3;
 
 	/* 10th cache-line, statistics counters */
 	uint64_t		stats[STAT_NR];
@@ -396,7 +398,7 @@ static inline uint64_t* my_rstats() {
    	if (my_hthr != NULL)   	return my_hthr->rstats;
     else if (myk() != NULL)	return myk()->rstats;
     else                   	BUG();
-} 
+}
 #define RSTAT(counter) (my_rstats()[RSTAT_ ## counter])
 
 /*
@@ -526,8 +528,12 @@ extern void thread_yield_kthread();
 extern void join_kthread(struct kthread *k);
 
 /* kthread fault handling helpers */
-extern struct completion_cbs kthr_cbs;
+extern struct bkend_completion_cbs kthr_owner_cbs;
+extern struct bkend_completion_cbs kthr_stealer_cbs;
 int kthr_fault_done(fault_t* f);
-int kthr_fault_read_done(fault_t* f, unsigned long buf_addr, size_t size);
+int kthr_fault_read_done(fault_t* f);
 int kthr_check_for_completions(struct kthread* k, int max_budget);
+int kthr_steal_completions(struct kthread* owner, int max_budget);
+int kthr_handle_stolen_completed_faults(struct kthread* k);
+int kthr_steal_waiting_faults(struct kthread* stealer, struct kthread* owner);
 int kthr_handle_waiting_faults(struct kthread* k);

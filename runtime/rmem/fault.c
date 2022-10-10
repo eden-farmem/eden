@@ -116,7 +116,7 @@ bool is_fault_serviced(fault_t* f)
 
 /* after receiving page fault */
 enum fault_status handle_page_fault(int chan_id, fault_t* fault, 
-    int* nevicts_needed, struct completion_cbs* cbs)
+    int* nevicts_needed, struct bkend_completion_cbs* cbs)
 {
     pflags_t pflags, oldflags;
     pflags_t flags[FAULT_MAX_RDAHEAD_SIZE+1];
@@ -260,19 +260,24 @@ enum fault_status handle_page_fault(int chan_id, fault_t* fault,
 }
 
 /* after reading the pages for a fault completed */
-int fault_read_done(fault_t* f, unsigned long buf_addr, size_t size)
+int fault_read_done(fault_t* f)
 {
     int n_retries, r;
     bool wrprotect, no_wake;
-    assert(size == (1 + f->rdahead) * CHUNK_SIZE);
+    size_t size;
 
     /* uffd copy the page back */
+    assert(f->bkend_buf);
     wrprotect = !f->is_write;
     no_wake = !f->from_kernel;
-    r = uffd_copy(userfault_fd, f->page, buf_addr, size, wrprotect, no_wake, 
-        true, &n_retries);
+    size = (1 + f->rdahead) * CHUNK_SIZE;
+    r = uffd_copy(userfault_fd, f->page, (unsigned long) f->bkend_buf, size, 
+        wrprotect, no_wake, true, &n_retries);
     assertz(r);
     RSTAT(UFFD_RETRIES) += n_retries;
+
+    /* free backend buffer */
+    bkend_buf_free(f->bkend_buf);
 
     /* set page flags */
     pflags_t flags = PFLAG_PRESENT;

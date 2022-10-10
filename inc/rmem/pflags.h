@@ -19,7 +19,7 @@ enum {
     UNUSED_1,
     PAGE_FLAGS_NUM
 };
-BUILD_ASSERT(!(PAGE_FLAGS_NUM & (PAGE_FLAGS_NUM - 1))); /*power of 2*/
+BUILD_ASSERT(is_power_of_two(PAGE_FLAGS_NUM));
 BUILD_ASSERT(sizeof(pflags_t) * 8 == PAGE_FLAGS_NUM);
 
 #define PFLAG_REGISTERED    (1u << PSHIFT_REGISTERED)

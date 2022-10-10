@@ -33,10 +33,12 @@ typedef struct fault {
     uint8_t rdahead;            /* actual read-ahead locked for this fault */
     int8_t posted_chan_id;
 
+    /* associated resources */
     unsigned long page;
     struct region_t* mr;
     thread_t* thread;
-    uint64_t pad[2];
+    void* bkend_buf;
+    uint64_t pad[1];
 
     TAILQ_ENTRY(fault) link;
 } fault_t;
@@ -62,22 +64,25 @@ DECLARE_PERTHREAD(struct tcache_perthread, fault_pt);
 
 /* inits */
 int fault_tcache_init(); 
-int fault_tcache_init_thread();
+void fault_tcache_init_thread();
 
 /* fault_alloc - allocates a fault object */
-static inline fault_t *fault_alloc(void) {
+static inline fault_t *fault_alloc(void)
+{
     return tcache_alloc(&perthread_get(fault_pt));
 }
 
 /* fault_free - frees a fault */
-static inline void fault_free(struct fault *f) {
+static inline void fault_free(struct fault *f)
+{
     tcache_free(&perthread_get(fault_pt), (void *)f);
 }
 
 /*
  * Fault request utils
  */
-static inline void fault_upgrade_to_write(fault_t* f, const char* reason) {
+static inline void fault_upgrade_to_write(fault_t* f, const char* reason)
+{
     f->is_read = f->is_wrprotect = false;
     f->is_write = true;
     log_debug("%s - upgraded to WRITE. Reason: %s", FSTR(f), reason);
@@ -116,10 +121,10 @@ enum fault_status {
     FAULT_READ_POSTED
 };
 
-struct completion_cbs;
+struct bkend_completion_cbs;
 enum fault_status handle_page_fault(int chan_id, fault_t* fault, int* nevicts, 
-    struct completion_cbs* cbs);
-int fault_read_done(fault_t* f, unsigned long buf_addr, size_t size);
+    struct bkend_completion_cbs* cbs);
+int fault_read_done(fault_t* f);
 void fault_done(fault_t* fault);
 
 /**

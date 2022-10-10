@@ -142,7 +142,51 @@ static void drain_overflow(struct kthread *l)
 	}
 }
 
-static bool steal_work(struct kthread *l, struct kthread *r)
+/* do the remote memory work in the scheduler; returns true if there are threads 
+ * whose remote memory needs are handled and are ready to run */
+static inline bool do_remote_memory_work(struct kthread *k)
+{
+	int nready;
+
+	/* we must be out of work to get here */
+	assert(k->rq_head == k->rq_tail);
+
+	/* currently, kthread holds a lock the entire time it is in the scheduler
+	 * runtime but we should release the big lock during remote memory work as 
+	 * it may take significant amount of time and hurt work stealing by other 
+	 * kthreads. we will protect remote memory data structures with a different 
+	 * lock (pf_lock) in a more fine-grained manner */
+	assert_spin_lock_held(&k->lock);
+	spin_unlock(&k->lock);
+
+	/* check on stolen/owned completions and waiting faults, in that order */
+	nready = 0;
+	if (k->n_cq_steals_q > 0)
+		nready += kthr_handle_stolen_completed_faults(k);
+	nready += kthr_check_for_completions(k, RMEM_MAX_COMP_PER_OP);
+	nready += kthr_handle_waiting_faults(k);
+
+	/* re-take the big lock and check the ready queue once more */
+	spin_lock(&k->lock);
+	assert(nready == (k->rq_head != k->rq_tail));
+
+	return (nready > 0);
+}
+
+/* steal remote memory completions and waiting fault from other threads */
+static inline bool steal_remote_memory_work(struct kthread *l, struct kthread *r)
+{
+	int nstolen = 0;
+	assert(!spin_lock_held(&l->pf_lock));
+	spin_lock(&l->pf_lock);
+	nstolen += kthr_steal_completions(r, RMEM_MAX_COMP_PER_OP);
+	nstolen += kthr_steal_waiting_faults(l, r);
+	spin_unlock(&l->pf_lock);
+	return (nstolen > 0);
+}
+
+/* steal ready threads and softirqs from other threads */
+static inline bool steal_other_work(struct kthread *l, struct kthread *r)
 {
 	thread_t *th;
 	uint32_t i, avail, rq_tail;
@@ -185,44 +229,6 @@ static bool steal_work(struct kthread *l, struct kthread *r)
 		goto done;
 	}
 
-#if defined (REMOTE_MEMORY) && defined(FAULT_HINTS2)
-	int nthr_ready;
-	struct fault *fault, *next;
-	
-	/* steal completed and waiting faults */
-	if (spin_try_lock(&r->pf_lock)) {
-		nthr_ready = kthr_check_for_completions(r, RMEM_MAX_COMP_PER_OP);
-		if (nthr_ready > 0) {
-			/* we added some completed threads to our ready queue */
-			RSTAT(READY_STEALS) += nthr_ready;
-			spin_unlock(&r->pf_lock);
-			return true;
-		}
-
-		/* otherwise, steal half from the wait queue */
-		avail = div_up(r->n_wait_q, 2);
-		if (avail > 0) {
-			fault = TAILQ_FIRST(&r->fault_wait_q);
-			while (fault != NULL && avail > 0) {
-				next = TAILQ_NEXT(fault, link);
-				TAILQ_REMOVE(&r->fault_wait_q, fault, link);
-				assert(r->pf_pending > 0 && r->n_wait_q > 0);
-				r->pf_pending--;
-				r->n_wait_q--;
-				TAILQ_INSERT_TAIL(&l->fault_wait_q, fault, link);
-				l->pf_pending++;
-				l->n_wait_q++;
-				RSTAT(WAIT_STEALS)++;
-				fault = next;
-				avail--;
-			}		
-			spin_unlock(&r->pf_lock);
-			return false;
-		}
-		spin_unlock(&r->pf_lock);
-	}
-#endif
-
 	/* check for softirqs */
 	th = softirq_run_thread(r, RUNTIME_SOFTIRQ_BUDGET);
 	if (th) {
@@ -242,6 +248,25 @@ done:
 
 	spin_unlock(&r->lock);
 	return th != NULL;
+}
+
+/* steal work from other threads */
+static bool steal_work(struct kthread *l, struct kthread *r)
+{
+#if defined (REMOTE_MEMORY) && defined(FAULT_HINTS)
+	/* steal remote memory work first */
+	if (steal_remote_memory_work(l ,r))
+		/* handle stolen completions immediately so we don't run out of 
+		 * bkend_bufs */
+		if (do_remote_memory_work(l))
+			return true;
+#endif
+		
+	/* then steal other work */
+	if (steal_other_work(l, r))
+		return true;
+	
+	return false;
 }
 
 static __noinline struct thread *do_watchdog(struct kthread *l)
@@ -317,14 +342,8 @@ again:
 
 	/* then handle remote memory */
 #if defined (REMOTE_MEMORY) && defined(FAULT_HINTS)
-	int nthr_ready = 0;
-	spin_lock(&l->pf_lock);
-	nthr_ready += kthr_check_for_completions(l, RMEM_MAX_COMP_PER_OP);
-	nthr_ready += kthr_handle_waiting_faults(l);
-	spin_unlock(&l->pf_lock);
-	if (nthr_ready > 0)
-		/* we now have some completed threads to our ready queue */
-		goto done;
+	if(do_remote_memory_work(l))
+		return true;
 #endif
 
 	/* then check for local softirqs */

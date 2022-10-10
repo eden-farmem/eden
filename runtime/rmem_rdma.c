@@ -24,13 +24,6 @@
 #define CQ_SEND_SIZE            MAX_REQS_PER_CHAN
 #define DATAPATH_CQ_SIZE        MAX_REQS_PER_CHAN
 
-/* memory buf size */
-#define BUF_ENTRY_SIZE      (CHUNK_SIZE * RMEM_MAX_CHUNKS_PER_OP)
-#define READ_BUF_SIZE       (BUF_ENTRY_SIZE * MAX_R_REQS_PER_CONN_CHAN)
-#define WRITE_BUF_SIZE      (BUF_ENTRY_SIZE * MAX_W_REQS_PER_CONN_CHAN)
-BUILD_ASSERT(READ_BUF_SIZE >= CHUNK_SIZE);
-BUILD_ASSERT(WRITE_BUF_SIZE >= CHUNK_SIZE);
-
 /* global state */
 struct server_conn_t* servers[MAX_SERVERS + 1];
 SLIST_HEAD(servers_listhead, server_conn_t);
@@ -188,20 +181,6 @@ void create_register_memory_buf(struct connection *conn)
 
     /* read/write bufs (only required for datapath qps) */
     if (conn->datapath) {
-        conn->read_buf = aligned_alloc(CHUNK_SIZE, READ_BUF_SIZE);
-        assert(conn->read_buf);
-
-        conn->write_buf = aligned_alloc(CHUNK_SIZE, WRITE_BUF_SIZE);
-        assert(conn->write_buf);
-
-        conn->read_mr = ibv_reg_mr(global_ctx->pd, conn->read_buf, 
-            READ_BUF_SIZE, IBV_ACCESS_LOCAL_WRITE);
-        assert(conn->read_mr);
-
-        conn->write_mr = ibv_reg_mr(global_ctx->pd, conn->write_buf, 
-            WRITE_BUF_SIZE, IBV_ACCESS_LOCAL_WRITE);
-        assert(conn->write_mr);
-
         size = MAX_R_REQS_PER_CONN_CHAN * sizeof(request_t);
         conn->read_reqs = aligned_alloc(CACHE_LINE_SIZE, size);
         assert(conn->read_reqs);
@@ -222,6 +201,9 @@ void create_register_memory_buf(struct connection *conn)
 void build_global_context(struct ibv_context *verbs)
 {
     int i;
+    void* region;
+    size_t len;
+
     if (global_ctx) {
         assert(global_ctx->ctx == verbs);
         return;
@@ -235,6 +217,12 @@ void build_global_context(struct ibv_context *verbs)
     /* create pd (to be used for all qps) */
     global_ctx->pd = ibv_alloc_pd(global_ctx->ctx);
 	assert(global_ctx->pd);
+
+    /* for RDMA, we need to register backend buffer pool */
+    bkend_buf_get_backing_region(&region, &len);
+    global_ctx->bkend_buf_pool_mr = ibv_reg_mr(global_ctx->pd, region, len, 
+        IBV_ACCESS_LOCAL_WRITE);
+    assert(global_ctx->bkend_buf_pool_mr);
 
     /* create shared cqs */
    	global_ctx->cc = ibv_create_comp_channel(global_ctx->ctx);
@@ -546,20 +534,22 @@ int connect2rcntrl(const char *ip, int port) {
 /***************** backend supported ops *****************************/
 
 /* backend init */
-int rdma_init() {
-    int i;
+int rdma_init()
+{
+    int i, ret, rcntrl_port;
+    char *rcntrl_ip, *rcntrl_port_str;
 
     /* parse remote controller info */
     log_info("setting up RDMA backend for remote memory");
-    char *rcntrl_ip = getenv("RDMA_RACK_CNTRL_IP" /*RCNTRL_ENV_IP*/);
-    char *rcntrl_port_str = getenv("RDMA_RACK_CNTRL_PORT" /*RCNTRL_ENV_PORT*/);
+    rcntrl_ip = getenv("RDMA_RACK_CNTRL_IP" /*RCNTRL_ENV_IP*/);
+    rcntrl_port_str = getenv("RDMA_RACK_CNTRL_PORT" /*RCNTRL_ENV_PORT*/);
 
     if (rcntrl_ip == NULL) {
         rcntrl_ip = malloc(sizeof(RDMA_RACK_CNTRL_IP));
         assert(rcntrl_ip != NULL);
         strcpy(rcntrl_ip, RDMA_RACK_CNTRL_IP);
     }
-    int rcntrl_port = RDMA_RACK_CNTRL_PORT;
+    rcntrl_port = RDMA_RACK_CNTRL_PORT;
     if (rcntrl_port_str != NULL)
         rcntrl_port = atoi(rcntrl_port_str);
     assert(rcntrl_port > 0);
@@ -574,7 +564,7 @@ int rdma_init() {
 
     /* connect to rcntrl and a memory server */
     SLIST_INIT(&servers_list);
-    int ret = connect2rcntrl(rcntrl_ip, rcntrl_port);
+    ret = connect2rcntrl(rcntrl_ip, rcntrl_port);
     return ret;
 }
 
@@ -614,11 +604,13 @@ int rdma_free_region(struct region_t *reg) {
 int rdma_post_read(int chan_id, fault_t* f) 
 {
     struct connection *conn;
-    unsigned long remote_addr, local_addr;
+    unsigned long remote_addr;
+    void* local_addr;
     size_t size;
     int req_id;
     
     /* get connection */
+    log_debug("%s - posting read", FSTR(f));
     assert(chan_id >= 0 && chan_id < nchans_bkend);
     conn = &(f->mr->server->dp[chan_id]);
     assert(conn->datapath);
@@ -630,20 +622,22 @@ int rdma_post_read(int chan_id, fault_t* f)
         /* all slots busy, try again */
         return EAGAIN;
 
-    /* infer addrs */
+    /* infer regions */
     remote_addr = f->mr->remote_addr + (f->page - f->mr->addr);
-    local_addr = (unsigned long)conn->read_buf + BUF_ENTRY_SIZE * req_id;
+    local_addr = bkend_buf_alloc();
+    BUG_ON(local_addr == NULL);     /* not enough bufs */
+    f->bkend_buf = local_addr;
     size = CHUNK_SIZE * (1 + f->rdahead);
-    assert(size <= BUF_ENTRY_SIZE);
+    assert(size <= BACKEND_BUF_SIZE);
 
     /* take this slot */
     log_debug("%s - read request available index=%d", FSTR(f), req_id);
     conn->read_reqs[req_id].busy = 1;
     conn->read_reqs[req_id].index = req_id;
-    conn->read_reqs[req_id].local_addr = local_addr;
+    conn->read_reqs[req_id].local_addr = (unsigned long) local_addr;
     conn->read_reqs[req_id].orig_local_addr = f->page;
     conn->read_reqs[req_id].remote_addr = remote_addr;
-    conn->read_reqs[req_id].lkey = conn->read_mr->lkey;
+    conn->read_reqs[req_id].lkey = global_ctx->bkend_buf_pool_mr->lkey;
     conn->read_reqs[req_id].rkey = conn->server->rdmakey;
     conn->read_reqs[req_id].size = size;
     conn->read_reqs[req_id].mode = M_READ;
@@ -651,8 +645,8 @@ int rdma_post_read(int chan_id, fault_t* f)
     conn->read_reqs[req_id].fault = f;
 
     /* post read */
-    log_debug("%s - READ remote_addr %lx into local_addr %lx, size %lu", FSTR(f), 
-        remote_addr, f->page, size);
+    log_debug("%s - READ remote_addr %lx into local_addr %p, size %lu", FSTR(f), 
+        remote_addr, local_addr, size);
     do_rdma_op(&conn->read_reqs[req_id], true);
 
     /* increment req_id */
@@ -670,7 +664,8 @@ int rdma_post_write(int chan_id, struct region_t* mr, unsigned long addr,
     size_t size) 
 {
     struct connection *conn;
-    unsigned long remote_addr, local_addr;
+    unsigned long remote_addr;
+    void* local_addr;
     int req_id;
     
     /* get connection */
@@ -685,29 +680,30 @@ int rdma_post_write(int chan_id, struct region_t* mr, unsigned long addr,
         /* all slots busy, try again */
         return EAGAIN;
 
-    /* infer addrs */
+    /* infer regions */
     remote_addr = mr->remote_addr + (addr - mr->addr);
-    local_addr = (unsigned long) conn->read_buf + BUF_ENTRY_SIZE * req_id;
-    assert(size <= BUF_ENTRY_SIZE);
+    local_addr = bkend_buf_alloc();
+    BUG_ON(local_addr == NULL);     /* not enough bufs */
 
     /* take this slot */
     log_debug("write request available addr=%lx index=%d", addr, req_id);
     conn->write_reqs[req_id].busy = 1;
     conn->write_reqs[req_id].index = req_id;
-    conn->write_reqs[req_id].local_addr = local_addr;
+    conn->write_reqs[req_id].local_addr = (unsigned long) local_addr;
     conn->write_reqs[req_id].orig_local_addr = addr;
     conn->write_reqs[req_id].remote_addr = remote_addr;
-    conn->write_reqs[req_id].lkey = conn->write_mr->lkey;
+    conn->write_reqs[req_id].lkey = global_ctx->bkend_buf_pool_mr->lkey;
     conn->write_reqs[req_id].rkey = conn->server->rdmakey;
     conn->write_reqs[req_id].size = size;
     conn->write_reqs[req_id].mode = M_WRITE;
     conn->write_reqs[req_id].conn = conn;
 
     /* copy page into rdma-registered local buf */
-    memcpy((void *)local_addr, (void *)addr, size);
+    assert(size <= BACKEND_BUF_SIZE);
+    memcpy(local_addr, (void *)addr, size);
 
     /* post write */
-    log_debug("WRITE remote_addr %lx from local_addr %lx, size %lu", 
+    log_debug("WRITE remote_addr %lx from local_addr %p, size %lu", 
         remote_addr, local_addr, size);
     do_rdma_op(&conn->write_reqs[req_id], true);
 
@@ -722,7 +718,7 @@ int rdma_post_write(int chan_id, struct region_t* mr, unsigned long addr,
 }
 
 /* backend check for read & write completions on a channel */
-int rdma_check_cq(int chan_id, struct completion_cbs* cbs, int max_cqe, 
+int rdma_check_cq(int chan_id, struct bkend_completion_cbs* cbs, int max_cqe, 
     int* nread, int* nwrite)
 {
     struct request* req;
@@ -738,7 +734,8 @@ int rdma_check_cq(int chan_id, struct completion_cbs* cbs, int max_cqe,
     /* get CQ to poll */
     cq = global_ctx->dp_cq[chan_id];
 
-    /* poll */
+    /* poll cq (ibv_* operations are thread-safe making this function 
+     * thread-safe for each channel) */
     ncqe = ibv_poll_cq(cq, max_cqe, wc);
     for (i = 0; i < ncqe; i++) {
         /* check status */
@@ -754,21 +751,24 @@ int rdma_check_cq(int chan_id, struct completion_cbs* cbs, int max_cqe,
         if ((opcode & IBV_WC_RECV) || (opcode & IBV_WC_SEND)) {
             /* not expecting any send/recv traffic on datapath */
             BUG();
-        } else if (opcode == IBV_WC_RDMA_READ) {
+        }
+        else if (opcode == IBV_WC_RDMA_READ) {
             /* handle read completion */
             req = (struct request*)(uintptr_t) wc[i].wr_id;
-            assert(req && req->fault);
+            assert(req && req->fault && req->fault->bkend_buf);
+            assert(req->size == (1 + req->fault->rdahead) * CHUNK_SIZE);
             log_debug("%s - RDMA READ completed successfully", FSTR(req->fault));
            
             /* call completion hook */
-            r = cbs->read_completion(req->fault, req->local_addr, req->size);
+            r = cbs->read_completion(req->fault);
             assertz(r);
 
             /* release request slot */
             req->busy = 0;
             RSTAT(NET_READ)++;
             if (nread)  (*nread)++;
-        } else {
+        }
+        else {
             /* handle write completion */
             assert(opcode == IBV_WC_RDMA_WRITE);
             req = (struct request*)(uintptr_t) wc[i].wr_id;
@@ -779,7 +779,7 @@ int rdma_check_cq(int chan_id, struct completion_cbs* cbs, int max_cqe,
 
             /* call completion hook */
             r = cbs->write_completion(req->conn->server->reg, 
-                req->orig_local_addr, req->size);
+                    req->orig_local_addr, req->size);
             assertz(r);
 
             /* release request slot */

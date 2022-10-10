@@ -71,10 +71,9 @@ static const struct tcache_ops fault_tcache_ops = {
  * fault_init_thread - inits per-thread tcache for fault objects
  * Returns 0 (always successful).
  */
-int fault_tcache_init_thread(void)
+void fault_tcache_init_thread(void)
 {
 	tcache_init_perthread(fault_tcache, &perthread_get(fault_pt));
-	return 0;
 }
 
 /**
