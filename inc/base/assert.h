@@ -5,6 +5,7 @@
 #pragma once
 
 #include <base/types.h>
+#include <assert.h>
 
 extern void logk_bug(bool fatal, const char *expr,
 		     const char *file, int line, const char *func);
@@ -20,8 +21,9 @@ extern void logk_bug(bool fatal, const char *expr,
 #endif /* __CHECKER__ */
 
 /* these assertions will get compiled out in release builds (fails on false) */
-#undef assert	/*to suprress the compiler warnings*/
-#if defined(DEBUG) || defined(SAFEMODE)
+// #undef assert	/*to suprress the compiler warnings*/
+#if defined(DEBUG)
+#undef assert
 #define assert(cond)						\
         do {							\
 		__build_assert_if_constant(cond);		\
@@ -31,16 +33,19 @@ extern void logk_bug(bool fatal, const char *expr,
 			__builtin_unreachable();		\
 		}						\
         } while (0)
-#else /* DEBUG */
-/* FIXME: this doesn't evaluate the expression at all so don't statements that needs 
- * to be part of control flow as expressions! */
+#elif defined(SAFEMODE)
+/* keep original assert */
+#else /* no DEBUG or SAFEMODE */
+#undef assert
+/* FIXME: this doesn't evaluate the expression at all so don't use statements 
+ * that needs to be part of control flow as expressions! */
 #define assert(cond)						\
 	do {									\
 		__build_assert_if_constant(cond);	\
 		(void)sizeof(cond);					\
 	} while (0)
 #endif /* DEBUG */
-#define assertz(x) assert(((x)==0))
+#define assertz(x) assert(!(x))
 
 /**
  * BUG - a fatal code-path that doesn't compile out in release builds

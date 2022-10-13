@@ -183,12 +183,16 @@ void *mem_map_shm(mem_key_t key, void *base, size_t len, size_t pgsize,
 		flags |= IPC_EXCL;
 
 	shmid = shmget(key, len, flags);
-	if (shmid == -1)
+	if (shmid == -1) {
+		log_warn("shmget failed. errno: %d", errno);
 		return MAP_FAILED;
+	}
 
 	addr = shmat(shmid, base, 0);
-	if (addr == MAP_FAILED)
+	if (addr == MAP_FAILED) {
+		log_warn("shmat failed. errno: %d", errno);
 		return MAP_FAILED;
+	}
 
 	touch_mapping(addr, len, pgsize);
 	return addr;

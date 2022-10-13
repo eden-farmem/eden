@@ -8,7 +8,6 @@
 
 #include <stdatomic.h>
 #include <sys/mman.h>
-#include <sys/queue.h>
 
 #include "base/cpu.h"
 #include "base/log.h"

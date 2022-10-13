@@ -10,6 +10,7 @@
 #include <sys/mman.h>
 #include <unistd.h>
 
+#include "base/list.h"
 #include "rmem/backend.h"
 #include "rmem/fault.h"
 #include "rmem/pflags.h"
@@ -22,24 +23,26 @@
 __thread void* zero_page = NULL;
 __thread char fstr[__FAULT_STR_LEN];
 
-__thread struct dne_fifo_head dne_q;
+__thread struct list_head dne_q;
 __thread unsigned int n_dne_fifo;
 __thread dne_q_item_t dne_q_items[DNE_QUEUE_SIZE];
 
 __thread unsigned int n_wait_q;
-__thread struct fault_wait_q_head fault_wait_q;
+__thread struct list_head fault_wait_q;
 
 /**
  * Per-thread zero page support
  */
 
-void zero_page_init_thread() {
+void zero_page_init_thread()
+{
     zero_page = aligned_alloc(CHUNK_SIZE, CHUNK_SIZE);
     assert(zero_page);
     memset(zero_page, 0, CHUNK_SIZE);
 }
 
-void zero_page_free_thread() {
+void zero_page_free_thread()
+{
     assert(zero_page);
     free(zero_page);
 }
@@ -49,12 +52,14 @@ void zero_page_free_thread() {
  * Keeps recently fetched pages for a while before leaving then open for 
  * eviction */
 
-void dne_q_init_thread() {
-    TAILQ_INIT(&dne_q);
+void dne_q_init_thread()
+{
+    list_head_init(&dne_q);
     n_dne_fifo = 0;
 }
 
-void dne_q_free_thread() {
+void dne_q_free_thread()
+{
     /* nothing to do */
 }
 
@@ -64,9 +69,7 @@ void dne_on_new_fault(struct region_t *mr, unsigned long addr)
     dne_q_item_t *q_item = NULL;
     if (n_dne_fifo >= DNE_QUEUE_SIZE) {
         // Queue is full. Remove oldest entry from head
-        q_item = TAILQ_FIRST(&dne_q);
-        TAILQ_REMOVE(&dne_q, q_item, link);
-
+        q_item = list_pop(&dne_q, dne_q_item_t, link);
         log_debug("DNE FIFO pop and clearing DNE flag: %lx", q_item->addr);
         clear_page_flags(q_item->mr, q_item->addr, PFLAG_NOEVICT, &oldflags);
     } else {
@@ -82,7 +85,7 @@ void dne_on_new_fault(struct region_t *mr, unsigned long addr)
 
     // Actually add q_item to tail of queue
     log_debug("DNE FIFO push: %lx", q_item->addr);
-    TAILQ_INSERT_TAIL(&dne_q, q_item, link);
+    list_add_tail(&dne_q, &q_item->link);
     return;
 }
 
@@ -119,7 +122,6 @@ enum fault_status handle_page_fault(int chan_id, fault_t* fault,
     int* nevicts_needed, struct bkend_completion_cbs* cbs)
 {
     pflags_t pflags, oldflags;
-    pflags_t flags[FAULT_MAX_RDAHEAD_SIZE+1];
     struct region_t* mr;
     bool page_present, was_locked, no_wake;
     int i, ret, n_retries, nchunks;
@@ -157,12 +159,11 @@ enum fault_status handle_page_fault(int chan_id, fault_t* fault,
             /* we can handle write-protect right away */
             page_present = !!(pflags & PFLAG_PRESENT);
             if (page_present && (fault->is_wrprotect | fault->is_write)) {
-                n_retries = 0;
                 no_wake = fault->from_kernel ? false : true;
                 ret = uffd_wp_remove(userfault_fd, fault->page, CHUNK_SIZE, 
                     no_wake, true, &n_retries);
                 assertz(ret);
-                RSTAT(UFFD_RETRIES)++;
+                RSTAT(UFFD_RETRIES) += n_retries;
 
                 /* done */
                 log_debug("%s - removed write protection", FSTR(fault));
@@ -192,8 +193,7 @@ enum fault_status handle_page_fault(int chan_id, fault_t* fault,
 #ifndef NO_ZERO_PAGE
                 /* copy zero page. TODO; Use UFFD_ZERO instead? */
                 bool wrprotect;
-                n_retries = 0;
-                wrprotect = !fault->is_write;
+                wrprotect = fault->is_read;
                 no_wake = !fault->from_kernel;
                 ret = uffd_copy(userfault_fd, fault->page, (unsigned long) 
                     zero_page, CHUNK_SIZE, wrprotect, no_wake, true, &n_retries);
@@ -210,15 +210,14 @@ enum fault_status handle_page_fault(int chan_id, fault_t* fault,
 
             /* at this point, we can support read-ahead. see if we can get 
                 * a lock on the next few pages that are missing */
-            flags[0] = pflags;
             for (i = 1; i <= fault->rdahead_max; i++) {
                 addr = fault->page + i * CHUNK_SIZE;
                 if(!is_in_memory_region_unsafe(mr, addr))
                     break;
                 /* try lock */
-                flags[i] = set_page_flags(mr, addr, PFLAG_WORK_ONGOING, &oldflags);
+                pflags = set_page_flags(mr, addr, PFLAG_WORK_ONGOING, &oldflags);
                 was_locked = !!(oldflags & PFLAG_WORK_ONGOING);
-                page_present = !!(flags[i] & PFLAG_PRESENT);
+                page_present = !!(pflags & PFLAG_PRESENT);
                 if (page_present || was_locked) 
                     break;
                 nchunks++;
@@ -268,7 +267,7 @@ int fault_read_done(fault_t* f)
 
     /* uffd copy the page back */
     assert(f->bkend_buf);
-    wrprotect = !f->is_write;
+    wrprotect = f->is_read;
     no_wake = !f->from_kernel;
     size = (1 + f->rdahead) * CHUNK_SIZE;
     r = uffd_copy(userfault_fd, f->page, (unsigned long) f->bkend_buf, size, 
@@ -313,14 +312,4 @@ void fault_done(fault_t* fault)
     /* free */
     put_mr(fault->mr);
     fault_free(fault);
-}
-
-/**
- * Per-thread fault wait queue support
- * Holds off concurrent faults on a page while one of them service it 
- */
-void fault_wait_q_init_thread()
-{
-    TAILQ_INIT(&fault_wait_q);
-    n_wait_q = 0;
 }

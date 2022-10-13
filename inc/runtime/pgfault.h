@@ -14,7 +14,11 @@
  * Pagefault API
  * hint the scheduler to check for an impending fault and take over if so
  */
-#if defined(REMOTE_MEMORY) && defined(FAULT_HINTS)
+#ifdef REMOTE_MEMORY_HINTS
+#ifndef REMOTE_MEMORY
+#error "REMOTE_MEMORY" must be defined for hints
+#endif
+
 #define hint_fault(addr,write,rd)                           \
     do {                                                    \
         if (__is_fault_pending(addr, write))                \

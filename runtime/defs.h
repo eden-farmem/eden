@@ -309,8 +309,8 @@ struct kthread {
 	spinlock_t 			pf_lock;
 	unsigned int 		pf_pending;
 	unsigned int		bkend_chan_id;
-    struct fault_wait_q_head fault_wait_q;
-    struct fault_wait_q_head fault_cq_steals_q;
+    struct list_head 	fault_wait_q;
+    struct list_head 	fault_cq_steals_q;
     unsigned int 		n_wait_q;
     unsigned int 		n_cq_steals_q;
 	unsigned int		pad3;

@@ -166,18 +166,34 @@ static inline bool do_remote_memory_work(struct kthread *k)
 	nready += kthr_check_for_completions(k, RMEM_MAX_COMP_PER_OP);
 	nready += kthr_handle_waiting_faults(k);
 
+	/* set all these served faults as not-pending */
+	spin_lock(&k->pf_lock);
+    assert(k->pf_pending >= nready);
+    k->pf_pending -= nready;
+    spin_unlock(&k->pf_lock);
+
 	/* re-take the big lock and check the ready queue once more */
 	spin_lock(&k->lock);
-	assert(nready == (k->rq_head != k->rq_tail));
 
-	return (nready > 0);
+	/* we may expect that "nready" to be equal to the length of the ready queue 
+	 * but since we do not hold the big lock, they may get 
+	 * stolen from the ready queue by the time we get here. After taking the 
+	 * lock again, the ready_q should reflect the real count of ready threads 
+	 * still waiting to be scheduled on the current kthread, not "nready" */
+	log_debug("have %d ready threads after checking on rmem work",
+		(k->rq_head - k->rq_tail));
+	return (k->rq_head - k->rq_tail) > 0;
 }
 
 /* steal remote memory completions and waiting fault from other threads */
 static inline bool steal_remote_memory_work(struct kthread *l, struct kthread *r)
 {
 	int nstolen = 0;
+
+	assert_spin_lock_held(&l->lock);
+	assert_spin_lock_held(&r->lock);
 	assert(!spin_lock_held(&l->pf_lock));
+
 	spin_lock(&l->pf_lock);
 	nstolen += kthr_steal_completions(r, RMEM_MAX_COMP_PER_OP);
 	nstolen += kthr_steal_waiting_faults(l, r);
@@ -185,14 +201,84 @@ static inline bool steal_remote_memory_work(struct kthread *l, struct kthread *r
 	return (nstolen > 0);
 }
 
-/* steal ready threads and softirqs from other threads */
-static inline bool steal_other_work(struct kthread *l, struct kthread *r)
+/* steal ready threads from other threads */
+static inline bool steal_ready_work(struct kthread *l, struct kthread *r)
 {
 	thread_t *th;
 	uint32_t i, avail, rq_tail;
 
 	assert_spin_lock_held(&l->lock);
-	assert(l->rq_head == 0 && l->rq_tail == 0);
+	assert_spin_lock_held(&r->lock);
+
+	/* check that local runqueue is empry and reset it. Note that this is 
+	 * us helping avoid modulo-ing (rq_head % RUNTIME_RQ_SIZE) to index the 
+	 * ready queue as long as we don't add more than RUNTIME_RQ_SIZE threads */
+	assert(l->rq_head == l->rq_tail);
+	l->rq_head = l->rq_tail = 0;
+
+	/* try to steal directly from the runqueue */
+	avail = load_acquire(&r->rq_head) - r->rq_tail;
+	avail = div_up(avail, 2);
+	if (avail) {
+		/* steal half the tasks */
+		assert(avail <= div_up(RUNTIME_RQ_SIZE, 2));
+		rq_tail = r->rq_tail;
+		for (i = 0; i < avail; i++)
+			l->rq[i] = r->rq[rq_tail++ % RUNTIME_RQ_SIZE];
+		store_release(&r->rq_tail, rq_tail);
+		r->q_ptrs->rq_tail += avail;
+
+		l->rq_head = avail;
+		l->q_ptrs->rq_head += avail;
+		STAT(THREADS_STOLEN) += avail;
+		log_debug("%p stole %d threads from %p RQ", l, avail, r);
+		return true;
+	}
+
+	/* check for overflow tasks */
+	th = list_pop(&r->rq_overflow, thread_t, link);
+	if (th) {
+		r->rq_overflow_len--;
+		l->rq[l->rq_head++ % RUNTIME_RQ_SIZE] = th;
+		l->q_ptrs->rq_head++;
+		STAT(THREADS_STOLEN)++;
+		return true;
+	}
+
+	return false;
+}
+
+/* steal softirqs from other threads */
+static inline bool steal_softirq_work(struct kthread *l, struct kthread *r)
+{
+	thread_t *th;
+
+	assert_spin_lock_held(&l->lock);
+	assert_spin_lock_held(&r->lock);
+
+	/* check for softirqs */
+	th = softirq_run_thread(r, RUNTIME_SOFTIRQ_BUDGET);
+
+	/* enqueue the stolen work */
+	if (th) {
+		l->rq[l->rq_head++ % RUNTIME_RQ_SIZE] = th;
+		l->q_ptrs->rq_head++;
+		STAT(SOFTIRQS_STOLEN)++;
+		return true;
+	}
+
+	return false;
+}
+
+/* steal work from other threads */
+static bool steal_work(struct kthread *l, struct kthread *r)
+{
+	assert_spin_lock_held(&l->lock);
+	assert(l->rq_head == l->rq_tail);
+
+	/* reset the local runqueue since it's empty. Note that this is helping 
+	 * us avoid */
+	l->rq_head = l->rq_tail = 0;
 
 	if (!spin_try_lock(&r->lock))
 		return false;
@@ -203,69 +289,46 @@ static inline bool steal_other_work(struct kthread *l, struct kthread *r)
 		return false;
 	}
 
-	/* try to steal directly from the runqueue */
-	avail = load_acquire(&r->rq_head) - r->rq_tail;
-	if (avail) {
-		/* steal half the tasks */
-		avail = div_up(avail, 2);
-		assert(avail <= div_up(RUNTIME_RQ_SIZE, 2));
-		rq_tail = r->rq_tail;
-		for (i = 0; i < avail; i++)
-			l->rq[i] = r->rq[rq_tail++ % RUNTIME_RQ_SIZE];
-		store_release(&r->rq_tail, rq_tail);
-		r->q_ptrs->rq_tail += avail;
+	/* steal ready work first */
+	if (steal_ready_work(l, r)) {
 		spin_unlock(&r->lock);
-
-		l->rq_head = avail;
-		l->q_ptrs->rq_head += avail;
-		STAT(THREADS_STOLEN) += avail;
 		return true;
 	}
 
-	/* check for overflow tasks */
-	th = list_pop(&r->rq_overflow, thread_t, link);
-	if (th) {
-		r->rq_overflow_len--;
-		goto done;
+#if defined(REMOTE_MEMORY_HINTS)
+	/* then steal remote memory work */
+	if (steal_remote_memory_work(l ,r)) {
+		spin_unlock(&r->lock);
+		
+		/* we have some stolen faults, however it is not ready to run as the 
+		 * faults need further handling before releasing threads, and
+		 * let's handle stolen completions immediately so we don't run out of 
+		 * bkend_bufs; we also release locks on both l and r for stealing 
+		 * while handling the faults */
+		if (do_remote_memory_work(l)) {
+			/* found ready work, return */
+			return true;
+		}
+
+		/* stole work but none of it was ready just yet, let's return now and 
+		 * come back here later */
+		return false;
+	}
+#endif
+
+	/* then steal other work */
+	if (steal_softirq_work(l, r)) {
+		spin_unlock(&r->lock);
+		return true;
 	}
 
-	/* check for softirqs */
-	th = softirq_run_thread(r, RUNTIME_SOFTIRQ_BUDGET);
-	if (th) {
-		STAT(SOFTIRQS_STOLEN)++;
-		goto done;
-	}
-
-done:
-	/* either enqueue the stolen work or detach the kthread */
-	if (th) {
-		l->rq[l->rq_head++] = th;
-		l->q_ptrs->rq_head++;
-		STAT(THREADS_STOLEN)++;
-	} else if (r->parked) {
+	/* no ready work to steal. if the thread has no pending faults either, 
+	 * detach it if it was already parked */
+	if (r->parked && r->pf_pending == 0) {
 		kthread_detach(r);
 	}
-
-	spin_unlock(&r->lock);
-	return th != NULL;
-}
-
-/* steal work from other threads */
-static bool steal_work(struct kthread *l, struct kthread *r)
-{
-#if defined (REMOTE_MEMORY) && defined(FAULT_HINTS)
-	/* steal remote memory work first */
-	if (steal_remote_memory_work(l ,r))
-		/* handle stolen completions immediately so we don't run out of 
-		 * bkend_bufs */
-		if (do_remote_memory_work(l))
-			return true;
-#endif
-		
-	/* then steal other work */
-	if (steal_other_work(l, r))
-		return true;
 	
+	spin_unlock(&r->lock);
 	return false;
 }
 
@@ -341,9 +404,9 @@ again:
 	l->rq_head = l->rq_tail = 0;
 
 	/* then handle remote memory */
-#if defined (REMOTE_MEMORY) && defined(FAULT_HINTS)
+#if defined(REMOTE_MEMORY_HINTS)
 	if(do_remote_memory_work(l))
-		return true;
+		goto done;
 #endif
 
 	/* then check for local softirqs */
@@ -435,7 +498,7 @@ void join_kthread(struct kthread *k)
 	thread_t *waketh;
 	struct list_head tmp;
 
-	//log_info_ratelimited("join_kthread() %p", k);
+	log_info_ratelimited("join_kthread() %p", k);
 
 	list_head_init(&tmp);
 
@@ -459,6 +522,12 @@ void join_kthread(struct kthread *k)
 	/* drain the overflow runqueue */
 	list_append_list(&tmp, &k->rq_overflow);
 	k->rq_overflow_len = 0;
+
+#ifdef REMOTE_MEMORY
+	/* REMOTE MEMORY TODO: */
+	/* also drain the remote memory waiting faults and stolen completions */
+	BUG();
+#endif
 
 	/* detach the kthread */
 	kthread_detach(k);
@@ -540,6 +609,22 @@ void thread_park_and_unlock_np(spinlock_t *l)
 }
 
 /**
+ * thread_park - puts a thread to sleep, and schedules the next thread
+ */
+void thread_park(void)
+{
+	thread_t *myth = thread_self();
+
+	assert_preempt_disabled();
+	assert(myth->state == THREAD_STATE_RUNNING);
+
+	myth->state = THREAD_STATE_SLEEPING;
+	myth->stack_busy = true;
+
+	enter_schedule(myth);
+}
+
+/**
  * thread_yield - yields the currently running thread
  *
  * Yielding will give other threads a chance to run.
@@ -550,6 +635,8 @@ void thread_yield(void)
 
 	/* check for softirqs */
 	softirq_run(RUNTIME_SOFTIRQ_BUDGET);
+
+	/* REMOTE MEMORY TODO: check for waitin faults and fault completions */
 
 	preempt_disable();
 	assert(myth->state == THREAD_STATE_RUNNING);
@@ -564,10 +651,11 @@ void thread_yield(void)
  * __thread_ready_unsafe - marks a thread as a runnable
  * @th: the thread to mark runnable
  *
- * This function can only be called internally when @th is 
+ * This function can only be called internally when releasing 
+ * the threads from within the runtime, @th is 
  * sleeping and preempt is disabled.
  */
-static inline void __thread_ready_unsafe(thread_t *th)
+void thread_ready_np(thread_t *th)
 {
 	struct kthread *k;
 	uint32_t rq_tail;
@@ -580,16 +668,10 @@ static inline void __thread_ready_unsafe(thread_t *th)
 	rq_tail = load_acquire(&k->rq_tail);
 	if (unlikely(k->rq_head - rq_tail >= RUNTIME_RQ_SIZE)) {
 		assert(k->rq_head - rq_tail == RUNTIME_RQ_SIZE);
-		if (!spin_lock_held(&k->lock)) {
-			spin_lock(&k->lock);
-			list_add_tail(&k->rq_overflow, &th->link);
-			k->rq_overflow_len++;
-			spin_unlock(&k->lock);
-		}
-		else {
-			list_add_tail(&k->rq_overflow, &th->link);
-			k->rq_overflow_len++;
-		}
+		spin_lock(&k->lock);
+		list_add_tail(&k->rq_overflow, &th->link);
+		k->rq_overflow_len++;
+		spin_unlock(&k->lock);
 		return;
 	}
 
@@ -607,20 +689,8 @@ static inline void __thread_ready_unsafe(thread_t *th)
 void thread_ready(thread_t *th)
 {
 	getk();
-	__thread_ready_unsafe(th);
+	thread_ready_np(th);
 	putk();
-}
-
-/**
- * thread_ready_preempt_off - marks a thread as a runnable
- * @th: the thread to mark runnable
- *
- * This function can only be called when @th is 
- * sleeping and preempt is disabled.
- */
-void thread_ready_preempt_off(thread_t *th)
-{
-	__thread_ready_unsafe(th);
 }
 
 static void thread_finish_yield_kthread(void)

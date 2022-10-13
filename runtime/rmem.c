@@ -42,6 +42,12 @@ int rmem_init()
     log_debug("rmem_init with %.2lf GB local memory", 
         local_memory * 1.0 / (1 << 30));
 
+    /* remote memory does not support burstable or on-demand cores for now */
+    if (guaranteedks != maxks || spinks != maxks){
+        log_err("remote mem does not yet support burstable or on-demand cores");
+        return 1;
+    }
+
     /* init global data structures */
     CIRCLEQ_INIT(&region_list);
     memory_booked = ATOMIC_VAR_INIT(0);
@@ -81,13 +87,13 @@ int rmem_init()
 
     /* kick off rmem handlers 
      * (currently just one but we can add more) */
-    nhandlers = 4;
+    nhandlers = 1;
     handlers = malloc(nhandlers*sizeof(hthread_t*));
     handlers[0] = new_rmem_handler_thread(PIN_RMEM_HANDLER_CORE);
     /* note that these extra cores are not excluded from shenango core list */
-    handlers[1] = new_rmem_handler_thread(PIN_RMEM_HANDLER_CORE-1);
-    handlers[2] = new_rmem_handler_thread(PIN_RMEM_HANDLER_CORE-2);
-    handlers[3] = new_rmem_handler_thread(PIN_RMEM_HANDLER_CORE-3);
+    // handlers[1] = new_rmem_handler_thread(PIN_RMEM_HANDLER_CORE-1);
+    // handlers[2] = new_rmem_handler_thread(PIN_RMEM_HANDLER_CORE-2);
+    // handlers[3] = new_rmem_handler_thread(PIN_RMEM_HANDLER_CORE-3);
 
 #ifdef USE_VDSO_CHECKS
     /* init vdso objects */
@@ -110,10 +116,6 @@ int rmem_init_thread()
     bkend_buf_tcache_init_thread();
     zero_page_init_thread();
     dne_q_init_thread();
-    TAILQ_INIT(&k->fault_wait_q);
-    k->n_wait_q = 0;
-    TAILQ_INIT(&k->fault_cq_steals_q);
-    k->n_cq_steals_q = 0;
 
     /* get dedicated backend channel */
     k->bkend_chan_id = rmbackend->get_new_data_channel();
@@ -138,8 +140,8 @@ int rmem_destroy_thread()
 {
     zero_page_free_thread();
     dne_q_free_thread();
-    assert(TAILQ_EMPTY(&myk()->fault_wait_q));
-    assert(TAILQ_EMPTY(&myk()->fault_cq_steals_q));
+    assert(list_empty(&myk()->fault_wait_q));
+    assert(list_empty(&myk()->fault_cq_steals_q));
     return 0;
 }
 

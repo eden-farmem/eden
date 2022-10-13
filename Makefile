@@ -18,15 +18,15 @@ ifneq ($(DEBUG),)
 CFLAGS += -DDEBUG -DCCAN_LIST_DEBUG -rdynamic -O0 -ggdb
 LDFLAGS += -rdynamic
 else
-CFLAGS += -DNDEBUG -O3
+ifneq ($(GDB),)
+CFLAGS += -g -ggdb -O0
+else
+CFLAGS += -O3
+endif
 endif
 
 ifneq ($(SAFEMODE),)
 CFLAGS += -DSAFEMODE
-endif
-
-ifneq ($(GDB),)
-CFLAGS += -g -ggdb
 endif
 
 ifneq ($(NUMA_NODE),)
@@ -37,16 +37,13 @@ ifneq ($(EXCLUDE_CORES),)
 CFLAGS += -DEXCLUDE_CORES=$(EXCLUDE_CORES)
 endif
 
-ifneq ($(PAGE_FAULTS),)
-CFLAGS += -DPAGE_FAULTS_$(PAGE_FAULTS)
-endif
-
 ifneq ($(REMOTE_MEMORY),)
 CFLAGS += -DREMOTE_MEMORY
 endif
 
-ifneq ($(FAULT_HINTS),)
-CFLAGS += -DFAULT_HINTS
+ifneq ($(REMOTE_MEMORY_HINTS),)
+CFLAGS += -DREMOTE_MEMORY
+CFLAGS += -DREMOTE_MEMORY_HINTS
 endif
 
 ifneq ($(STATS_CORE),)
@@ -127,12 +124,10 @@ test_targets = $(basename $(test_src))
 # endif
 DPDK_LIBS = $(shell $(PKGCONF) --static --libs libdpdk)
 
-
 # must be first
-all: all-but-tests $(test_targets)
+all: runtime iok $(test_targets)
 
-# ignore tests for kona (due to the external dependency on it while linking)
-all-but-tests: libbase.a libnet.a libruntime.a iokerneld iokerneld-noht rcntrl memserver
+runtime: libs rcntrl memserver
 
 libs: libbase.a libnet.a libruntime.a 
 

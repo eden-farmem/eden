@@ -722,6 +722,9 @@ static bool cores_is_proc_congested(struct proc *p)
 			continue;
 		}
 
+		/* REMOTE MEMORY TODO: */
+		/* also signal congestion based on remote memory backlog work */
+
 		/* check if the RX queue is congested */
 		if (wraps_lt(rxq_tail, last_rxq_head)) {
 			STAT_INC(RX_GRANT, 1);

@@ -21,7 +21,7 @@ typedef struct hthread {
     volatile bool stop;
     pthread_t thread;
     int bkend_chan_id;
-    struct fault_wait_q_head fault_wait_q;
+    struct list_head fault_wait_q;
     int n_wait_q;
     uint64_t rstats[RSTAT_NR];
 } hthread_t __aligned(CACHE_LINE_SIZE);

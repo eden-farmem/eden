@@ -114,6 +114,9 @@ int uffd_copy(int fd, unsigned long dst, unsigned long src, size_t size,
     int r;
     int mode = 0;
 
+    if (n_retries)
+        *n_retries = 0;
+
     if (wrprotect)  
         mode |= UFFDIO_COPY_MODE_WP;
     if (no_wake)    

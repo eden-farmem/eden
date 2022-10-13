@@ -59,6 +59,10 @@ static struct kthread *allock(void)
 	BUG_ON(k->park_efd < 0);
 	k->detached = true;
 	k->pf_pending = 0;
+    list_head_init(&k->fault_wait_q);
+    k->n_wait_q = 0;
+    list_head_init(&k->fault_cq_steals_q);
+    k->n_cq_steals_q = 0;
 	return k;
 }
 
@@ -156,6 +160,11 @@ found:
 	assert(r->rq_head == r->rq_tail);
 	assert(list_empty(&r->rq_overflow));
 	assert(k->rq_overflow_len == 0);
+	assert(k->pf_pending == 0);
+	assert(list_empty(&r->fault_wait_q));
+	assert(k->n_wait_q == 0);
+	assert(list_empty(&r->fault_cq_steals_q));
+	assert(k->n_cq_steals_q == 0);
 	assert(mbufq_empty(&r->txpktq_overflow));
 	assert(mbufq_empty(&r->txcmdq_overflow));
 	assert(r->timern == 0);

@@ -176,7 +176,7 @@ static void* rmem_handler(void *arg)
     bkend_buf_tcache_init_thread();
     zero_page_init_thread();
     dne_q_init_thread();
-    TAILQ_INIT(&my_hthr->fault_wait_q);
+    list_head_init(&my_hthr->fault_wait_q);
     my_hthr->n_wait_q = 0;
 
     /* do work */
@@ -185,24 +185,24 @@ static void* rmem_handler(void *arg)
         nevicts = nevicts_needed = 0;
 
         /* pick faults from the backlog first */
-        fault = TAILQ_FIRST(&my_hthr->fault_wait_q);
+        fault = list_top(&my_hthr->fault_wait_q, fault_t, link);
         while (fault != NULL) {
-            next = TAILQ_NEXT(fault, link);
+            next = list_next(&my_hthr->fault_wait_q, fault, link);
             fstatus = handle_page_fault(my_hthr->bkend_chan_id, fault, 
                 &nevicts_needed, &hthr_cbs);
             switch (fstatus) {
                 case FAULT_DONE:
                     log_debug("%s - done, released from wait", FSTR(fault));
-                    TAILQ_REMOVE(&my_hthr->fault_wait_q, fault, link);
+                    list_del_from(&my_hthr->fault_wait_q, &fault->link);
+                    assert(my_hthr->n_wait_q > 0);
                     my_hthr->n_wait_q--;
-                    assert(my_hthr->n_wait_q >= 0);
                     fault_done(fault);
                     break;
                 case FAULT_READ_POSTED:
                     log_debug("%s - done, released from wait", FSTR(fault));
-                    TAILQ_REMOVE(&my_hthr->fault_wait_q, fault, link);
+                    list_del_from(&my_hthr->fault_wait_q, &fault->link);
+                    assert(my_hthr->n_wait_q > 0);
                     my_hthr->n_wait_q--;
-                    assert(my_hthr->n_wait_q >= 0);
                     if (nevicts_needed > 0)
                         goto eviction;
                     break;
@@ -236,7 +236,7 @@ static void* rmem_handler(void *arg)
                     break;
                 case FAULT_AGAIN:
                     /* add to wait */
-                    TAILQ_INSERT_TAIL(&my_hthr->fault_wait_q, fault, link);
+                    list_add_tail(&my_hthr->fault_wait_q, &fault->link);
                     my_hthr->n_wait_q++;
                     log_debug("%s - added to wait", FSTR(fault));
                     break;
@@ -280,7 +280,7 @@ eviction:
     /* destroy state */
     zero_page_free_thread();
     dne_q_free_thread();
-    assert(TAILQ_EMPTY(&my_hthr->fault_wait_q));
+    assert(list_empty(&my_hthr->fault_wait_q));
     return NULL;
 }
 

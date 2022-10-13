@@ -476,8 +476,8 @@ void remote_client_slab_add(struct region_t *reg, int nslabs) {
     // log_debug("waiting for completion of receive response done slab add...");
     wait_rcntrl_response(conn, reg, IBV_WC_RECV, MSG_DONE_SLAB_ADD);
 
-    log_info("created remote region at address addr=%lx size=%ld",
-        reg->remote_addr, reg->size);
+    log_info("created remote region %p at address addr=%lx size=%ld",
+        reg, reg->remote_addr, reg->size);
     if (reg->remote_addr == 0 && reg->size == 0) {
         log_err("Rack is out of memory!\n");
         BUG();

@@ -7,7 +7,6 @@
 
 #include <stdio.h>
 #include <stdint.h>
-#include <sys/queue.h>
 
 #include "base/assert.h"
 #include "base/lock.h"
@@ -40,7 +39,7 @@ typedef struct fault {
     void* bkend_buf;
     uint64_t pad[1];
 
-    TAILQ_ENTRY(fault) link;
+	struct list_node link;
 } fault_t;
 BUILD_ASSERT(sizeof(fault_t) % CACHE_LINE_SIZE == 0);
 BUILD_ASSERT(FAULT_MAX_RDAHEAD_SIZE < UINT8_MAX);   /* due to rdahead */
@@ -105,9 +104,8 @@ void zero_page_free_thread();
 typedef struct dne_q_item {
     unsigned long addr;
     struct region_t *mr;
-    TAILQ_ENTRY(dne_q_item) link;
+    struct list_node link;
 } dne_q_item_t;
-TAILQ_HEAD(dne_fifo_head, dne_q_item);
 void dne_q_init_thread();
 void dne_q_free_thread();
 void dne_on_new_fault(struct region_t *mr, unsigned long addr);
@@ -126,11 +124,5 @@ enum fault_status handle_page_fault(int chan_id, fault_t* fault, int* nevicts,
     struct bkend_completion_cbs* cbs);
 int fault_read_done(fault_t* f);
 void fault_done(fault_t* fault);
-
-/**
- * Fault wait queue support
- * (inlining datapath functions in the header)
- */
-TAILQ_HEAD(fault_wait_q_head, fault);
 
 #endif    // __FAULT_H__

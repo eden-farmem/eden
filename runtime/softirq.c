@@ -49,13 +49,13 @@ static void softirq_gather_work(struct softirq_work *w, struct kthread *k,
 	local_budget_left = SOFTIRQ_MAX_BUDGET;
 
 #ifdef REMOTE_MEMORY
-	/* TODO: Is this really needed? */
+	/* REMOTE MEMORY TODO: Is this really needed? */
 	/* supress new work when it gets congested. NOTE(TODO): we assume that 
 	 * supressing RX means supressing new work, which is not always true. Also, 
 	 * we're supressing other events for IO core like TX completions due to the 
 	 * shared events queue, which may cause trouble in some cases. */
-	int active_threads = (k->rq_head - k->rq_tail) + k->rq_overflow_len; 
-	local_budget_left = CONGESTION_THRESHOLD - (active_threads + k->pf_pending);
+	// int active_threads = (k->rq_head - k->rq_tail) + k->rq_overflow_len; 
+	// local_budget_left = CONGESTION_THRESHOLD - (active_threads + k->pf_pending);
 #endif
 
 	while (budget_left > 0 && local_budget_left > 0) {
@@ -103,9 +103,7 @@ static void softirq_gather_work(struct softirq_work *w, struct kthread *k,
  */
 static inline bool softirq_ready(struct kthread* k) 
 {
-	/* we could use a more accurate indicator for pgfault completions but 
-	 * RDMA does not provide checking for CQE without reading them */
-	return (k->pf_pending > 0) || timer_needed(k) || !lrpc_empty(&k->rxq);
+	return timer_needed(k) || !lrpc_empty(&k->rxq);
 }
 
 /**
