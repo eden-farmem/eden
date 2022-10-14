@@ -99,6 +99,15 @@ void *rmrealloc(void *ptr, size_t size, size_t old_size)
         BUG();
     }
 
+    /* not handling size decrements in the proper way for now - we just return 
+     * the same region with a hole in it (doing it the proper way would also
+     * make eviction more complicated as current_offset is not expected to go 
+     * down)*/
+    if (size < old_size) {
+        retptr = ptr;
+        goto OUT;
+    }
+
     do {
         offset = atomic_load_explicit(&mr->current_offset, memory_order_acquire);
         ptr_offset = (unsigned long)ptr - mr->addr;
@@ -253,8 +262,8 @@ int rmadvise(void *addr, size_t length, int advice)
     if (ret == 0) {
         /* update pressure */
         size = marked * CHUNK_SIZE;
-        atomic_fetch_sub_explicit(&memory_booked, size, memory_order_acquire);
-        pressure = atomic_fetch_sub_explicit(&memory_used, size, memory_order_acquire);
+        atomic_fetch_sub_explicit(&memory_booked, size, memory_order_relaxed);
+        pressure = atomic_fetch_sub_explicit(&memory_used, size, memory_order_relaxed);
         log_debug("Freed %d page(s), pressure=%lld", marked, pressure - size);
         RSTAT(MADV_SIZE) += length;
     }

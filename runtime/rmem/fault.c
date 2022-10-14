@@ -23,6 +23,7 @@
 __thread void* zero_page = NULL;
 __thread char fstr[__FAULT_STR_LEN];
 
+__thread bool dne_fifo_on;
 __thread struct list_head dne_q;
 __thread unsigned int n_dne_fifo;
 __thread dne_q_item_t dne_q_items[DNE_QUEUE_SIZE];
@@ -56,6 +57,12 @@ void dne_q_init_thread()
 {
     list_head_init(&dne_q);
     n_dne_fifo = 0;
+
+    /* turn off DNE when the local memory is too little because eviction 
+     * can never find candidates otherwise */
+    dne_fifo_on = (local_memory >= 4 * DNE_QUEUE_SIZE * CHUNK_SIZE);
+    if (!dne_fifo_on)
+        log_warn("ignoring DNE queue");
 }
 
 void dne_q_free_thread()
@@ -63,10 +70,14 @@ void dne_q_free_thread()
     /* nothing to do */
 }
 
-void dne_on_new_fault(struct region_t *mr, unsigned long addr) 
+static inline void dne_on_new_fault(struct region_t *mr, unsigned long addr) 
 {
     pflags_t oldflags;
     dne_q_item_t *q_item = NULL;
+
+    if (!dne_fifo_on)
+        return;
+
     if (n_dne_fifo >= DNE_QUEUE_SIZE) {
         // Queue is full. Remove oldest entry from head
         q_item = list_pop(&dne_q, dne_q_item_t, link);
@@ -127,6 +138,7 @@ enum fault_status handle_page_fault(int chan_id, fault_t* fault,
     int i, ret, n_retries, nchunks;
     unsigned long addr;
     unsigned long long pressure;
+    uint64_t start_tsc, duration;
     *nevicts_needed = 0;
 
     /* see if this fault needs to be acted upon, because some other fault 
@@ -145,6 +157,8 @@ enum fault_status handle_page_fault(int chan_id, fault_t* fault,
         /* try getting a lock on the page */
         mr = fault->mr;
         assert(mr);
+        BUG_ON(mr != region_cached);    /* TODO: remove */
+
         pflags = set_page_flags(mr, fault->page, PFLAG_WORK_ONGOING, &oldflags);
         was_locked = !!(oldflags & PFLAG_WORK_ONGOING);
         if (unlikely(was_locked)) {
@@ -231,13 +245,17 @@ enum fault_status handle_page_fault(int chan_id, fault_t* fault,
             /* send off page read */
             /* NOTE: kona also makes an attempt to read from rdma write_q
              * to preempt eviction but I won't do that here */
+            start_tsc = 0;
             do {
                 ret = rmbackend->post_read(chan_id, fault);
                 if (ret == EAGAIN) {
+                    /* start the timer the first time we start retrying */
+                    if (!start_tsc)
+                        start_tsc = rdtsc();
+
                     /* read queue is full, nothing to do but repeat and keep 
                      * checking for completions to free request slots. We can 
                      * just check for one completion here? */
-                    /* TODO: we may want to count idle cycles here */    
                     rmbackend->check_for_completions(chan_id, cbs, 
                         RMEM_MAX_COMP_PER_OP, NULL, NULL);
 		            cpu_relax();
@@ -246,8 +264,15 @@ enum fault_status handle_page_fault(int chan_id, fault_t* fault,
             assertz(ret);
             fault->posted_chan_id = chan_id;
 
+            /* save wait time if any */
+            if (start_tsc) {
+                duration = rdtscp(NULL) - start_tsc;
+                RSTAT(BACKEND_WAIT_CYCLES) += duration;
+            }
+
             /* book some memory for the pages */
-            pressure = atomic_fetch_add(&memory_booked, nchunks * CHUNK_SIZE);
+            pressure = atomic_fetch_add_explicit(&memory_booked, 
+                nchunks * CHUNK_SIZE, memory_order_relaxed);
             pressure += nchunks * CHUNK_SIZE;
             if (pressure > local_memory)
                 *nevicts_needed = nchunks;
@@ -282,6 +307,9 @@ int fault_read_done(fault_t* f)
     pflags_t flags = PFLAG_PRESENT;
     if (!wrprotect) flags |= PFLAG_DIRTY;
     set_page_flags_range(f->mr, f->page, size, flags);
+
+    /* increase memory pressure */
+    atomic_fetch_add_explicit(&memory_used, CHUNK_SIZE, memory_order_relaxed);
     return 0;
 }
 

@@ -43,6 +43,7 @@ struct region_t {
 /* region data */
 CIRCLEQ_HEAD(region_listhead, region_t);
 extern struct region_listhead region_list;
+extern struct region_t* region_cached;
 extern struct region_t* last_evicted;
 DECLARE_SPINLOCK(regions_lock);
 
@@ -96,17 +97,22 @@ static inline bool within_memory_region(void *ptr)
 static inline struct region_t *get_available_region(size_t size) 
 {
     struct region_t *mr = NULL;
+    unsigned long long offset;
+    size_t required_space;
+
     spin_lock(&regions_lock);
     CIRCLEQ_FOREACH(mr, &region_list, link) {
-        size_t required_space = size;
-        if (mr->current_offset + required_space <= mr->size) {
-            log_debug("%s:found avilable mr:%p for size:%ld", __func__, mr, size);
+        required_space = size;
+        offset = atomic_load(&mr->current_offset);
+        if (offset + required_space <= mr->size) {
+            log_debug("%s:found available mr:%p for size:%ld", 
+                __func__, mr, size);
             __get_mr(mr);
             spin_unlock(&regions_lock);
             return mr;
         } else {
-            log_debug("%s: mr:%p is out of memory. size:%ld, current offset:%lld",
-                __func__, mr, mr->size, mr->current_offset);
+            log_debug("%s: mr:%p is out of memory. size:%ld, offset:%lld",
+                __func__, mr, mr->size, offset);
         }
     }
     spin_unlock(&regions_lock);
@@ -124,13 +130,17 @@ static inline struct region_t *get_next_evictable_region()
 
     if (last_evicted == NULL) {
         last_evicted = CIRCLEQ_FIRST(&region_list);
-        if (last_evicted != NULL)   __get_mr(last_evicted);
+        if (last_evicted != NULL)
+            __get_mr(last_evicted);
         spin_unlock(&regions_lock);
+        log_debug("first evictible region %p", last_evicted);
         return last_evicted;
     }
 
-    last_evicted = CIRCLEQ_NEXT(last_evicted, link);
-    if (last_evicted != NULL)   __get_mr(last_evicted);
+    last_evicted = CIRCLEQ_LOOP_NEXT(&region_list, last_evicted, link);
+    log_debug("next evictible region %p", last_evicted);
+    if (last_evicted != NULL)
+        __get_mr(last_evicted);
     spin_unlock(&regions_lock);
     return last_evicted;
 }

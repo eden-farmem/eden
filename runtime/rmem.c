@@ -87,13 +87,14 @@ int rmem_init()
 
     /* kick off rmem handlers 
      * (currently just one but we can add more) */
-    nhandlers = 1;
+    nhandlers = 4;
     handlers = malloc(nhandlers*sizeof(hthread_t*));
     handlers[0] = new_rmem_handler_thread(PIN_RMEM_HANDLER_CORE);
     /* note that these extra cores are not excluded from shenango core list */
-    // handlers[1] = new_rmem_handler_thread(PIN_RMEM_HANDLER_CORE-1);
-    // handlers[2] = new_rmem_handler_thread(PIN_RMEM_HANDLER_CORE-2);
-    // handlers[3] = new_rmem_handler_thread(PIN_RMEM_HANDLER_CORE-3);
+    handlers[1] = new_rmem_handler_thread(PIN_RMEM_HANDLER_CORE-1);
+    handlers[2] = new_rmem_handler_thread(PIN_RMEM_HANDLER_CORE-2);
+    handlers[3] = new_rmem_handler_thread(PIN_RMEM_HANDLER_CORE-3);
+
 
 #ifdef USE_VDSO_CHECKS
     /* init vdso objects */

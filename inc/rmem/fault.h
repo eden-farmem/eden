@@ -108,7 +108,6 @@ typedef struct dne_q_item {
 } dne_q_item_t;
 void dne_q_init_thread();
 void dne_q_free_thread();
-void dne_on_new_fault(struct region_t *mr, unsigned long addr);
 
 /**
  * Fault handling

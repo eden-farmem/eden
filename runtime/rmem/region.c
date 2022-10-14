@@ -17,6 +17,7 @@
 /* region data */
 struct region_listhead region_list;
 struct region_t* last_evicted = NULL;
+struct region_t* region_cached = NULL;
 int nregions = 0;
 DEFINE_SPINLOCK(regions_lock);
 
@@ -66,14 +67,16 @@ int register_memory_region(struct region_t *mr, int writeable) {
         PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
     if (mr->page_flags == NULL) 
         goto error;
-    mr->ref_cnt = ATOMIC_VAR_INIT(1);
+    mr->ref_cnt = ATOMIC_VAR_INIT(0);
     mr->current_offset = ATOMIC_VAR_INIT(0);
+    mr->evict_offset = ATOMIC_VAR_INIT(0);
 
     /* add it to the list. TODO: this should be done in rmem.c after adding 
      * a region */
     spin_lock(&regions_lock);
     CIRCLEQ_INSERT_HEAD(&region_list, mr, link);
     nregions++;
+    region_cached = mr;
     BUG_ON(nregions > RMEM_MAX_REGIONS);
     spin_unlock(&regions_lock);
     return 0;
