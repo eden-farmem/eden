@@ -74,7 +74,7 @@ void on_recv_done_slab_add(struct connection *conn, struct region_t *reg)
     int r;
 
     /* add server to our list. currently, the server and region are one-to-one
-     * coupled - so we should only be adding the server once in lifetime */
+     * coupled - so we should only be adding the server once in a lifetime */
     msg = conn->recv_msg;
     server = servers[msg->data.id];
     BUG_ON(server->status == CONNECTED);    /* adding server twice! */
@@ -96,6 +96,11 @@ void on_recv_done_slab_add(struct connection *conn, struct region_t *reg)
     assert(reg->addr);
     log_debug("%s:slab added on server:%s, port:%d, id:%d, at address %p",
         __func__, server->ip, server->port, server->id, (void *)reg->remote_addr);
+
+    /* associate server with region. TODO: we should have one-to-many 
+     * association between servers and regions */
+    BUG_ON(server->reg);
+    server->reg = reg;
 
     if (server->status == DISCONNECTED) {
         r = connect2server(server->id);
@@ -619,7 +624,7 @@ int rdma_post_read(int chan_id, fault_t* f)
     req_id = conn->read_req_idx;
     assert(req_id >= 0 && req_id < MAX_R_REQS_PER_CONN_CHAN);
     if (conn->read_reqs[req_id].busy)
-        /* all slots busy, try again */
+        /* all slots busy, try again later */
         return EAGAIN;
 
     /* infer remote addr */
@@ -792,6 +797,9 @@ int rdma_check_cq(int chan_id, struct bkend_completion_cbs* cbs, int max_cqe,
             r = cbs->write_completion(req->conn->server->reg, 
                     req->orig_local_addr, req->size);
             assertz(r);
+
+            /* release data buffer */
+            bkend_buf_free((void*)req->local_addr);
 
             /* release request slot */
             req->busy = 0;

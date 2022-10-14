@@ -67,6 +67,7 @@ static const char *rstat_names[] = {
     "uffd_retries",
     "rdahead_ops",
     "rdahead_pages",
+	"backend_wait_cycles",
 
     /* eviction stats */
     "evict_ops",
@@ -96,7 +97,8 @@ static const char *rstat_names[] = {
 /* must correspond exactly to RSTAT_* enum definitions in rmem/stats.h */
 BUILD_ASSERT(ARRAY_SIZE(rstat_names) == RSTAT_NR);
 
-static int append_stat(char *pos, size_t len, const char *name, uint64_t val)
+static inline int append_stat(char *pos, size_t len, 
+	const char *name, uint64_t val)
 {
 	return snprintf(pos, len, "%s:%ld,", name, val);
 }
@@ -143,7 +145,7 @@ static ssize_t stat_write_buf(char *buf, size_t len)
 }
 
 /* gather all rmem stats and write to the buffer */
-static int rstat_write_buf(char *buf, char *buf_hthr, size_t len)
+static inline int rstat_write_buf(char *buf, char *buf_hthr, size_t len)
 {
 	uint64_t rstats_all[RSTAT_NR];
 	uint64_t rstats_hthr[RSTAT_NR];
@@ -262,6 +264,9 @@ static void* stat_worker_local(void *arg)
 		fflush(fp);
 
 		/* print remote memory stats */
+		/* TODO BUG: enabling stats core with this method is causing the 
+		 * runtime to fail WHEN multiple handler cores are present AND
+		 * stdout/stderr are being redirected to a file */
 		ret = rstat_write_buf(buf, buf_hthr, UDP_MAX_PAYLOAD);
 		if (ret < 0) {
 			log_err("rstat err %d: couldn't generate rmem stat buffer", ret);

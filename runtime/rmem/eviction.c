@@ -129,38 +129,65 @@ static inline bool is_evictable(pflags_t flags)
 static inline unsigned long find_candidate_chunks(struct region_t *mr, 
     int *nchunks, int max_batch_size) 
 {
-    unsigned long addr, base_addr = 0;
+    unsigned long addr, base_addr, cur_addr;
     int tries = 0;
     pflags_t flags;
+    unsigned long long offset, new_offset, limit;
 
     *nchunks = 0;
+    base_addr = cur_addr = 0;
     while(tries < 10) {
         tries++;
 
-        /* for each MR, keep track of MR offset we last evicted from */
-        if (mr->evict_offset >= mr->current_offset) {
-            log_debug("restarting offset=%llx to offset=0 for mr:%p", 
-                mr->evict_offset, mr);
-            mr->evict_offset = 0;
-        }
+        /* we do simple clocking over the region to find candidates! other 
+         * threads may be trying too, so use CAS to move offset. TODO: can 
+         * we make threads evict from different offsets to not collide? */
+        do {
+            offset = mr->evict_offset;
+            limit = mr->current_offset;
+            BUG_ON(offset >= limit);
 
-        /* we're doing simple clocking over the region to find candidates! */
-        assert(mr->evict_offset < mr->current_offset);
-        addr = mr->addr + atomic_fetch_add(&mr->evict_offset, PAGE_SIZE);
+            /* new candidate */
+            new_offset = offset + CHUNK_SIZE;
+            if (*nchunks > 0) {
+                /* if we already have some pages and the next page either 
+                 * goes past the registered memory or is taken by another 
+                 * thread, call it here */
+                assert(base_addr && cur_addr);
+                if ((new_offset != cur_addr + CHUNK_SIZE) || new_offset >= limit)
+                    return base_addr;
+            }
+
+            if (new_offset >= limit) {
+                /* we reached the limit of registered memory; atomically get 
+                 * the offset back to start of the region */
+                log_debug("resetting offset=%llx to 0 for mr:%p", offset, mr);
+                new_offset = 0;
+            }
+        } while(!atomic_compare_exchange_strong(&mr->evict_offset, 
+            &offset, new_offset));
+
+        /* claimed new page */
+        addr = mr->addr + new_offset;
+        assert(addr < mr->addr + mr->current_offset);
 
         /* check if the page is evictable */
+        /* TODO: get flags in a batch so we can amortize cost of atomic ops */
         flags = get_page_flags(mr, addr);
         if (!is_evictable(flags)) {
-            /* have we already found some evictible pages? then break! */
-            if (base_addr) break;
-            else continue;
+            /* have we already found some evictible pages? then call it! */
+            if (*nchunks > 0) 
+                return base_addr;
+            else
+                continue;
         }
 
         /* found something evictable */
         (*nchunks)++;
+        cur_addr = addr;
         if (!base_addr) 
             base_addr = addr;
-        if (*nchunks > max_batch_size)
+        if (*nchunks >= max_batch_size)
             break;
     }
 
@@ -196,7 +223,7 @@ bool needs_write_back(pflags_t flags)
 {
     /* page must be present at this point */
     assert(!!(flags & PFLAG_PRESENT));
-#if defined(WP_ON_READ)
+#ifdef WP_ON_READ
     /* DIRTY bit is only valid when WP is enabled */
     return !!(flags & PFLAG_DIRTY);
 #endif
@@ -210,7 +237,8 @@ bool needs_write_back(pflags_t flags)
 static unsigned int write_pages_to_backend(int chan_id, struct region_t *mr, 
     unsigned long addr, int nchunks, struct bkend_completion_cbs* cbs) 
 {
-    int r, n_retries, ncompletions = 0;    
+    int r, n_retries, ncompletions = 0;
+    uint64_t start_tsc, duration;
     log_debug("writing back contiguous region at [%lx, %d)", addr, nchunks);
 
     /* protect the region first */
@@ -221,9 +249,14 @@ static unsigned int write_pages_to_backend(int chan_id, struct region_t *mr,
     RSTAT(EVICT_WBACK)++;
 
     /* post the write-back */
+    start_tsc = 0;
     do {
         r = rmbackend->post_write(chan_id, mr, addr, nchunks * CHUNK_SIZE);
         if (r == EAGAIN) {
+            /* start the timer the first time we are here */
+            if (!start_tsc)
+                start_tsc = rdtsc();
+
             /* write queue is full, nothing to do but repeat and keep 
              * checking for completions to free request slots; raising error
              * if we handled completions but still cannot post */
@@ -236,6 +269,13 @@ static unsigned int write_pages_to_backend(int chan_id, struct region_t *mr,
         }
     } while(r == EAGAIN);
     assertz(r);
+
+    /* save wait time if any */
+    if (start_tsc) {
+        duration = rdtscp(NULL) - start_tsc;
+        RSTAT(BACKEND_WAIT_CYCLES) += duration;
+    }
+
     return 0;
 }
 
@@ -304,8 +344,7 @@ int write_back_completed(struct region_t* mr, unsigned long addr, size_t size)
     covered = 0;
     while(covered < size) {
         page = addr + covered;
-        clear_page_flags(mr, page, PFLAG_EVICT_ONGOING | PFLAG_PRESENT | 
-            PFLAG_DIRTY | PFLAG_HOT_MARKER, &oldflags);
+        clear_page_flags(mr, page, PFLAG_EVICT_ONGOING, &oldflags);
         if (!(oldflags & PFLAG_EVICT_ONGOING)) {
             /* I'm the last one to reach here, unlock the page. See 
              * do_eviction() for a comment on what we're doing here. */
@@ -346,7 +385,7 @@ int do_eviction(int chan_id, struct bkend_completion_cbs* cbs, int max_batch_siz
         }
 
         /* get the longest contiguous sub-chunk that we manage to lock! */
-        assert(nchunks_found < max_batch_size);
+        assert(nchunks_found <= max_batch_size);
         nchunks_locked = 0;
         for (i = 0; i < nchunks_found; i++) {
             addr = base_addr + i * CHUNK_SIZE;
@@ -371,12 +410,13 @@ int do_eviction(int chan_id, struct bkend_completion_cbs* cbs, int max_batch_siz
             break;
     } while(nchunks_locked == 0);
 
-    /* flag them as evicting. TODO: is this necessary? */
-    log_debug("evicting pages at %lu, number: %d\n", base_addr, nchunks_locked);
-    assert(nchunks_locked < EVICTION_MAX_BATCH_SIZE);
+    /* flag them as evicting */
+    log_debug("evicting pages at %lx, number: %d\n", base_addr, nchunks_locked);
+    assert(nchunks_locked <= EVICTION_MAX_BATCH_SIZE);
     for (i = 0; i < nchunks_locked; i++) {
         addr = base_addr + i * CHUNK_SIZE;
         flags[i] = set_page_flags(mr, addr, PFLAG_EVICT_ONGOING, &oldflags);
+        assert(!(oldflags & PFLAG_EVICT_ONGOING));
     }
     RSTAT(EVICTS)++;
     RSTAT(EVICT_PAGES) += nchunks_locked;
@@ -415,8 +455,8 @@ int do_eviction(int chan_id, struct bkend_completion_cbs* cbs, int max_batch_siz
          * another fault to go on reading from remote memory while the dirtied 
          * changes are waiting in the write queue. At the same time, we cannot
          * clear after write completion because that might happen before the 
-         * madvise here. So we try and determine who goes before the other
-         * using the PFLAG_EVICT_ONGOING flag */
+         * madvise here (due to completion stealing). So we try and determine 
+         * who goes before the other using the PFLAG_EVICT_ONGOING flag */
         bitmap_for_each_set(write_map, nchunks_locked, i) {
             addr = base_addr + i * CHUNK_SIZE;
             clear_page_flags(mr, addr, PFLAG_EVICT_ONGOING | PFLAG_PRESENT | 
