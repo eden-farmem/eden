@@ -176,6 +176,25 @@ static int parse_remote_memory_flag(const char *name, const char *val)
 	return 0;
 }
 
+static int parse_rmem_backend_flag(const char *name, const char *val)
+{
+	if (!val || strlen(val) == 0) {
+		log_err("Invalid rmem backend: %s. Allowed: local, rdma", val);
+		return 1;
+	}
+
+	if (strcmp("local", val) == 0)
+		rmbackend_type = RMEM_BACKEND_LOCAL;
+	else if (strcmp("rdma", val) == 0)
+		rmbackend_type = RMEM_BACKEND_RDMA;
+	else {
+		log_err("Invalid rmem backend: %s. Allowed: local, rdma", val);
+		return 1;
+	}
+
+	return 0;
+}
+
 static int parse_rmem_local_memory_flag(const char *name, const char *val)
 {
 	int ret = str_to_long(val, (long int *)&local_memory);
@@ -248,6 +267,7 @@ static const struct cfg_handler cfg_handlers[] = {
 	{ "log_level", parse_log_level, false },
 	{ "disable_watchdog", parse_watchdog_flag, false },
 	{ "remote_memory", parse_remote_memory_flag, false },
+	{ "rmem_backend", parse_rmem_backend_flag, false },
 	{ "rmem_local_memory", parse_rmem_local_memory_flag, false },
 };
 

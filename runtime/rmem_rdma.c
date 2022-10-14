@@ -604,7 +604,7 @@ int rdma_free_region(struct region_t *reg) {
 int rdma_post_read(int chan_id, fault_t* f) 
 {
     struct connection *conn;
-    unsigned long remote_addr;
+    unsigned long remote_addr, offset;
     void* local_addr;
     size_t size;
     int req_id;
@@ -622,12 +622,16 @@ int rdma_post_read(int chan_id, fault_t* f)
         /* all slots busy, try again */
         return EAGAIN;
 
-    /* infer regions */
-    remote_addr = f->mr->remote_addr + (f->page - f->mr->addr);
+    /* infer remote addr */
+    offset = f->page - f->mr->addr;
+    remote_addr = f->mr->remote_addr + offset;
+    size = CHUNK_SIZE * (1 + f->rdahead);
+    assert(offset + size <= f->mr->size);
+
+    /* alloc data buf */
     local_addr = bkend_buf_alloc();
     BUG_ON(local_addr == NULL);     /* not enough bufs */
     f->bkend_buf = local_addr;
-    size = CHUNK_SIZE * (1 + f->rdahead);
     assert(size <= BACKEND_BUF_SIZE);
 
     /* take this slot */
@@ -664,7 +668,7 @@ int rdma_post_write(int chan_id, struct region_t* mr, unsigned long addr,
     size_t size) 
 {
     struct connection *conn;
-    unsigned long remote_addr;
+    unsigned long remote_addr, offset;
     void* local_addr;
     int req_id;
     
@@ -680,10 +684,15 @@ int rdma_post_write(int chan_id, struct region_t* mr, unsigned long addr,
         /* all slots busy, try again */
         return EAGAIN;
 
-    /* infer regions */
-    remote_addr = mr->remote_addr + (addr - mr->addr);
+    /* infer remote addr */
+    offset = addr - mr->addr;
+    remote_addr = mr->remote_addr + offset;
+    assert(offset + size <= mr->size);
+
+    /* alloc data buf */
     local_addr = bkend_buf_alloc();
     BUG_ON(local_addr == NULL);     /* not enough bufs */
+    assert(size <= BACKEND_BUF_SIZE);
 
     /* take this slot */
     log_debug("write request available addr=%lx index=%d", addr, req_id);
@@ -756,6 +765,7 @@ int rdma_check_cq(int chan_id, struct bkend_completion_cbs* cbs, int max_cqe,
             /* handle read completion */
             req = (struct request*)(uintptr_t) wc[i].wr_id;
             assert(req && req->fault && req->fault->bkend_buf);
+            assert(req->busy);
             assert(req->size == (1 + req->fault->rdahead) * CHUNK_SIZE);
             log_debug("%s - RDMA READ completed successfully", FSTR(req->fault));
            
@@ -773,6 +783,7 @@ int rdma_check_cq(int chan_id, struct bkend_completion_cbs* cbs, int max_cqe,
             assert(opcode == IBV_WC_RDMA_WRITE);
             req = (struct request*)(uintptr_t) wc[i].wr_id;
             assert(req && req->conn && req->conn->server); 
+            assert(req->busy);
             assert(req->conn->server->reg);
             log_debug("RDMA WRITE completed on chan %d: index=%d, addr=%lx", 
                 chan_id, req->index, req->orig_local_addr);

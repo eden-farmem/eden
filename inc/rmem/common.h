@@ -11,6 +11,7 @@
 
 /* global remote memory settings */
 extern bool rmem_enabled;
+extern rmem_backend_t rmbackend_type;
 extern uint64_t local_memory;
 extern double eviction_threshold;
 extern double eviction_done_threshold;
