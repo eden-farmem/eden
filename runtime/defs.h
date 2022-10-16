@@ -37,7 +37,8 @@
 #define RUNTIME_SCHED_POLL_ITERS	4
 #define RUNTIME_SCHED_MIN_POLL_US	2
 #define RUNTIME_WATCHDOG_US		50
-
+#define RUNTIME_VISIT_US		50
+BUILD_ASSERT(RUNTIME_VISIT_US <= RUNTIME_WATCHDOG_US);
 
 /*
  * Trap frame support
@@ -471,17 +472,6 @@ static inline bool timer_needed(struct kthread *k)
 {
 	/* deliberate race condition */
 	return k->timern > 0 && k->timers[0].deadline_us <= microtime();
-}
-
-/*
- * Page fault support
- */
-static inline bool pgfault_response_ready(struct kthread* k) {
-	bool ready = false;
-#ifdef PAGE_FAULTS
-	ready = fault_backend.poll_response_async(k->pf_channel);
-#endif
-	return ready;
 }
 
 /*

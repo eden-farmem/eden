@@ -18,8 +18,8 @@ typedef struct thread thread_t;
  * primitives.
  */
 
-extern void thread_park(void);
 extern void thread_park_and_unlock_np(spinlock_t *l);
+extern void thread_park_on_fault(void* address, bool write, int rdahead);
 extern void thread_ready(thread_t *thread);
 extern void thread_ready_np(thread_t *thread);
 extern thread_t *thread_create(thread_fn_t fn, void *arg);

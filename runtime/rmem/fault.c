@@ -164,7 +164,7 @@ enum fault_status handle_page_fault(int chan_id, fault_t* fault,
         if (unlikely(was_locked)) {
             /* someone else is working on it, check back later */
             log_debug("%s - saw ongoing work, going to wait", FSTR(fault));
-            return FAULT_AGAIN;
+            return FAULT_IN_PROGRESS;
         }
         else {
             /* we are handling it */
@@ -183,8 +183,9 @@ enum fault_status handle_page_fault(int chan_id, fault_t* fault,
                 log_debug("%s - removed write protection", FSTR(fault));
                 return FAULT_DONE;
             }
-            else {
-                /* upgrade to write fault */
+            
+            /* page not present, upgrade wp to write */
+            if (fault->is_wrprotect) {
                 fault_upgrade_to_write(fault, "from wrprotect on no page");
                 RSTAT(WP_UPGRADES)++;
             }

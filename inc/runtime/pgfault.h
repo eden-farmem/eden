@@ -9,7 +9,6 @@
 #include "rmem/pflags.h"
 #include "rmem/region.h"
 
-/* API */
 /**
  * Pagefault API
  * hint the scheduler to check for an impending fault and take over if so
@@ -22,7 +21,7 @@
 #define hint_fault(addr,write,rd)                           \
     do {                                                    \
         if (__is_fault_pending(addr, write))                \
-            kthr_send_fault_to_scheduler(addr, write, rd);  \
+            thread_park_on_fault(addr, write, rd);        \
     } while (0);
 #define hint_read_fault_rdahead(addr,rd)    hint_fault(addr, false, rd)
 #define hint_write_fault_rdahead(addr,rd)   hint_fault(addr, true,  rd)
@@ -48,12 +47,16 @@ typedef long (*vdso_check_page_t)(const void *p);
 extern vdso_check_page_t __is_page_mapped_vdso;
 extern vdso_check_page_t __is_page_mapped_and_readonly_vdso;
 extern __thread struct region_t* __cached_mr;
-void kthr_send_fault_to_scheduler(void* address, bool write, int rdahead);
 
 /* checks if a page at an address is in a state that results in page fault
  * (inlining in header file for low-overhead access) */
 static inline bool __is_fault_pending(void* address, bool write)
 {
+#ifndef REMOTE_MEMORY_HINTS
+    log_err("%s not supported without remote memory + hints", __func__);
+    BUG();
+#endif
+
     bool nofault;
 #ifndef USE_VDSO_CHECKS
     pflags_t pflags;

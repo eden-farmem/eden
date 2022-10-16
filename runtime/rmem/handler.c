@@ -206,7 +206,7 @@ static void* rmem_handler(void *arg)
                     if (nevicts_needed > 0)
                         goto eviction;
                     break;
-                case FAULT_AGAIN:
+                case FAULT_IN_PROGRESS:
                     log_debug("%s - not released from wait", FSTR(fault));
                     break;
             }
@@ -234,7 +234,7 @@ static void* rmem_handler(void *arg)
                 case FAULT_DONE:
                     fault_done(fault);
                     break;
-                case FAULT_AGAIN:
+                case FAULT_IN_PROGRESS:
                     /* add to wait */
                     list_add_tail(&my_hthr->fault_wait_q, &fault->link);
                     my_hthr->n_wait_q++;

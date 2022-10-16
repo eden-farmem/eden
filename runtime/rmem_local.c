@@ -120,6 +120,7 @@ int local_get_data_channel()
     id = backend_get_data_channel();
     assert(id >= 0 && id < RMEM_MAX_CHANNELS);
     channels[id] = aligned_alloc(CACHE_LINE_SIZE, sizeof(struct local_channel));
+    memset(channels[id], 0, sizeof(struct local_channel));
     return id;
 }
 
@@ -193,7 +194,7 @@ int local_post_read(int chan_id, fault_t* f)
     /* do we have a free slot? */
     req_id = chan->read_req_idx;
     assert(req_id >= 0 && req_id < MAX_R_REQS_PER_CHAN);
-    if (chan->read_reqs[req_id].busy)
+    if (load_acquire(&chan->read_reqs[req_id].busy))
         /* all slots busy, try again */
         return EAGAIN;
 
@@ -238,8 +239,7 @@ int local_post_read(int chan_id, fault_t* f)
     chan->cq[cq_id].req_idx = req_id;
     chan->cq[cq_id].rwmode = READ;
     chan->cq[cq_id].posted_tsc = rdtsc();
-    mb();
-    chan->cq[cq_id].busy = 1;
+    store_release(&chan->cq[cq_id].busy, 1);
 
     /* release after completion to maintain order */
     page_lock_release(remote_addr);
@@ -276,7 +276,7 @@ int local_post_write(int chan_id, struct region_t* mr, unsigned long addr,
     /* do we have a free slot? */
     req_id = chan->write_req_idx;
     assert(req_id >= 0 && req_id < MAX_W_REQS_PER_CHAN);
-    if (chan->write_reqs[req_id].busy)
+    if (load_acquire(&chan->write_reqs[req_id].busy))
         /* all slots busy, try again */
         return EAGAIN;
 
@@ -328,8 +328,7 @@ int local_post_write(int chan_id, struct region_t* mr, unsigned long addr,
     chan->cq[cq_id].req_idx = req_id;
     chan->cq[cq_id].rwmode = READ;
     chan->cq[cq_id].posted_tsc = rdtsc();
-    mb();
-    chan->cq[cq_id].busy = 1;
+    store_release(&chan->cq[cq_id].busy, 1);
 
     /* release after completion to maintain order */
     page_lock_release(remote_addr);
@@ -373,17 +372,16 @@ int local_check_cq(int chan_id, struct bkend_completion_cbs* cbs, int max_cqe,
 
     /* poll cq (this function is expected to be thread-safe) */
     spin_lock(cq_lock);
-    for (i = 0; i < max_cqe; i++) {
-
+    for (i = 0; i < max_cqe; i++)
+    {
         /* check current slot */
-        cq_id = chan->cq_post_idx;
+        cq_id = chan->cq_read_idx;
         assert(cq_id >= 0 && cq_id < MAX_REQS_PER_CHAN);
-        if (!cq[cq_id].busy)
+        if (!load_acquire(&cq[cq_id].busy))
             /* no completions */
             break;
 
         /* found one */
-        mb();
         log_debug("found completion on chan %d idx %d", chan_id, cq_id);
 
         /* check artificial delay: is it time yet? */
@@ -401,14 +399,14 @@ int local_check_cq(int chan_id, struct bkend_completion_cbs* cbs, int max_cqe,
             assert(req->busy);
             assert(req->fault && req->fault->bkend_buf);
             assert(req->size == (1 + req->fault->rdahead) * CHUNK_SIZE);
-            log_debug("%s - RDMA READ completed successfully", FSTR(req->fault));
+            log_debug("%s - RDMA READ done, qid: %d", FSTR(req->fault), req_id);
            
             /* call completion hook */
             r = cbs->read_completion(req->fault);
             assertz(r);
 
             /* release request slot */
-            req->busy = 0;
+            store_release(&req->busy, 0);
             RSTAT(NET_READ)++;
             if (nread)  (*nread)++;
         }
@@ -430,10 +428,17 @@ int local_check_cq(int chan_id, struct bkend_completion_cbs* cbs, int max_cqe,
             bkend_buf_free((void*)req->local_addr);
 
             /* release request slot */
-            req->busy = 0;
+            store_release(&req->busy, 0);
             RSTAT(NET_WRITE)++;
             if (nwrite)  (*nwrite)++;
         }
+
+        /* go to next cq */
+        store_release(&cq[cq_id].busy, 0);
+        chan->cq_read_idx++;
+        assert(cq_id + 1 == chan->cq_read_idx); /*no unexpected concur reads */
+        if (chan->cq_read_idx >= MAX_REQS_PER_CHAN) 
+            chan->cq_read_idx = 0;
         ncqe++;
     }
 

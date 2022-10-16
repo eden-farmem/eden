@@ -17,6 +17,7 @@
 #include <runtime/sync.h>
 #include <runtime/thread.h>
 #include <runtime/pgfault.h>
+#include "rmem/eviction.h"
 
 #include "defs.h"
 
@@ -295,7 +296,7 @@ static bool steal_work(struct kthread *l, struct kthread *r)
 		return true;
 	}
 
-#if defined(REMOTE_MEMORY_HINTS)
+#ifdef REMOTE_MEMORY_HINTS
 	/* then steal remote memory work */
 	if (steal_remote_memory_work(l ,r)) {
 		spin_unlock(&r->lock);
@@ -404,7 +405,7 @@ again:
 	l->rq_head = l->rq_tail = 0;
 
 	/* then handle remote memory */
-#if defined(REMOTE_MEMORY_HINTS)
+#ifdef REMOTE_MEMORY_HINTS
 	if(do_remote_memory_work(l))
 		goto done;
 #endif
@@ -547,17 +548,20 @@ static __always_inline void enter_schedule(thread_t *myth)
 {
 	struct kthread *k = myk();
 	thread_t *th;
+	bool visit_runtime;
 
 	assert_preempt_disabled();
-
 	spin_lock(&k->lock);
 
-	/* slow path: switch from the uthread stack to the runtime stack */
-	if (k->rq_head == k->rq_tail ||
-	    (!disable_watchdog &&
-	     unlikely(rdtsc() - last_watchdog_tsc >
-		      cycles_per_us * RUNTIME_WATCHDOG_US))) {
+	/* slow path: switch from the uthread stack to the runtime stack 
+	 * WHEN there are no ready threads or some time has passed if watchdog 
+	 * or remote memory is enabled */
+	visit_runtime = !disable_watchdog || (rmem_enabled && k->pf_pending > 0);
+	if (k->rq_head == k->rq_tail || 
+	    (visit_runtime && unlikely(rdtsc() - last_tsc > 
+			cycles_per_us * RUNTIME_VISIT_US))) {
 		jmp_runtime(schedule);
+		RUNTIME_EXIT();
 		return;
 	}
 
@@ -580,11 +584,13 @@ static __always_inline void enter_schedule(thread_t *myth)
 		th->state = THREAD_STATE_RUNNING;
 		th->stack_busy = false;
 		preempt_enable();
+		RUNTIME_EXIT();
 		return;
 	}
 
 	/* switch stacks and enter the next thread */
 	STAT(RESCHEDULES)++;
+	RUNTIME_EXIT();
 	jmp_thread_direct(myth, th);
 }
 
@@ -604,22 +610,6 @@ void thread_park_and_unlock_np(spinlock_t *l)
 	myth->state = THREAD_STATE_SLEEPING;
 	myth->stack_busy = true;
 	spin_unlock(l);
-
-	enter_schedule(myth);
-}
-
-/**
- * thread_park - puts a thread to sleep, and schedules the next thread
- */
-void thread_park(void)
-{
-	thread_t *myth = thread_self();
-
-	assert_preempt_disabled();
-	assert(myth->state == THREAD_STATE_RUNNING);
-
-	myth->state = THREAD_STATE_SLEEPING;
-	myth->stack_busy = true;
 
 	enter_schedule(myth);
 }
@@ -645,6 +635,119 @@ void thread_yield(void)
 	thread_ready(myth);
 
 	enter_schedule(myth);
+}
+
+static __always_inline void enter_schedule_with_fault(thread_t *th, fault_t* f)
+{
+    struct kthread *k;
+    struct region_t* mr;
+    int nevicts_needed = 0, nevicts = 0;
+    enum fault_status fstatus;
+
+	/* my kthread */
+	assert_preempt_disabled();
+	k = myk();
+
+	/* accounting */
+    if (f->is_read)         RSTAT(FAULTS_R)++;
+    if (f->is_write)        RSTAT(FAULTS_W)++;
+    if (f->is_wrprotect)    RSTAT(FAULTS_WP)++;
+
+    /* find region */
+    mr = get_region_by_addr_safe(f->page);
+    BUG_ON(!mr);  /* we dont do region deletions yet so it must exist */
+    assert(mr->addr);
+    f->mr = mr;
+
+	/* start handling fault */
+    fstatus = handle_page_fault(k->bkend_chan_id, f, &nevicts_needed, 
+        &kthr_owner_cbs);
+    switch (fstatus) {
+        case FAULT_DONE:
+			/* unlikely but we're done before we started */
+            kthr_fault_done(f);
+			goto schedule;
+            break;
+        case FAULT_IN_PROGRESS:
+            /* add to wait and yield to run another thread */
+            spin_lock(&k->pf_lock);
+            list_add_tail(&k->fault_wait_q, &f->link);
+            k->n_wait_q++;
+            k->pf_pending++;
+            spin_unlock(&k->pf_lock);
+            log_debug("%s - added to wait", FSTR(f));
+			goto schedule;
+            break;
+        case FAULT_READ_POSTED:
+            /* nothing to do here, we check for completions later*/
+            spin_lock(&k->pf_lock);
+            k->pf_pending++;
+            spin_unlock(&k->pf_lock);
+            log_debug("%s - posted read", FSTR(f));
+            if (nevicts_needed)
+                goto eviction;
+            goto schedule;
+            break;
+    }
+
+eviction:
+    /* start eviction; evict only as much as needed on shenango cores */
+    while(nevicts < nevicts_needed)
+        nevicts += do_eviction(k->bkend_chan_id, &kthr_owner_cbs, 
+            min(nevicts_needed - nevicts, EVICTION_MAX_BATCH_SIZE));
+
+schedule:
+	enter_schedule(th);
+}
+
+/**
+ * thread_park - puts a thread to sleep and yields to the scheduler with 
+ * the information on the potential page å
+ * @address: fault address
+ * @write: whether the fault was due to a write operation
+ * @rdahead: how many pages to read-ahead with the faulting page
+ */
+void thread_park_on_fault(void* address, bool write, int rdahead)
+{
+#ifndef REMOTE_MEMORY_HINTS
+    log_err("%s not supported without remote memory", __func__);
+    BUG();
+#endif
+    struct fault* fault;
+	thread_t *myth;
+
+	/* entering runtime */
+	preempt_disable();
+	RUNTIME_ENTER();
+
+	/* park thread */
+	myth = thread_self();
+	assert(myth->state == THREAD_STATE_RUNNING);
+	myth->state = THREAD_STATE_SLEEPING;
+	myth->stack_busy = true;
+
+	/* alloc fault object */
+    fault = fault_alloc();
+    if (unlikely(!fault)) {
+        log_debug("couldn't get a fault object");
+        BUG();
+    }
+    memset(fault, 0, sizeof(fault_t));
+    fault->page = ((unsigned long) address) & ~CHUNK_MASK;
+    fault->is_read = !write;
+    fault->is_write = write;
+    fault->from_kernel = false;
+    fault->rdahead_max = rdahead;
+    fault->rdahead = 0;
+    fault->thread = thread_self();
+    log_debug("fault posted at %lx write %d", fault->page, write);
+
+	/* enter scheduler with fault */
+	enter_schedule_with_fault(myth, fault);
+
+    /* fault serviced when we get back here */
+    assert(!__is_fault_pending(address, write));
+    ASSERT_NOT_IN_RUNTIME();
 }
 
 /**

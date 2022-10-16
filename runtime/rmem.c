@@ -19,8 +19,8 @@
 #include "defs.h"
 
 /* externed global settings */
-bool rmem_enabled = true;    /*TODO: set me to false by default*/
-rmem_backend_t rmbackend_type = RMEM_BACKEND_DEFAULT; /* TODO: add to cfg */
+bool rmem_enabled = false;
+rmem_backend_t rmbackend_type = RMEM_BACKEND_DEFAULT;
 double eviction_threshold = EVICTION_THRESHOLD;
 double eviction_done_threshold = EVICTION_DONE_THRESHOLD;
 uint64_t local_memory = LOCAL_MEMORY_SIZE;
@@ -87,13 +87,13 @@ int rmem_init()
 
     /* kick off rmem handlers 
      * (currently just one but we can add more) */
-    nhandlers = 4;
+    nhandlers = 1;
     handlers = malloc(nhandlers*sizeof(hthread_t*));
     handlers[0] = new_rmem_handler_thread(PIN_RMEM_HANDLER_CORE);
     /* note that these extra cores are not excluded from shenango core list */
-    handlers[1] = new_rmem_handler_thread(PIN_RMEM_HANDLER_CORE-1);
-    handlers[2] = new_rmem_handler_thread(PIN_RMEM_HANDLER_CORE-2);
-    handlers[3] = new_rmem_handler_thread(PIN_RMEM_HANDLER_CORE-3);
+    // handlers[1] = new_rmem_handler_thread(PIN_RMEM_HANDLER_CORE-1);
+    // handlers[2] = new_rmem_handler_thread(PIN_RMEM_HANDLER_CORE-2);
+    // handlers[3] = new_rmem_handler_thread(PIN_RMEM_HANDLER_CORE-3);
 
 
 #ifdef USE_VDSO_CHECKS

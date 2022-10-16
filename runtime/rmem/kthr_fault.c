@@ -1,5 +1,5 @@
 /*
- * pgfault.c - support for userspace page faults
+ * kthr_fault.c - fault handling in shenango kthreads
  */
 
 #include <sys/auxv.h>
@@ -16,7 +16,7 @@
 #include "runtime/pgfault.h"
 #include "runtime/sync.h"
 
-#include "defs.h"
+#include "../defs.h"
 
 /* state */
 __thread struct region_t* __cached_mr = NULL;
@@ -270,7 +270,7 @@ int kthr_handle_waiting_faults(struct kthread* k)
                             min(nevicts_needed, EVICTION_MAX_BATCH_SIZE));
                 }
                 break;
-            case FAULT_AGAIN:
+            case FAULT_IN_PROGRESS:
                 /* fault not ready to handle, add it back to tail */
                 log_debug("%s - not released from wait", FSTR(fault));
                 spin_lock(&k->pf_lock);
@@ -290,99 +290,6 @@ int kthr_handle_waiting_faults(struct kthread* k)
     }
 
     return ndone;
-}
-
-/**
- * Handle the fault in Shenango
- */
-void kthr_send_fault_to_scheduler(void* address, bool write, int rdahead)
-{
-#ifndef REMOTE_MEMORY
-    log_err("remote memory not defined");
-    BUG();
-#endif
-    RUNTIME_ENTER();
-    struct fault* fault;
-    unsigned long page;
-    struct kthread *k;
-    struct region_t* mr;
-    int nevicts_needed = 0, nevicts = 0;
-    enum fault_status fstatus;
-
-    /* disable preempt */
-    k = getk();
-
-    /* alloc fault object */
-    page = ((unsigned long) address) & ~CHUNK_MASK;
-    fault = fault_alloc();
-    if (unlikely(!fault)) {
-        log_debug("couldn't get a fault object");
-        BUG();
-    }
-    memset(fault, 0, sizeof(fault_t));
-    fault->page = page;
-    fault->is_read = !write;
-    fault->is_write = write;
-    fault->from_kernel = false;
-    fault->rdahead_max = rdahead;
-    fault->rdahead = 0;
-    fault->thread = thread_self();
-    log_debug("fault posted at %lx write %d", page, write);
-
-    /* accounting */
-    if (fault->is_read)         RSTAT(FAULTS_R)++;
-    if (fault->is_write)        RSTAT(FAULTS_W)++;
-    if (fault->is_wrprotect)    RSTAT(FAULTS_WP)++;
-
-    /* find region */
-    mr = get_region_by_addr_safe(fault->page);
-    BUG_ON(!mr);  /* we dont do region deletions yet so it must exist */
-    assert(mr->addr);
-    fault->mr = mr;
-
-    /* start handling fault */
-    fstatus = handle_page_fault(k->bkend_chan_id, fault, &nevicts_needed, 
-        &kthr_owner_cbs);
-    switch (fstatus) {
-        case FAULT_DONE:
-            fault_done(fault);
-            putk();
-            goto done;
-        case FAULT_AGAIN:
-            /* add to wait and yield to run another thread */
-            spin_lock(&k->pf_lock);
-            list_add_tail(&k->fault_wait_q, &fault->link);
-            k->n_wait_q++;
-            k->pf_pending++;
-            spin_unlock(&k->pf_lock);
-            log_debug("%s - added to wait", FSTR(fault));
-            goto yield_thread_and_wait;
-            break;
-        case FAULT_READ_POSTED:
-            /* nothing to do here, we check for completions later*/
-            spin_lock(&k->pf_lock);
-            k->pf_pending++;
-            spin_unlock(&k->pf_lock);
-            log_debug("%s - posted read", FSTR(fault));
-            if (nevicts_needed)
-                goto eviction;
-            goto yield_thread_and_wait;
-            break;
-    }
-
-eviction:
-    /* start eviction; evict only as much as necessary on shenango cores */
-    while(nevicts < nevicts_needed)
-        nevicts += do_eviction(k->bkend_chan_id, &kthr_owner_cbs, 
-            min(nevicts_needed - nevicts, EVICTION_MAX_BATCH_SIZE));
-
-yield_thread_and_wait:
-    thread_park();
-
-done:
-    /* fault serviced if we get here */
-    assert(!__is_fault_pending(address, write));
-    RUNTIME_EXIT();
 }
 
 /* kthread backend read/write completion ops for owner thread */

@@ -172,17 +172,20 @@ static int parse_watchdog_flag(const char *name, const char *val)
 
 static int parse_remote_memory_flag(const char *name, const char *val)
 {
-	rmem_enabled = true;
+	long tmp;
+	int ret;
+
+	ret = str_to_long(val, &tmp);
+	if (ret) {
+		log_err("Expecting 0 or 1 for %s", name);
+		return ret;
+	}
+	rmem_enabled = (tmp != 0);
 	return 0;
 }
 
 static int parse_rmem_backend_flag(const char *name, const char *val)
 {
-	if (!val || strlen(val) == 0) {
-		log_err("Invalid rmem backend: %s. Allowed: local, rdma", val);
-		return 1;
-	}
-
 	if (strcmp("local", val) == 0)
 		rmbackend_type = RMEM_BACKEND_LOCAL;
 	else if (strcmp("rdma", val) == 0)
@@ -298,10 +301,10 @@ int cfg_load(const char *path)
 			line++;
 			continue;
 		}
-		name = strtok(buf, " ");
+		name = strtok(buf, " \n");
 		if (!name)
 			break;
-		val = strtok(NULL, " ");
+		val = strtok(NULL, " \n");
 
 		for (i = 0; i < ARRAY_SIZE(cfg_handlers); i++) {
 			const struct cfg_handler *h = &cfg_handlers[i];

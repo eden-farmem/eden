@@ -623,7 +623,7 @@ int rdma_post_read(int chan_id, fault_t* f)
     /* do we have a free slot? */
     req_id = conn->read_req_idx;
     assert(req_id >= 0 && req_id < MAX_R_REQS_PER_CONN_CHAN);
-    if (conn->read_reqs[req_id].busy)
+    if (load_acquire(&conn->read_reqs[req_id].busy))
         /* all slots busy, try again later */
         return EAGAIN;
 
@@ -685,7 +685,7 @@ int rdma_post_write(int chan_id, struct region_t* mr, unsigned long addr,
     /* do we have a free slot? */
     req_id = conn->write_req_idx;
     assert(req_id >= 0 && req_id < MAX_W_REQS_PER_CONN_CHAN);
-    if (conn->write_reqs[req_id].busy)
+    if (load_acquire(&conn->write_reqs[req_id].busy))
         /* all slots busy, try again */
         return EAGAIN;
 
@@ -779,7 +779,7 @@ int rdma_check_cq(int chan_id, struct bkend_completion_cbs* cbs, int max_cqe,
             assertz(r);
 
             /* release request slot */
-            req->busy = 0;
+            store_release(&req->busy, 0);
             RSTAT(NET_READ)++;
             if (nread)  (*nread)++;
         }
@@ -802,7 +802,7 @@ int rdma_check_cq(int chan_id, struct bkend_completion_cbs* cbs, int max_cqe,
             bkend_buf_free((void*)req->local_addr);
 
             /* release request slot */
-            req->busy = 0;
+            store_release(&req->busy, 0);
             RSTAT(NET_WRITE)++;
             if (nwrite)  (*nwrite)++;
         }

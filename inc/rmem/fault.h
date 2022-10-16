@@ -114,7 +114,7 @@ void dne_q_free_thread();
  */
 enum fault_status {
     FAULT_DONE = 0,
-    FAULT_AGAIN,
+    FAULT_IN_PROGRESS,
     FAULT_READ_POSTED
 };
 
