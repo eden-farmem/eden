@@ -60,9 +60,10 @@ struct local_channel {
 };
 
 /* state */
-struct local_channel* channels[RMEM_MAX_CHANNELS] = {0};
-spinlock_t pglocks[PAGE_LOCKS_SIZE];
-unsigned long pglock_holders[PAGE_LOCKS_SIZE] = {0};
+static struct local_channel* channels[RMEM_MAX_CHANNELS] = {0};
+static spinlock_t pglocks[PAGE_LOCKS_SIZE];
+static unsigned long pglock_holders[PAGE_LOCKS_SIZE] = {0};
+static __thread struct local_completion wc[RMEM_MAX_COMP_PER_OP];
 
 /**
  * Page lock helpers to avoid concurrent page reads/writes. rmem shouldn't 
@@ -370,7 +371,8 @@ int local_check_cq(int chan_id, struct bkend_completion_cbs* cbs, int max_cqe,
     cq = chan->cq;
     cq_lock = &chan->cq_read_lock;
 
-    /* poll cq (this function is expected to be thread-safe) */
+    /* get completions out of the queue (this function is expected to be thread-
+     * safe) so we pull them out quickly under a lock and handle them later */
     spin_lock(cq_lock);
     for (i = 0; i < max_cqe; i++)
     {
@@ -389,10 +391,25 @@ int local_check_cq(int chan_id, struct bkend_completion_cbs* cbs, int max_cqe,
         if (duration_tsc < cycles_per_us * LOCAL_BACKEND_DELAY_MUS)
             break;
 
-        /* handle */
-        req_id = cq[cq_id].req_idx;
+        /* copy completion to local buf. NOTE: mind the shallow copy */
+        wc[i] = cq[cq_id];
+
+        /* go to next cq */
+        store_release(&cq[cq_id].busy, 0);
+        chan->cq_read_idx++;
+        assert(cq_id + 1 == chan->cq_read_idx); /*no unexpected concur reads */
+        if (chan->cq_read_idx >= MAX_REQS_PER_CHAN) 
+            chan->cq_read_idx = 0;
+        ncqe++;
+    }
+    spin_unlock(cq_lock);
+
+    /* handle completions */
+    for (i = 0; i < ncqe; i++)
+    {
+        req_id = wc[i].req_idx;
         assert(req_id >= 0);
-        if (cq[cq_id].rwmode == READ) {
+        if (wc[i].rwmode == READ) {
             /* handle read completion */
             assert(req_id < MAX_R_REQS_PER_CHAN);
             req = &(channels[chan_id]->read_reqs[req_id]);
@@ -412,7 +429,7 @@ int local_check_cq(int chan_id, struct bkend_completion_cbs* cbs, int max_cqe,
         }
         else {
             /* handle write completion */
-            assert(cq[cq_id].rwmode == WRITE);
+            assert(wc[i].rwmode == WRITE);
             assert(req_id < MAX_W_REQS_PER_CHAN);
             req = &(channels[chan_id]->write_reqs[req_id]);
             assert(req->busy);
@@ -432,17 +449,8 @@ int local_check_cq(int chan_id, struct bkend_completion_cbs* cbs, int max_cqe,
             RSTAT(NET_WRITE)++;
             if (nwrite)  (*nwrite)++;
         }
-
-        /* go to next cq */
-        store_release(&cq[cq_id].busy, 0);
-        chan->cq_read_idx++;
-        assert(cq_id + 1 == chan->cq_read_idx); /*no unexpected concur reads */
-        if (chan->cq_read_idx >= MAX_REQS_PER_CHAN) 
-            chan->cq_read_idx = 0;
-        ncqe++;
     }
 
-    spin_unlock(cq_lock);
     assert(!(nread && nwrite) || (*nread + *nwrite == ncqe));
     return ncqe;
 }

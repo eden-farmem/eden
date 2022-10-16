@@ -25,13 +25,13 @@
 #define DATAPATH_CQ_SIZE        MAX_REQS_PER_CHAN
 
 /* global state */
-struct server_conn_t* servers[MAX_SERVERS + 1];
+static struct server_conn_t* servers[MAX_SERVERS + 1];
 SLIST_HEAD(servers_listhead, server_conn_t);
-struct servers_listhead servers_list;
+static struct servers_listhead servers_list;
 static struct context *global_ctx = NULL;
 
 /* thread-local state */
-__thread struct ibv_wc wc[RMEM_MAX_COMP_PER_OP];
+static __thread struct ibv_wc wc[RMEM_MAX_COMP_PER_OP];
 
 /* forward declarations */
 static int on_route_resolved(struct rdma_cm_id *id);
