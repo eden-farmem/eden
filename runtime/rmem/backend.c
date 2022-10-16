@@ -32,7 +32,7 @@ int backend_get_data_channel()
             log_warn("out of rdma channels!");
             return -1;
         }
-    } while(!atomic_compare_exchange_strong(&nchans_bkend, &chan_id, chan_id+1));
+    } while(!atomic_compare_exchange_weak(&nchans_bkend, &chan_id, chan_id+1));
     log_debug("channel %d taken, num channels: %d", chan_id, nchans_bkend);
     return chan_id;
 }

@@ -54,7 +54,7 @@ void *rmalloc(size_t size)
     do {
         offset = atomic_load(&mr->current_offset);
         BUG_ON(offset + size > mr->size);	/* out of memory */
-        booked = atomic_compare_exchange_strong(&mr->current_offset, &offset, 
+        booked = atomic_compare_exchange_weak(&mr->current_offset, &offset, 
             offset + size);
     } while(!booked);
 
@@ -115,7 +115,7 @@ void *rmrealloc(void *ptr, size_t size, size_t old_size)
         if (!can_resize_inplace)
             break;
         BUG_ON(ptr_offset + size > mr->size);	/* out of memory */
-        booked = atomic_compare_exchange_strong(&mr->current_offset, &offset, 
+        booked = atomic_compare_exchange_weak(&mr->current_offset, &offset, 
             ptr_offset + size);
     } while(!booked);
 
