@@ -450,12 +450,14 @@ void remote_server_setup(struct server_conn_t *server)
     server->status = CONNECTED;
 
     /* setup data path queues */
+    mb();
     for (i = 0; i < server->num_dp; i++) {
         init_connection(&(server->dp[i]), server->ip, server->port);
         follow_connection_setup(server->dp[i].chan);
         assert(server->dp[i].connected);
         log_info("server %s on port %d: datapath qp %d done", 
             server->ip, server->port, i);
+        mb();
     }
 }
 

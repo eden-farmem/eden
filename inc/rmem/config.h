@@ -22,7 +22,7 @@ typedef enum {
 #define RMEM_BACKEND_DEFAULT    1
 #define RMEM_SLAB_SIZE          (128 * 1024L)
 #define RMEM_MAX_CHANNELS       32
-#define RMEM_MAX_CHUNKS_PER_OP  4
+#define RMEM_MAX_CHUNKS_PER_OP  8
 #define RMEM_MAX_COMP_PER_OP    4
 
 /********* Cluster *******************************************/

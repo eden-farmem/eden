@@ -738,6 +738,7 @@ void thread_park_on_fault(void* address, bool write, int rdahead)
     fault->is_write = write;
     fault->from_kernel = false;
     fault->rdahead_max = rdahead;
+	BUG_ON(1 + rdahead > RMEM_MAX_CHUNKS_PER_OP);	/* read ahead limit */
     fault->rdahead = 0;
     fault->thread = thread_self();
     log_debug("fault posted at %lx write %d", fault->page, write);

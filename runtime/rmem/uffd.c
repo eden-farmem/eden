@@ -124,7 +124,7 @@ int uffd_copy(int fd, unsigned long dst, unsigned long src, size_t size,
     struct uffdio_copy copy = {
         .dst = dst, 
         .src = src, 
-        .len = CHUNK_SIZE, 
+        .len = size, 
         .mode = mode
     };
 
