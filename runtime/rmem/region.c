@@ -10,7 +10,7 @@
 
 #include "base/stddef.h"
 #include "rmem/backend.h"
-#include "rmem/pflags.h"
+#include "rmem/page.h"
 #include "rmem/region.h"
 #include "rmem/uffd.h"
 
@@ -38,7 +38,7 @@ void deregister_memory_region(struct region_t *mr) {
 
 int register_memory_region(struct region_t *mr, int writeable) {
     void *ptr = NULL;
-    size_t page_flags_size;
+    size_t page_flags_size, npages;
     int r;
 
     log_debug("registering region %p", mr);
@@ -62,8 +62,9 @@ int register_memory_region(struct region_t *mr, int writeable) {
     if (r < 0) goto error;
 
     /* initalize metadata */
-    page_flags_size = align_up((mr->size >> CHUNK_SHIFT), 8) * PAGE_FLAGS_NUM / 8;
-     mr->page_flags = (atomic_pflags_t *)mmap(NULL, page_flags_size, 
+    npages = (mr->size >> CHUNK_SHIFT);
+    page_flags_size = align_up(npages, 8) * sizeof(atomic_pflags_t);
+    mr->page_flags = (atomic_pflags_t*) mmap(NULL, page_flags_size, 
         PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
     if (mr->page_flags == NULL) 
         goto error;

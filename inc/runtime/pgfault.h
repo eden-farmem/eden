@@ -6,7 +6,7 @@
 
 #include "base/assert.h"
 #include "rmem/backend.h"
-#include "rmem/pflags.h"
+#include "rmem/page.h"
 #include "rmem/region.h"
 
 /**

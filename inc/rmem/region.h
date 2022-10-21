@@ -14,8 +14,8 @@
 #include "rmem/config.h"
 #include "rmem/rdma.h"
 
-/* Smallest native type that can support flags for each page */
-typedef char pflags_t;
+/* Smallest native type that can support metadata for each page */
+typedef unsigned int pflags_t;
 typedef _Atomic(pflags_t) atomic_pflags_t;
 BUILD_ASSERT(sizeof(atomic_pflags_t) == sizeof(pflags_t));
 
@@ -57,7 +57,7 @@ void remove_memory_region(struct region_t *mr);
 
 /* Adds a reference to region
  * For internal-use. Unsafe unless used from within the regions_lock */
-static inline bool __get_mr(struct region_t *mr) 
+static inline bool __get_mr(struct region_t *mr)
 {
     log_debug("adding ref_cnt for mr %p", mr);
     int r = atomic_fetch_add_explicit(&mr->ref_cnt, 1, memory_order_acquire);

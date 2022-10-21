@@ -52,8 +52,6 @@ int rmem_init()
     CIRCLEQ_INIT(&region_list);
     memory_booked = ATOMIC_VAR_INIT(0);
     memory_used = ATOMIC_VAR_INIT(0);
-    /* TODO:init all fault queues */
-    /* TODO: init dne queue */
 
     /* init userfaultfd */
     userfault_fd = uffd_init();
@@ -85,6 +83,13 @@ int rmem_init()
     ret = fault_tcache_init();
     assertz(ret);
 
+    /* tcaches for pages */
+    ret = rmpage_node_tcache_init();
+    assertz(ret);
+
+    /* init lru lists */
+    lru_lists_init();
+
     /* kick off rmem handlers 
      * (currently just one but we can add more) */
     nhandlers = 1;
@@ -115,8 +120,8 @@ int rmem_init_thread()
     /* init per-thread data */
     fault_tcache_init_thread();
     bkend_buf_tcache_init_thread();
+    rmpage_node_tcache_init_thread();
     zero_page_init_thread();
-    dne_q_init_thread();
 
     /* get dedicated backend channel */
     k->bkend_chan_id = rmbackend->get_new_data_channel();
@@ -140,7 +145,6 @@ int rmem_init_late()
 int rmem_destroy_thread()
 {
     zero_page_free_thread();
-    dne_q_free_thread();
     assert(list_empty(&myk()->fault_wait_q));
     assert(list_empty(&myk()->fault_cq_steals_q));
     return 0;

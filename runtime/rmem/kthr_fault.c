@@ -10,7 +10,7 @@
 #include "base/vdso.h"
 #include "rmem/eviction.h"
 #include "rmem/fault.h"
-#include "rmem/pflags.h"
+#include "rmem/page.h"
 #include "rmem/region.h"
 #include "runtime/thread.h"
 #include "runtime/pgfault.h"

@@ -18,8 +18,7 @@ typedef enum {
     RMEM_BACKEND_LOCAL = 0,
     RMEM_BACKEND_RDMA = 1
 } rmem_backend_t;
-// #define RMEM_BACKEND_DEFAULT 0  
-#define RMEM_BACKEND_DEFAULT    1
+#define RMEM_BACKEND_DEFAULT    RMEM_BACKEND_LOCAL
 #define RMEM_SLAB_SIZE          (128 * 1024L)
 #define RMEM_MAX_CHANNELS       32
 #define RMEM_MAX_CHUNKS_PER_OP  8

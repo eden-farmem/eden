@@ -212,7 +212,7 @@ int local_post_read(int chan_id, fault_t* f)
     assert(size <= BACKEND_BUF_SIZE);
 
     /* take this slot */
-    log_debug("%s - read request available index=%d", FSTR(f), req_id);
+    log_debug("%s - taking read slot %d on chan %d", FSTR(f), req_id, chan_id);
     chan->read_reqs[req_id].busy = 1;
     chan->read_reqs[req_id].index = req_id;
     chan->read_reqs[req_id].local_addr = (unsigned long) local_addr;
@@ -231,7 +231,7 @@ int local_post_read(int chan_id, fault_t* f)
     /* copy from remote */
     log_debug("%s - READ remote_addr %lx into local_addr %p, size %lu", FSTR(f), 
         remote_addr, local_addr, size);
-    memcpy(local_addr, (void*) remote_addr, size);
+    // memcpy(local_addr, (void*) remote_addr, size);
 
     /* post completion */
     cq_id = chan->cq_post_idx;
@@ -241,6 +241,7 @@ int local_post_read(int chan_id, fault_t* f)
     chan->cq[cq_id].rwmode = READ;
     chan->cq[cq_id].posted_tsc = rdtsc();
     store_release(&chan->cq[cq_id].busy, 1);
+    log_debug("%s - posted cq %d on chan %d", FSTR(f), cq_id, chan_id);
 
     /* release after completion to maintain order */
     page_lock_release(remote_addr);
@@ -292,7 +293,7 @@ int local_post_write(int chan_id, struct region_t* mr, unsigned long addr,
     assert(size <= BACKEND_BUF_SIZE);
 
     /* take this slot */
-    log_debug("write request available addr=%lx index=%d", addr, req_id);
+    log_debug("taking write slot %d for %lx on chan %d", req_id, addr, chan_id);
     chan->write_reqs[req_id].busy = 1;
     chan->write_reqs[req_id].index = req_id;
     chan->write_reqs[req_id].local_addr = (unsigned long) local_addr;
@@ -320,16 +321,17 @@ int local_post_write(int chan_id, struct region_t* mr, unsigned long addr,
     /* copy to remote */
     log_debug("WRITE remote_addr %lx from local_addr %p, size %lu", 
         remote_addr, local_addr, size);
-    memcpy((void*) remote_addr, local_addr, size);
+    // memcpy((void*) remote_addr, local_addr, size);
 
     /* post completion */
     cq_id = chan->cq_post_idx;
     assert(cq_id >= 0 && cq_id < MAX_REQS_PER_CHAN);
     assert(!chan->cq[cq_id].busy);  /* cq should have enough free entries */
     chan->cq[cq_id].req_idx = req_id;
-    chan->cq[cq_id].rwmode = READ;
+    chan->cq[cq_id].rwmode = WRITE;
     chan->cq[cq_id].posted_tsc = rdtsc();
     store_release(&chan->cq[cq_id].busy, 1);
+    log_debug("posted cq %d for %lx on chan %d", cq_id, addr, chan_id);
 
     /* release after completion to maintain order */
     page_lock_release(remote_addr);

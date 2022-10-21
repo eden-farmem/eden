@@ -16,7 +16,7 @@
 #include "rmem/eviction.h"
 #include "rmem/fault.h"
 #include "rmem/handler.h"
-#include "rmem/pflags.h"
+#include "rmem/page.h"
 #include "rmem/region.h"
 #include "rmem/uffd.h"
 
@@ -174,8 +174,8 @@ static void* rmem_handler(void *arg)
 	assertz(r);
     fault_tcache_init_thread();
     bkend_buf_tcache_init_thread();
+    rmpage_node_tcache_init_thread();
     zero_page_init_thread();
-    dne_q_init_thread();
     list_head_init(&my_hthr->fault_wait_q);
     my_hthr->n_wait_q = 0;
 
@@ -279,7 +279,6 @@ eviction:
 
     /* destroy state */
     zero_page_free_thread();
-    dne_q_free_thread();
     assert(list_empty(&my_hthr->fault_wait_q));
     return NULL;
 }
@@ -288,7 +287,7 @@ eviction:
 hthread_t* new_rmem_handler_thread(int pincore_id)
 {
     int r;
-    hthread_t* hthr = malloc(sizeof(hthread_t));
+    hthread_t* hthr = aligned_alloc(CACHE_LINE_SIZE, sizeof(hthread_t));
     assert(hthr);
     memset(hthr, 0, sizeof(hthread_t));
 

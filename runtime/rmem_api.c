@@ -13,7 +13,7 @@
 #include "base/atomic.h"
 #include "rmem/common.h"
 #include "rmem/eviction.h"
-#include "rmem/pflags.h"
+#include "rmem/page.h"
 #include "rmem/region.h"
 #include "defs.h"
 

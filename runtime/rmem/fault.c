@@ -13,20 +13,14 @@
 #include "base/list.h"
 #include "rmem/backend.h"
 #include "rmem/fault.h"
-#include "rmem/pflags.h"
+#include "rmem/page.h"
 #include "rmem/uffd.h"
-#include "rmem/pflags.h"
 
 #include "../defs.h"
 
 /* fault handling common state */
 __thread void* zero_page = NULL;
 __thread char fstr[__FAULT_STR_LEN];
-
-__thread bool dne_fifo_on;
-__thread struct list_head dne_q;
-__thread unsigned int n_dne_fifo;
-__thread dne_q_item_t dne_q_items[DNE_QUEUE_SIZE];
 
 __thread unsigned int n_wait_q;
 __thread struct list_head fault_wait_q;
@@ -46,58 +40,6 @@ void zero_page_free_thread()
 {
     assert(zero_page);
     free(zero_page);
-}
-
-/**
- * Per-thread DNE support
- * Keeps recently fetched pages for a while before leaving then open for 
- * eviction */
-
-void dne_q_init_thread()
-{
-    list_head_init(&dne_q);
-    n_dne_fifo = 0;
-
-    /* turn off DNE when the local memory is too little because eviction 
-     * can never find candidates otherwise */
-    dne_fifo_on = (local_memory >= 4 * DNE_QUEUE_SIZE * CHUNK_SIZE);
-    if (!dne_fifo_on)
-        log_warn("ignoring DNE queue");
-}
-
-void dne_q_free_thread()
-{
-    /* nothing to do */
-}
-
-static inline void dne_on_new_fault(struct region_t *mr, unsigned long addr) 
-{
-    pflags_t oldflags;
-    dne_q_item_t *q_item = NULL;
-
-    if (!dne_fifo_on)
-        return;
-
-    if (n_dne_fifo >= DNE_QUEUE_SIZE) {
-        // Queue is full. Remove oldest entry from head
-        q_item = list_pop(&dne_q, dne_q_item_t, link);
-        log_debug("DNE FIFO pop and clearing DNE flag: %lx", q_item->addr);
-        clear_page_flags(q_item->mr, q_item->addr, PFLAG_NOEVICT, &oldflags);
-    } else {
-        // Queue is not full yet, just use the next item.
-        q_item = &dne_q_items[n_dne_fifo];
-        n_dne_fifo++;
-        log_debug("Increaing DNE FIFO size: %u", n_dne_fifo);
-    }
-
-    // Prepare the q_item for new insertion.
-    q_item->addr = addr;
-    q_item->mr = mr;
-
-    // Actually add q_item to tail of queue
-    log_debug("DNE FIFO push: %lx", q_item->addr);
-    list_add_tail(&dne_q, &q_item->link);
-    return;
 }
 
 /**
@@ -178,6 +120,8 @@ enum fault_status handle_page_fault(int chan_id, fault_t* fault,
                     no_wake, true, &n_retries);
                 assertz(ret);
                 RSTAT(UFFD_RETRIES) += n_retries;
+
+                /* TODO: bump this item in the LRU lists */
 
                 /* done */
                 log_debug("%s - removed write protection", FSTR(fault));
@@ -287,9 +231,12 @@ enum fault_status handle_page_fault(int chan_id, fault_t* fault,
 /* after reading the pages for a fault completed */
 int fault_read_done(fault_t* f)
 {
-    int n_retries, r;
+    int n_retries, r, i;
     bool wrprotect, no_wake;
     size_t size;
+    struct rmpage_node* pgnode;
+    struct list_head tmp;
+    pflags_t pgidx;
 
     /* uffd copy the page back */
     assert(f->bkend_buf);
@@ -304,6 +251,29 @@ int fault_read_done(fault_t* f)
     /* free backend buffer */
     bkend_buf_free(f->bkend_buf);
 
+    /* newly fetched pages - alloc page nodes */
+    list_head_init(&tmp);
+    for (i = 0; i <= f->rdahead; i++) { 
+        /* get a page node */
+        pgnode = rmpage_node_alloc();
+        assert(pgnode);
+
+        /* TODO: shall we take mr references on active pages too? */
+        pgnode->mr = f->mr;
+        pgnode->addr = f->page;
+        list_add_tail(&tmp, &pgnode->link);
+
+        pgidx = rmpage_get_node_id(pgnode);
+        pgidx = set_page_index_atomic(f->mr, f->page, pgidx);
+        assertz(pgidx); /* old index must be 0 */
+    }
+
+    /* add to page list */
+    spin_lock(&cold_pages.lock);
+    list_append_list(&cold_pages.pages, &tmp);
+    cold_pages.npages += (1 + f->rdahead);
+    spin_unlock(&cold_pages.lock);
+
     /* set page flags */
     pflags_t flags = PFLAG_PRESENT;
     if (!wrprotect) flags |= PFLAG_DIRTY;
@@ -315,30 +285,20 @@ int fault_read_done(fault_t* f)
 }
 
 /* after servicing fault is completely done */
-void fault_done(fault_t* fault) 
+void fault_done(fault_t* f) 
 {
-    unsigned long addr;
-    int i;
-    pflags_t oldflags;
+    size_t size;
+    int marked;
 
-    /* set do-not-evict and add to DNE (if not hinted as single-use) */
-    /* TODO: how useful is this? */
-    if (!fault->single_use) {
-        for (i = 0; i <= fault->rdahead; i++) {
-            addr = fault->page + i * CHUNK_SIZE;
-            set_page_flags(fault->mr, addr, PFLAG_NOEVICT, &oldflags);
-            /* only add if not already */
-            if (!(oldflags & PFLAG_NOEVICT))
-                dne_on_new_fault(fault->mr, addr);
-        }
-    }
-
-    /* remove lock */
-    clear_page_flags(fault->mr, fault->page, PFLAG_WORK_ONGOING, &oldflags);
+    /* remove lock (in the ascending order) */
+    size = (1 + f->rdahead) * CHUNK_SIZE;
+    marked = clear_page_flags_range(f->mr, f->page, 
+        size, PFLAG_WORK_ONGOING);
+    assert(marked == (1 + f->rdahead));
     RSTAT(FAULTS_DONE)++;
-    log_debug("%s - fault done", FSTR(fault));
+    log_debug("%s - fault done", FSTR(f));
 
     /* free */
-    put_mr(fault->mr);
-    fault_free(fault);
+    put_mr(f->mr);
+    fault_free(f);
 }

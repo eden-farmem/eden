@@ -205,9 +205,10 @@ void create_register_memory_buf(struct connection *conn)
  */
 void build_global_context(struct ibv_context *verbs)
 {
-    int i;
+    int i, r;
     void* region;
     size_t len;
+    struct ibv_device_attr dev_attr;
 
     if (global_ctx) {
         assert(global_ctx->ctx == verbs);
@@ -218,6 +219,17 @@ void build_global_context(struct ibv_context *verbs)
     global_ctx = (struct context *) malloc(sizeof(struct context));
     assert(global_ctx);
     global_ctx->ctx = verbs;
+
+    /* check device capabilities */
+    r = ibv_query_device(verbs, &dev_attr);
+    assertz(r);
+    BUG_ON(dev_attr.max_qp < (MAX_CONNECTIONS * RMEM_MAX_CHANNELS));
+    BUG_ON(dev_attr.max_qp_wr < MAX_R_REQS_PER_CHAN);
+    BUG_ON(dev_attr.max_qp_wr < MAX_W_REQS_PER_CHAN);
+    BUG_ON(dev_attr.max_cq < RMEM_MAX_CHANNELS);
+    BUG_ON(dev_attr.max_cqe < MAX_REQS_PER_CHAN);
+    log_debug("rdma device info: max qps: %d, qpe: %d, max cqs: %d cqe: %d", 
+        dev_attr.max_qp, dev_attr.max_qp_wr, dev_attr.max_cq, dev_attr.max_cqe);
 
     /* create pd (to be used for all qps) */
     global_ctx->pd = ibv_alloc_pd(global_ctx->ctx);
@@ -450,6 +462,7 @@ void remote_server_setup(struct server_conn_t *server)
     server->status = CONNECTED;
 
     /* setup data path queues */
+    sleep(1);
     mb();
     for (i = 0; i < server->num_dp; i++) {
         init_connection(&(server->dp[i]), server->ip, server->port);

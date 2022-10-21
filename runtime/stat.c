@@ -166,6 +166,9 @@ static inline int rstat_write_buf(char *buf, char *buf_hthr, size_t len)
 	assert(nhandlers > 0);
 	for (i = 0; i < nhandlers; i++) {
 		assert(handlers[i]);
+		/* ensure 64bit-alignment as gcc O3 is going to vectorize these loops 
+		 * and non-alignment results in segfaults (see gcc -ftree-vectorize) */
+		assert(((unsigned long) handlers[i]->rstats & 7) == 0);
 		for (j = 0; j < RSTAT_NR; j++) {
 			rstats_all[j] += handlers[i]->rstats[j];
 			rstats_hthr[j] += handlers[i]->rstats[j];

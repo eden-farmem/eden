@@ -95,21 +95,6 @@ void zero_page_init_thread();
 void zero_page_free_thread();
 
 /**
- * Do-not-evict Queue Support
- */
-#ifndef DNE_QUEUE_SIZE
-#define DNE_QUEUE_SIZE 64
-#endif
-
-typedef struct dne_q_item {
-    unsigned long addr;
-    struct region_t *mr;
-    struct list_node link;
-} dne_q_item_t;
-void dne_q_init_thread();
-void dne_q_free_thread();
-
-/**
  * Fault handling
  */
 enum fault_status {
