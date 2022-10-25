@@ -30,7 +30,6 @@ struct rmem_backend_ops* rmbackend = NULL;
 int userfault_fd = -1;
 hthread_t** handlers = NULL;
 int nhandlers = 0;
-atomic_ullong memory_booked;
 atomic_ullong memory_used;
 
 /**
@@ -50,7 +49,6 @@ int rmem_init()
 
     /* init global data structures */
     CIRCLEQ_INIT(&region_list);
-    memory_booked = ATOMIC_VAR_INIT(0);
     memory_used = ATOMIC_VAR_INIT(0);
 
     /* init userfaultfd */

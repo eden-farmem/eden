@@ -17,7 +17,6 @@
 /* region data */
 struct region_listhead region_list;
 struct region_t* last_evicted = NULL;
-struct region_t* region_cached = NULL;
 int nregions = 0;
 DEFINE_SPINLOCK(regions_lock);
 
@@ -74,12 +73,11 @@ int register_memory_region(struct region_t *mr, int writeable) {
 
     /* add it to the list. TODO: this should be done in rmem.c after adding 
      * a region */
-    spin_lock(&regions_lock);
+    acquire_region_lock();
     CIRCLEQ_INSERT_HEAD(&region_list, mr, link);
     nregions++;
-    region_cached = mr;
     BUG_ON(nregions > RMEM_MAX_REGIONS);
-    spin_unlock(&regions_lock);
+    release_region_lock();
     return 0;
 error:
     deregister_memory_region(mr);
@@ -91,11 +89,11 @@ void remove_memory_region(struct region_t *mr) {
     log_debug("deleting region %p", mr);
     BUG_ON(atomic_load(&mr->ref_cnt) > 0);
     
-    spin_lock(&regions_lock);
+    acquire_region_lock();
     CIRCLEQ_REMOVE(&region_list, mr, link);
     nregions--;
     last_evicted = CIRCLEQ_FIRST(&region_list); /* reset */
-    spin_unlock(&regions_lock);
+    release_region_lock();
 
     /* deregister */
     deregister_memory_region(mr);

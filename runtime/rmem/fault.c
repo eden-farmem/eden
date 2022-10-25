@@ -99,7 +99,6 @@ enum fault_status handle_page_fault(int chan_id, fault_t* fault,
         /* try getting a lock on the page */
         mr = fault->mr;
         assert(mr);
-        BUG_ON(mr != region_cached);    /* TODO: remove */
 
         pflags = set_page_flags(mr, fault->page, PFLAG_WORK_ONGOING, &oldflags);
         was_locked = !!(oldflags & PFLAG_WORK_ONGOING);
@@ -216,7 +215,7 @@ enum fault_status handle_page_fault(int chan_id, fault_t* fault,
             }
 
             /* book some memory for the pages */
-            pressure = atomic_fetch_add_explicit(&memory_booked, 
+            pressure = atomic_fetch_add_explicit(&memory_used, 
                 nchunks * CHUNK_SIZE, memory_order_relaxed);
             pressure += nchunks * CHUNK_SIZE;
             if (pressure > local_memory)
@@ -278,9 +277,6 @@ int fault_read_done(fault_t* f)
     pflags_t flags = PFLAG_PRESENT;
     if (!wrprotect) flags |= PFLAG_DIRTY;
     set_page_flags_range(f->mr, f->page, size, flags);
-
-    /* increase memory pressure */
-    atomic_fetch_add_explicit(&memory_used, CHUNK_SIZE, memory_order_relaxed);
     return 0;
 }
 

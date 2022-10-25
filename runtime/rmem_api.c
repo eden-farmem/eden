@@ -262,7 +262,6 @@ int rmadvise(void *addr, size_t length, int advice)
     if (ret == 0) {
         /* update pressure */
         size = marked * CHUNK_SIZE;
-        atomic_fetch_sub_explicit(&memory_booked, size, memory_order_relaxed);
         pressure = atomic_fetch_sub_explicit(&memory_used, size, memory_order_relaxed);
         log_debug("Freed %d page(s), pressure=%lld", marked, pressure - size);
         RSTAT(MADV_SIZE) += length;

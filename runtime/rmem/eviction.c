@@ -431,7 +431,6 @@ int do_eviction(int chan_id, struct bkend_completion_cbs* cbs, int max_batch_siz
     /* memory accounting */
     if (flushed > 0) {
         size = flushed * CHUNK_SIZE;
-        atomic_fetch_sub_explicit(&memory_booked, size, memory_order_acquire);
         pressure = atomic_fetch_sub_explicit(&memory_used, size, memory_order_acquire);
         log_debug("Freed %d page(s), pressure=%lld", nchunks, pressure - size);
     

@@ -61,15 +61,21 @@ static inline bool __is_fault_pending(void* address, bool write)
 #ifndef USE_VDSO_CHECKS
     pflags_t pflags;
     bool page_present, page_dirty;
+    struct region_t* mr = NULL;
+#ifdef NO_DYNAMIC_REGIONS
     /* we only support one region now so caching an unsafe reference for future 
      * fast path accesses. this is neither correct nor safe when we have 
      * multiple regions along with regular region updates */
     if (unlikely(!__cached_mr)) {
-        __cached_mr = get_first_region_unsafe();
+        __cached_mr = get_first_region_safe();
         assert(__cached_mr);
     }
-    assert(is_in_memory_region_unsafe(__cached_mr, (unsigned long) address));
-    pflags = get_page_flags(__cached_mr, (unsigned long) address);
+    mr = __cached_mr;
+#else
+    mr = get_region_by_addr_unsafe((unsigned long) address);
+#endif
+    assert(is_in_memory_region_unsafe(mr, (unsigned long) address));
+    pflags = get_page_flags(mr, (unsigned long) address);
     page_present = !!(pflags & PFLAG_PRESENT);
     page_dirty = !!(pflags & PFLAG_DIRTY);
     nofault = page_dirty || (!write && page_present);

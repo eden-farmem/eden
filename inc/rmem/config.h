@@ -11,7 +11,8 @@
 #include "base/mem.h"
 
 /* Default configs */
-#define WP_ON_READ      /* not available on kernel v < 5.0? */
+#define WP_ON_READ          /* not available on kernel v < 5.0? */
+#define NO_DYNAMIC_REGIONS  /* regions added/deleted only at startup/exit */
 
 /* memory backend */
 typedef enum {

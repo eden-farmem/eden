@@ -19,7 +19,6 @@ extern double eviction_done_threshold;
 /* global state */
 extern int nhandlers;
 extern hthread_t** handlers;
-extern atomic_ullong memory_booked;
 extern atomic_ullong memory_used;
 
 #endif  // __RMEM_COMMON_H__
