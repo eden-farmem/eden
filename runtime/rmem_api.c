@@ -144,10 +144,11 @@ int rmunmap(void *addr, size_t length)
 {
     RUNTIME_ENTER();
     struct region_t *mr;
-    unsigned long offset, page, max_addr;
-    int ret = 0;
-    pflags_t oldflags, flags;
+    int ret = 0, marked;
     bool locked;
+    unsigned long offset, page, max_addr, size;
+    pflags_t oldflags, flags, clrflags, pgidx;
+    struct rmpage_node *pgnode;
 
     log_debug("rmunmap at %p", addr);
     if (!addr) 
@@ -171,7 +172,7 @@ int rmunmap(void *addr, size_t length)
             break;
 
         do {
-            set_page_flags(mr, page, PFLAG_WORK_ONGOING, &oldflags);
+            flags = set_page_flags(mr, page, PFLAG_WORK_ONGOING, &oldflags);
             locked = !(oldflags & PFLAG_WORK_ONGOING);
             cpu_relax();
         } while(!locked);
@@ -182,10 +183,46 @@ int rmunmap(void *addr, size_t length)
      * except add perf overhead as we lock all the pages anyway */
     ret = munmap(addr, length);
 
-    /* unlock all pages while also setting them unregistered if munmap worked */
-    flags = PFLAG_WORK_ONGOING;
-    if (ret == 0)   flags |= PFLAG_REGISTERED;
-    clear_page_flags_range(mr, (unsigned long) addr, length, flags);
+    /* unlock all pages while also setting them unregistered and freeing the 
+     * page nodes for pages that were locally present (if munmap worked) */
+    marked = 0;
+    for (offset = 0; offset < length; offset += CHUNK_SIZE) {
+        page = (unsigned long) addr + offset;
+        if (page >= max_addr)
+            break;
+
+        /* unlock the page */
+        clrflags = PFLAG_WORK_ONGOING;
+ 
+        if (ret == 0) {
+            /* unregister the page */
+            clrflags |= PFLAG_REGISTERED;
+
+            /* if the page was present, drop it and release the page node */
+            flags = get_page_flags(mr, page);
+            assert(!!(flags & PFLAG_WORK_ONGOING));
+            if (!!(flags && PFLAG_PRESENT)) {
+                pgidx = get_page_index_from_flags(flags);
+                pgnode = rmpage_get_node_by_id(pgidx);
+                rmpage_node_free(pgnode);
+                marked++;
+                clrflags |= PFLAG_PRESENT;
+            }
+        }
+
+        /* unlock the page */
+        clear_page_flags(mr, page, clrflags, &oldflags);
+        log_debug("unlocked page for unmap %lx", page);
+    }
+
+    /* update memory usage */
+    if (marked) {
+        size = marked * CHUNK_SIZE;
+        atomic_fetch_sub_explicit(&memory_used, size, memory_order_relaxed);
+        log_debug("Freed %d page(s), pressure=%lld", marked, 
+            atomic_load(&memory_used));
+    }
+
     if (ret == 0)
         RSTAT(MUNMAP_SIZE) += length;
 
@@ -202,11 +239,11 @@ int rmadvise(void *addr, size_t length, int advice)
 {
     RUNTIME_ENTER();
     struct region_t *mr;
-    unsigned long offset, page, max_addr;
-    unsigned long long pressure, size;
+    unsigned long offset, page, max_addr, size;
     int ret = 0, marked;
-    pflags_t oldflags, flags;
+    pflags_t oldflags, flags, clrflags, pgidx;
     bool locked;
+    struct rmpage_node *pgnode;
 
     log_debug("rmadvise at %p size %ld advice %d", addr, length, advice);
     if (!addr) 
@@ -245,28 +282,45 @@ int rmadvise(void *addr, size_t length, int advice)
      * except add perf overhead as we lock all the pages anyway */
     ret = madvise(addr, length, advice);
 
-    /* unlock all pages while also setting them unregistered if munmap worked */
-    flags = PFLAG_WORK_ONGOING;
-    if (ret == 0)   flags |= PFLAG_PRESENT;
+    /* unlock all pages while also setting them unregistered and freeing the 
+     * page nodes for pages that were locally present (if munmap worked) */
     marked = 0;
     for (offset = 0; offset < length; offset += CHUNK_SIZE) {
         page = (unsigned long) addr + offset;
         if (page >= max_addr)
             break;
 
-        assert(!!(oldflags & PFLAG_WORK_ONGOING));  /* assert locked before */
-        if (!!(oldflags & PFLAG_PRESENT))
-            marked++;
+        /* unlock the page */
+        clrflags = PFLAG_WORK_ONGOING;
+
+        if (ret == 0) {
+            /* if the page was present, drop it and release the page node */
+            flags = get_page_flags(mr, page);
+            assert(!!(flags & PFLAG_WORK_ONGOING));
+            if (!!(flags && PFLAG_PRESENT)) {
+                pgidx = get_page_index_from_flags(flags);
+                pgnode = rmpage_get_node_by_id(pgidx);
+                rmpage_node_free(pgnode);
+                marked++;
+                clrflags |= PFLAG_PRESENT;
+            }
+        }
+
+        /* unlock the page */
+        clear_page_flags(mr, page, clrflags, &oldflags);
+        log_debug("unlocked page for unmap %lx", page);
     }
 
-    if (ret == 0) {
-        /* update pressure */
+    /* update memory usage */
+    if (marked) {
         size = marked * CHUNK_SIZE;
-        atomic_fetch_sub_explicit(&memory_booked, size, memory_order_relaxed);
-        pressure = atomic_fetch_sub_explicit(&memory_used, size, memory_order_relaxed);
-        log_debug("Freed %d page(s), pressure=%lld", marked, pressure - size);
-        RSTAT(MADV_SIZE) += length;
+        atomic_fetch_sub_explicit(&memory_used, size, memory_order_relaxed);
+        log_debug("Freed %d page(s), pressure=%lld", marked, 
+            atomic_load(&memory_used));
     }
+
+    if (ret == 0)
+        RSTAT(MADV_SIZE) += length;
 
 OUT:
     RUNTIME_EXIT();
