@@ -20,8 +20,6 @@
 #include "rmem/region.h"
 #include "rmem/uffd.h"
 
-#include "../defs.h"
-
 /* handler state */
 __thread struct hthread *my_hthr = NULL;
 
@@ -172,10 +170,7 @@ static void* rmem_handler(void *arg)
     /* init */
     r = thread_init_perthread();    /* for tcache support */
 	assertz(r);
-    fault_tcache_init_thread();
-    bkend_buf_tcache_init_thread();
-    rmpage_node_tcache_init_thread();
-    zero_page_init_thread();
+    rmem_common_init_thread(&my_hthr->bkend_chan_id, my_hthr->rstats);
     list_head_init(&my_hthr->fault_wait_q);
     my_hthr->n_wait_q = 0;
 
@@ -291,10 +286,6 @@ hthread_t* new_rmem_handler_thread(int pincore_id)
     assert(hthr);
     memset(hthr, 0, sizeof(hthread_t));
 
-    /* get a backend channel */
-    hthr->bkend_chan_id = rmbackend->get_new_data_channel();
-    assert(hthr->bkend_chan_id >= 0);
-
     /* create thread */
     hthr->stop = false;
     r = pthread_create(&hthr->thread, NULL, rmem_handler, (void*)hthr);
@@ -322,6 +313,9 @@ int stop_rmem_handler_thread(hthread_t* hthr)
 	struct timespec wait = {.tv_nsec = 5E8 }; /* 1/2 second */
     r = pthread_timedjoin_np(hthr->thread, NULL, &wait);
     assertz(r);
+
+    /* destroy per thread */
+    rmem_common_destroy_thread();
 
     /* deallocate */
     free(hthr);

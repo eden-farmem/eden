@@ -18,28 +18,12 @@
 
 #include "defs.h"
 
-/* externed global settings */
-bool rmem_enabled = false;
-rmem_backend_t rmbackend_type = RMEM_BACKEND_DEFAULT;
-double eviction_threshold = EVICTION_THRESHOLD;
-double eviction_done_threshold = EVICTION_DONE_THRESHOLD;
-uint64_t local_memory = LOCAL_MEMORY_SIZE;
-
-/* global state for remote memory */
-struct rmem_backend_ops* rmbackend = NULL;
-int userfault_fd = -1;
-hthread_t** handlers = NULL;
-int nhandlers = 0;
-atomic_ullong memory_used;
-
 /**
  * rmem_init - initializes remote memory
  */
 int rmem_init()
 {
-    int ret;
-    log_debug("rmem_init with %.2lf GB local memory", 
-        local_memory * 1.0 / (1 << 30));
+    int r;
 
     /* remote memory does not support burstable or on-demand cores for now */
     if (guaranteedks != maxks || spinks != maxks){
@@ -47,57 +31,10 @@ int rmem_init()
         return 1;
     }
 
-    /* init global data structures */
-    CIRCLEQ_INIT(&region_list);
-    memory_used = ATOMIC_VAR_INIT(0);
-
-    /* init userfaultfd */
-    userfault_fd = uffd_init();
-    assert(userfault_fd >= 0);
-
-    /* initialize backend buf pool (used by backend) */
-    ret = bkend_buf_tcache_init();
-    assertz(ret);
-
-    /* initialize backend */
-    switch(rmbackend_type) {
-        case RMEM_BACKEND_LOCAL:
-            rmbackend = &local_backend_ops;
-            break;
-        case RMEM_BACKEND_RDMA:
-            rmbackend = &rdma_backend_ops;
-            break;
-        default:
-            BUG();  /* unhandled backend */
-    }
-    ret = rmbackend->init();
-    assertz(ret);
-
-    /* add some memory to start with */
-    ret = rmbackend->add_memory(NULL, RDMA_SERVER_NSLABS);
-    assert(ret > 0);
-
-    /* assign tcaches for faults */
-    ret = fault_tcache_init();
-    assertz(ret);
-
-    /* tcaches for pages */
-    ret = rmpage_node_tcache_init();
-    assertz(ret);
-
-    /* init lru lists */
-    lru_lists_init();
-
-    /* kick off rmem handlers 
-     * (currently just one but we can add more) */
-    nhandlers = 1;
-    handlers = malloc(nhandlers*sizeof(hthread_t*));
-    handlers[0] = new_rmem_handler_thread(PIN_RMEM_HANDLER_CORE);
-    /* note that these extra cores are not excluded from shenango core list */
-    // handlers[1] = new_rmem_handler_thread(PIN_RMEM_HANDLER_CORE-1);
-    // handlers[2] = new_rmem_handler_thread(PIN_RMEM_HANDLER_CORE-2);
-    // handlers[3] = new_rmem_handler_thread(PIN_RMEM_HANDLER_CORE-3);
-
+    /* init rmem */
+    r = rmem_common_init();
+    if (r)
+        return r;
 
 #ifdef USE_VDSO_CHECKS
     /* init vdso objects */
@@ -108,22 +45,13 @@ int rmem_init()
 }
 
 /**
- * rmem_init_thread - initializes per-thread remote memory support (only for
- * shenango threads, not rmem handlers)
+ * rmem_init_thread - initializes per-thread remote memory 
+ * support shenango threads
  */
 int rmem_init_thread()
 {
     struct kthread *k = myk();
-
-    /* init per-thread data */
-    fault_tcache_init_thread();
-    bkend_buf_tcache_init_thread();
-    rmpage_node_tcache_init_thread();
-    zero_page_init_thread();
-
-    /* get dedicated backend channel */
-    k->bkend_chan_id = rmbackend->get_new_data_channel();
-    assert(k->bkend_chan_id >= 0);
+    rmem_common_init_thread(&k->bkend_chan_id, k->rstats);
     return 0;
 }
 
@@ -142,7 +70,7 @@ int rmem_init_late()
  */
 int rmem_destroy_thread()
 {
-    zero_page_free_thread();
+    rmem_common_destroy_thread();
     assert(list_empty(&myk()->fault_wait_q));
     assert(list_empty(&myk()->fault_cq_steals_q));
     return 0;
@@ -155,27 +83,5 @@ int rmem_destroy_thread()
  */
 int rmem_destroy()
 {
-    int i, ret;
-
-    /* stop and destroy handlers */
-    for (i = 0; i < nhandlers; i++) {
-        ret = stop_rmem_handler_thread(handlers[i]);
-        assertz(ret);
-    }
-    free(handlers);
-
-    /* TODO: anyway to destroy fault tcache? */
-
-    /* ensure all regions freed */
-    struct region_t *mr = NULL;
-    CIRCLEQ_FOREACH(mr, &region_list, link)   
-        remove_memory_region(mr);
-    assert(CIRCLEQ_EMPTY(&region_list));
-
-    /* destroy backend */
-    if (rmbackend != NULL) {
-        rmbackend->destroy();
-        rmbackend = NULL;
-    }
-    return 0;
+    return rmem_common_destroy();
 }

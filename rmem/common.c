@@ -1,0 +1,164 @@
+/*
+ * init.c - remote memory init
+ */
+
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#endif
+
+#include <sys/mman.h>
+
+#include "rmem/backend.h"
+#include "rmem/common.h"
+#include "rmem/config.h"
+#include "rmem/fault.h"
+#include "rmem/handler.h"
+#include "rmem/region.h"
+#include "rmem/uffd.h"
+#include "runtime/pgfault.h"
+
+/* externed global settings */
+bool rmem_enabled = false;
+rmem_backend_t rmbackend_type = RMEM_BACKEND_DEFAULT;
+double eviction_threshold = EVICTION_THRESHOLD;
+double eviction_done_threshold = EVICTION_DONE_THRESHOLD;
+uint64_t local_memory = LOCAL_MEMORY_SIZE;
+
+/* global state for remote memory */
+struct rmem_backend_ops* rmbackend = NULL;
+int userfault_fd = -1;
+hthread_t** handlers = NULL;
+int nhandlers = 1;
+atomic_ullong memory_used;
+__thread uint64_t* rstats_ptr = NULL;
+
+/**
+ * rmem_common_init - initializes remote memory
+ */
+int rmem_common_init()
+{
+    int i, ret;
+    log_debug("rmem_init with %.2lf GB local memory", 
+        local_memory * 1.0 / (1 << 30));
+
+    /* init global data structures */
+    CIRCLEQ_INIT(&region_list);
+    memory_used = ATOMIC_VAR_INIT(0);
+
+    /* init userfaultfd */
+    userfault_fd = uffd_init();
+    assert(userfault_fd >= 0);
+
+    /* initialize backend buf pool (used by backend) */
+    ret = bkend_buf_tcache_init();
+    assertz(ret);
+
+    /* initialize backend */
+    switch(rmbackend_type) {
+        case RMEM_BACKEND_LOCAL:
+            rmbackend = &local_backend_ops;
+            break;
+        case RMEM_BACKEND_RDMA:
+            rmbackend = &rdma_backend_ops;
+            break;
+        default:
+            BUG();  /* unhandled backend */
+    }
+    ret = rmbackend->init();
+    assertz(ret);
+
+    /* add some memory to start with */
+    ret = rmbackend->add_memory(NULL, RDMA_SERVER_NSLABS);
+    assert(ret > 0);
+
+    /* assign tcaches for faults */
+    ret = fault_tcache_init();
+    assertz(ret);
+
+    /* tcaches for pages */
+    ret = rmpage_node_tcache_init();
+    assertz(ret);
+
+    /* init lru lists */
+    lru_lists_init();
+
+    /* kick off rmem handlers */
+    BUG_ON(nhandlers > (RMEM_HANDLER_CORE_HIGH - RMEM_HANDLER_CORE_LOW + 1));
+    handlers = malloc(nhandlers*sizeof(hthread_t*));
+    for (i = 0; i < nhandlers; i++)
+        handlers[i] = new_rmem_handler_thread(RMEM_HANDLER_CORE_LOW + i);
+
+    return 0;
+}
+
+/**
+ * rmem_common_init_thread - initializes per-thread remote memory support for
+ * either shenango or handler threads. Also creates a new backend channel and 
+ * passes it back to the caller if asked for.
+ */
+int rmem_common_init_thread(int* new_chan_id, uint64_t* stats_ptr)
+{
+    /* init per-thread data */
+    fault_tcache_init_thread();
+    bkend_buf_tcache_init_thread();
+    rmpage_node_tcache_init_thread();
+    zero_page_init_thread();
+
+    /* get a dedicated backend channel */
+    assert(new_chan_id);
+    *new_chan_id = rmbackend->get_new_data_channel();
+    assert(*new_chan_id >= 0);
+    return 0;
+
+    /* save rstats ptr */
+    assert(stats_ptr);
+    rstats_ptr = stats_ptr;
+}
+
+/**
+ * rmem_init_late - remote memory post-init actions
+ */
+int rmem_init_late()
+{
+    return 0;
+}
+
+/**
+ * rmem_common_destroy_thread - destroy per-thread remote memory support
+ */
+int rmem_common_destroy_thread()
+{
+    zero_page_free_thread();
+    return 0;
+}
+
+/**
+ * rmem_common_destroy - remote memory clean-up
+ */
+int rmem_common_destroy()
+{
+    int i, ret;
+
+    /* stop and destroy handlers */
+    for (i = 0; i < nhandlers; i++) {
+        ret = stop_rmem_handler_thread(handlers[i]);
+        assertz(ret);
+    }
+    free(handlers);
+
+    /* TODO: anyway to destroy fault tcache? */
+
+    /* ensure all regions freed */
+    struct region_t *mr = NULL;
+    CIRCLEQ_FOREACH(mr, &region_list, link)   
+        remove_memory_region(mr);
+    assert(CIRCLEQ_EMPTY(&region_list));
+
+    /* destroy backend */
+    if (rmbackend != NULL) {
+        rmbackend->destroy();
+        rmbackend = NULL;
+    }
+
+    return 0;
+}

@@ -778,6 +778,22 @@ void cores_adjust_assignments(void)
 	}
 }
 
+/**
+ * Check if a given core was assigned as a remote memory handler
+ */
+bool is_rmem_handler_core(int core)
+{
+	/* exclude the rmem handler cores. TODO: In future, we should pick an 
+	 * available core here (e.g., the last one on preferred socket) and assign 
+	 * them rather than reading from config */
+#ifndef REMOTE_MEMORY
+	return false;
+#endif
+	assert(RMEM_HANDLER_CORE_LOW > 0 && RMEM_HANDLER_CORE_LOW < cpu_count);
+	assert(RMEM_HANDLER_CORE_HIGH > 0 && RMEM_HANDLER_CORE_HIGH < cpu_count);
+	return (core >= RMEM_HANDLER_CORE_LOW && core <= RMEM_HANDLER_CORE_HIGH);
+}
+
 /*
  * Initialize core state.
  */
@@ -829,12 +845,6 @@ int cores_init(void)
 	core_assign.linux_core = cpu_to_sibling_cpu(core_assign.dp_core);
 	core_assign.ctrl_core = cpu_to_sibling_cpu(core_assign.dp_core);
 
-	/* note down the rmem handler core. TODO: In future, we should pick an 
-	 * available core here (e.g., the last one on preferred socket) and assign 
-	 * it rather than reading from config */
-	assert(PIN_RMEM_HANDLER_CORE > 0 && PIN_RMEM_HANDLER_CORE < cpu_count);
-	core_assign.rmem_core = PIN_RMEM_HANDLER_CORE;
-
 	/* mark all cores as unavailable */
 	bitmap_init(avail_cores, cpu_count, false);
 
@@ -843,12 +853,11 @@ int cores_init(void)
 
 	/* find cores on socket 0 that are not already in use */
 	for (i = 0; i < cpu_count; i++) {
-		if (i == core_assign.linux_core ||
-		    i == core_assign.ctrl_core ||
-		    i == core_assign.dp_core || 
-			i == core_assign.rmem_core) {
+		if (i == core_assign.linux_core
+				|| i == core_assign.ctrl_core
+				|| i == core_assign.dp_core
+				|| is_rmem_handler_core(i))
 			continue;
-		}
 
 #ifdef CORES_NOHT
 		/* disable hyperthreads */
@@ -862,9 +871,8 @@ int cores_init(void)
 			core_init(i);
 	}
 
-	log_info("cores: linux on core %d, control on %d, dataplane on %d, "
-	 	"rmem on %d", core_assign.linux_core, core_assign.ctrl_core,
-		core_assign.dp_core, core_assign.rmem_core);
+	log_info("cores: linux on core %d, control on %d, dataplane on %d", 
+		core_assign.linux_core, core_assign.ctrl_core, core_assign.dp_core);
 
 	return 0;
 }

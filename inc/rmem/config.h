@@ -54,41 +54,45 @@ typedef enum {
 /* Single NUMA nodes for both machines.
  * R320: CPU(s): 16 
  * 16Gb Memory */
-#define RDMA_SERVER_MEMORY_GB   12
-#define PIN_RMEM_HANDLER_CORE   15
-#define PIN_SERVER_CORE         14
-#define PIN_SERVER_POLLER_CORE  13
-#define PIN_RACK_CNTRL_CORE     12
-#define PIN_RACK_CNTRL_POLLER_CORE 11
+#define RDMA_SERVER_MEMORY_GB       12
+#define RMEM_HANDLER_CORE_HIGH      12
+#define RMEM_HANDLER_CORE_LOW       12
+#define PIN_SERVER_CORE             14
+#define PIN_SERVER_POLLER_CORE      13
+#define PIN_RACK_CNTRL_CORE         12
+#define PIN_RACK_CNTRL_POLLER_CORE  11
 
 #elif defined(CLOUDLAB_C6220)
 /* NUMA node0 CPU(s):   0-7,16-23
  * NUMA node1 CPU(s):   8-15,24-31
  * RNIC NUMA node = 1
  * 64 GB Memory */
-#define RDMA_SERVER_MEMORY_GB   32
-#define PIN_RMEM_HANDLER_CORE   31
-#define PIN_SERVER_CORE         30
-#define PIN_SERVER_POLLER_CORE  29
-#define PIN_RACK_CNTRL_CORE     28
-#define PIN_RACK_CNTRL_POLLER_CORE 27
+#define RDMA_SERVER_MEMORY_GB       32
+#define RMEM_HANDLER_CORE_HIGH      31
+#define RMEM_HANDLER_CORE_LOW       31
+#define PIN_SERVER_CORE             30
+#define PIN_SERVER_POLLER_CORE      29
+#define PIN_RACK_CNTRL_CORE         28
+#define PIN_RACK_CNTRL_POLLER_CORE  27
 
 #elif defined(VRG_SC2)
 /* NUMA node0 CPU(s):   0-13,28-41
  * NUMA node1 CPU(s):   14-27,42-55
  * RNIC NUMA node = 1
  * 176 GB Memory */
-#define RDMA_SERVER_MEMORY_GB   64
-#define PIN_RMEM_HANDLER_CORE   55
-#define PIN_SERVER_CORE         54
-#define PIN_SERVER_POLLER_CORE  53
-#define PIN_RACK_CNTRL_CORE     52
-#define PIN_RACK_CNTRL_POLLER_CORE 51
+#define RDMA_SERVER_MEMORY_GB       64
+#define RMEM_HANDLER_CORE_HIGH      55
+#define RMEM_HANDLER_CORE_LOW       52
+#define PIN_SERVER_CORE             51
+#define PIN_SERVER_POLLER_CORE      50
+#define PIN_RACK_CNTRL_CORE         49
+#define PIN_RACK_CNTRL_POLLER_CORE  48
 
 #else
 #pragma GCC error "Specify memory size for selected machine"
 #endif
 #define RDMA_SERVER_NSLABS (RDMA_SERVER_MEMORY_GB * 1073741824L / RMEM_SLAB_SIZE)
+BUILD_ASSERT(RMEM_HANDLER_CORE_LOW <= RMEM_HANDLER_CORE_HIGH);
 /*************************************************************/
 
 /* Chunk size for remote memory handling (must be a power of 2 (KB)). */

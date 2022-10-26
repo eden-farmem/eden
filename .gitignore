@@ -1,6 +1,7 @@
 *.d
 *.o
 *.a
+*.so
 [._]*.sw[a-p]
 iokerneld
 iokerneld-noht

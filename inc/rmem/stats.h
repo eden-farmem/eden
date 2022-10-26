@@ -51,4 +51,17 @@ enum {
     RSTAT_NR,   /* total number of counters */
 };
 
+/**
+ * RSTAT - gets an remote memory stat counter
+ * (this can be used from both shenango & handler threads but make 
+ * sure to initialize the ptr to the thread-local stats)
+ */
+extern __thread uint64_t* rstats_ptr;
+static inline uint64_t* rstats_ptr_safe()
+{
+   	assert(rstats_ptr);
+    return rstats_ptr;
+}
+#define RSTAT(counter) (rstats_ptr_safe()[RSTAT_ ## counter])
+
 #endif  // __RMEM_STATS_H__

@@ -20,8 +20,6 @@
 #include "rmem/region.h"
 #include "rmem/uffd.h"
 
-#include "../defs.h"
-
 /* eviction state */
 __thread uint64_t last_seen_faults = 0;
 __thread struct region_t *eviction_region_safe = NULL;

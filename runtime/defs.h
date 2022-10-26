@@ -309,7 +309,7 @@ struct kthread {
 	/* 9th cache-line (all protected by the pf_lock) */
 	spinlock_t 			pf_lock;
 	unsigned int 		pf_pending;
-	unsigned int		bkend_chan_id;
+	int					bkend_chan_id;
     struct list_head 	fault_wait_q;
     struct list_head 	fault_cq_steals_q;
     unsigned int 		n_wait_q;
@@ -390,17 +390,6 @@ extern struct cpu_record cpu_map[NCPU];
  * Deliberately could race with preemption.
  */
 #define STAT(counter) (myk()->stats[STAT_ ## counter])
-
-/**
- * RSTAT - gets an remote memory stat counter
- * (this can be used from both shenango & handler threads)
- */
-static inline uint64_t* my_rstats() {
-   	if (my_hthr != NULL)   	return my_hthr->rstats;
-    else if (myk() != NULL)	return myk()->rstats;
-    else                   	BUG();
-}
-#define RSTAT(counter) (my_rstats()[RSTAT_ ## counter])
 
 /*
  * Softirq support

@@ -67,11 +67,5 @@ extern __thread bool __from_runtime;
   do {                              \
     __from_runtime = false;         \
   } while (0)
-#define ASSERT_IN_RUNTIME()         \
-  do {                              \
-    assert(__from_runtime);         \
-  } while (0)
-#define ASSERT_NOT_IN_RUNTIME()     \
-  do {                              \
-    assert(!__from_runtime);        \
-  } while (0)
+#define IN_RUNTIME()      (__from_runtime)
+#define NOT_IN_RUNTIME()  (!__from_runtime)

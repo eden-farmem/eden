@@ -1,5 +1,5 @@
 /*
- * kthr_fault.c - fault handling in shenango kthreads
+ * kfault.c - fault handling in shenango kthreads
  */
 
 #include <sys/auxv.h>
@@ -16,7 +16,7 @@
 #include "runtime/pgfault.h"
 #include "runtime/sync.h"
 
-#include "../defs.h"
+#include "defs.h"
 
 /* state */
 __thread struct region_t* __cached_mr = NULL;

@@ -28,7 +28,6 @@ struct region_t {
     unsigned long addr;
     unsigned long remote_addr;
     atomic_ullong current_offset;
-    atomic_ullong evict_offset;
 
     /* page metadata */
     atomic_pflags_t *page_flags;
@@ -90,6 +89,24 @@ static inline bool is_in_memory_region_unsafe(struct region_t *mr,
     unsigned long addr) 
 {
     return addr >= mr->addr && addr < mr->addr + mr->size;
+}
+
+/* Checks if given pointer falls in any of the active memory regions */
+static inline bool within_memory_region(void *ptr) 
+{
+    if (ptr == NULL)
+        return false;
+
+    struct region_t *mr = NULL;
+    acquire_region_lock();
+    CIRCLEQ_FOREACH(mr, &region_list, link) {
+        if (is_in_memory_region_unsafe(mr, (unsigned long)ptr)) {
+            release_region_lock();
+            return true;
+        }
+    }
+    release_region_lock();
+    return false;
 }
 
 /* Finds a region with available memory of given size. It returns a deletion-safe 

@@ -748,7 +748,7 @@ void thread_park_on_fault(void* address, bool write, int rdahead)
 
     /* fault serviced when we get back here */
     assert(!__is_fault_pending(address, write));
-    ASSERT_NOT_IN_RUNTIME();
+    assert(NOT_IN_RUNTIME());
 }
 
 /**

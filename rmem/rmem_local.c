@@ -12,8 +12,7 @@
 #include "base/time.h"
 #include "rmem/backend.h"
 #include "rmem/fault.h"
-
-#include "defs.h"
+#include "rmem/stats.h"
 
 #define LOCAL_BACKEND_DELAY_MUS 0
 #define PAGE_LOCKS_SHIFT    16

@@ -13,7 +13,7 @@
 #include "rmem/backend.h"
 #include "rmem/fault.h"
 #include "rmem/rdma.h"
-#include "defs.h"
+#include "rmem/stats.h"
 
 /** 
  * Per-connection QP and CQ sizes for send and recv. We only expect a lot of 

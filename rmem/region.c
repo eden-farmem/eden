@@ -69,7 +69,6 @@ int register_memory_region(struct region_t *mr, int writeable) {
         goto error;
     mr->ref_cnt = ATOMIC_VAR_INIT(0);
     mr->current_offset = ATOMIC_VAR_INIT(0);
-    mr->evict_offset = ATOMIC_VAR_INIT(0);
 
     /* add it to the list. TODO: this should be done in rmem.c after adding 
      * a region */

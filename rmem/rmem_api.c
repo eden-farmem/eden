@@ -11,11 +11,11 @@
 #include "base/log.h"
 #include "base/mem.h"
 #include "base/atomic.h"
+#include "rmem/api.h"
 #include "rmem/common.h"
 #include "rmem/eviction.h"
 #include "rmem/page.h"
 #include "rmem/region.h"
-#include "defs.h"
 
 /* TODO: Not sure why kona was doing this; remove and see. */
 size_t __update_size(size_t size)

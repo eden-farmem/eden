@@ -2,10 +2,11 @@
 
 set -e
 
-# Initialize dpdk module
+# Initialize submodules
 git submodule init
 git submodule update --recursive
 
+# Apply patches for DPDK
 # # Apply driver patches
 # patch -p 1 -d dpdk/ < ixgbe_19_11.patch
 
@@ -17,9 +18,7 @@ git submodule update --recursive
 # fi
 patch -p 1 -d dpdk/ < mlx5_20_11.patch
 
-# # Configure/compile dpdk
-# make -C dpdk/ config T=x86_64-native-linuxapp-gcc
-# make -C dpdk/ -j
+# Configure/compile dpdk
 pushd dpdk/
 meson build
 ninja -C build

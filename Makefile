@@ -1,3 +1,11 @@
+#
+# Shenango Build
+#
+
+#
+# Common
+#
+
 DPDK_PATH = dpdk
 PKGCONF ?= pkg-config
 INC     = -I./inc
@@ -8,11 +16,19 @@ LD	= gcc
 CC	= gcc
 AR	= ar
 SPARSE	= sparse
+CHECKFLAGS = -D__CHECKER__ -Waddress-space
+
 # uncomment to autodetect MLX5
 MLX5=$(shell lspci | grep 'ConnectX-5' || echo "")
-# MLX4=$(shell lspci | grep 'ConnectX-3' || echo "")
+MLX4=$(shell lspci | grep 'ConnectX-3' || echo "")
 
-CHECKFLAGS = -D__CHECKER__ -Waddress-space
+# Path and dir of this makefile
+MKFILE_PATH := $(abspath $(lastword $(MAKEFILE_LIST)))
+MKFILE_DIR := $(dir $(MKFILE_PATH))
+
+#
+# Make options
+#
 
 ifneq ($(DEBUG),)
 CFLAGS += -DDEBUG -DCCAN_LIST_DEBUG -rdynamic -O0 -ggdb
@@ -67,8 +83,30 @@ CFLAGS += -DMLX4
 endif
 endif
 
+#
+# Dependencies
+#
+
+# rdma
+RDMA_LIBS=-lrdmacm -libverbs
+
+# dpdk
+DPDK_LIBS = $(shell $(PKGCONF) --static --libs libdpdk)
+
+# jemalloc
+JE_ROOT_DIR=${MKFILE_DIR}/jemalloc
+JE_BUILD_DIR=${JE_ROOT_DIR}/build
+JE_LIB_DIR=${JE_BUILD_DIR}/lib
+JE_INCLUDE_DIR=${JE_BUILD_DIR}/include
+JE_LDFLAGS += -L${JE_LIB_DIR} -Wl,-rpath,${JE_LIB_DIR} -ljemalloc
+CFLAGS += -I${JE_INCLUDE_DIR}
+
 # handy for debugging
 print-%  : ; @echo $* = $($*)
+
+#
+# Shenango libs
+#
 
 # libbase.a - the base library
 base_src = $(wildcard base/*.c)
@@ -83,54 +121,54 @@ iokernel_src = $(wildcard iokernel/*.c)
 iokernel_obj = $(iokernel_src:.c=.o)
 iokernel_noht_obj = $(iokernel_src:.c=-noht.o)
 
+# librmem.a - a remote memory library
+rmem_src = $(wildcard rmem/*.c)
+rmem_obj = $(rmem_src:.c=.o)
+
 # runtime - a user-level threading and networking library
-runtime_src = $(wildcard runtime/*.c) $(wildcard runtime/net/*.c) $(wildcard runtime/rmem/*.c)
+runtime_src = $(wildcard runtime/*.c) $(wildcard runtime/net/*.c)
 runtime_asm = $(wildcard runtime/*.S)
 runtime_obj = $(runtime_src:.c=.o) $(runtime_asm:.S=.o)
 
+#
+# Shenango tools
+#
+
 # controller - remote memory controller
-rcntrl_src = rmem/rcntrl.c rmem/rdma.c
+rcntrl_src = tools/rmserver/rcntrl.c tools/rmserver/rdma.c
 rcntrl_obj = $(rcntrl_src:.c=.o)
 
 # memserver - remote memory server
-memserver_src = rmem/memserver.c rmem/rdma.c
+memserver_src = tools/rmserver/memserver.c tools/rmserver/rdma.c
 memserver_obj = $(memserver_src:.c=.o)
 
-# test cases
+# rmlib - rmclient library
+rmlib_src = $(wildcard tools/rmlib/*.c)
+rmlib_obj = $(rmlib_src:.c=.o)
+CFLAGS += -fPIC		# (rmlib is a shared library)
+
+tools_src = $(wildcard tools/*/*.c)
+tools_obj = $(tools_src:.c=.o)
+
+#
+# Shenango tests
+#
+
 test_src = $(wildcard tests/*.c)
 test_obj = $(test_src:.c=.o)
 test_targets = $(basename $(test_src))
 
-# dpdk libs
-# DPDK_LIBS= -L$(DPDK_PATH)/build/lib
-# DPDK_LIBS += -Wl,-whole-archive -lrte_pmd_e1000 -Wl,-no-whole-archive
-# DPDK_LIBS += -Wl,-whole-archive -lrte_pmd_ixgbe -Wl,-no-whole-archive
-# DPDK_LIBS += -Wl,-whole-archive -lrte_mempool_ring -Wl,-no-whole-archive
-# DPDK_LIBS += -ldpdk
-# DPDK_LIBS += -lrte_eal
-# DPDK_LIBS += -lrte_ethdev
-# DPDK_LIBS += -lrte_hash
-# DPDK_LIBS += -lrte_mbuf
-# DPDK_LIBS += -lrte_mempool
-# DPDK_LIBS += -lrte_mempool
-# DPDK_LIBS += -lrte_mempool_stack
-# DPDK_LIBS += -lrte_ring
-# # additional libs for running with Mellanox NICs
-# ifneq ($(MLX5),)
-# DPDK_LIBS +=  -lrte_pmd_mlx5 -libverbs -lmlx5 -lmnl
-# else
-# ifneq ($(MLX4),)
-# DPDK_LIBS += -lrte_pmd_mlx4 -libverbs -lmlx4
-# endif
-# endif
-DPDK_LIBS = $(shell $(PKGCONF) --static --libs libdpdk)
+#
+# Makefile targets
+#
 
-# must be first
-all: runtime iok $(test_targets)
+# (must be first target)
+all: runtime iok tools $(test_targets)
 
-runtime: libs rcntrl memserver
+## libs
+runtime: libs 
 
-libs: libbase.a libnet.a libruntime.a 
+libs: libbase.a libnet.a librmem.a libruntime.a 
 
 iok: iokerneld iokerneld-noht
 
@@ -140,30 +178,53 @@ libbase.a: $(base_obj)
 libnet.a: $(net_obj)
 	$(AR) rcs $@ $^
 
+librmem.a: $(rmem_obj)
+	$(AR) rcs $@ $^
+
 libruntime.a: $(runtime_obj)
 	$(AR) rcs $@ $^
 
 iokerneld: $(iokernel_obj) libbase.a libnet.a base/base.ld
-	$(LD) $(LDFLAGS) -o $@ $(iokernel_obj) libbase.a libnet.a $(DPDK_LIBS) \
-	-lpthread -lnuma -ldl
+	$(LD) $(LDFLAGS) -o $@ $(iokernel_obj) libbase.a libnet.a $(DPDK_LIBS)	\
+		-lpthread -lnuma -ldl
 
 iokerneld-noht: $(iokernel_noht_obj) libbase.a libnet.a base/base.ld
-	$(LD) $(LDFLAGS) -o $@ $(iokernel_noht_obj) libbase.a libnet.a $(DPDK_LIBS) \
-	 -lpthread -lnuma -ldl
+	$(LD) $(LDFLAGS) -o $@ $(iokernel_noht_obj) libbase.a libnet.a 			\
+		$(DPDK_LIBS) -lpthread -lnuma -ldl
+
+## tools
+tools: rcntrl memserver rmlib
 
 rcntrl: $(rcntrl_obj) libbase.a 
-	$(LD) $(LDFLAGS) -o $@ $(rcntrl_obj) libbase.a -lpthread -lrdmacm -libverbs
+	$(LD) $(LDFLAGS) -o $@ $(rcntrl_obj) libbase.a -lpthread $(RDMA_LIBS)
 
 memserver: $(memserver_obj) libbase.a 
-	$(LD) $(LDFLAGS) -o $@ $(memserver_obj) libbase.a -lpthread -lrdmacm -libverbs
+	$(LD) $(LDFLAGS) -o $@ $(memserver_obj) libbase.a -lpthread $(RDMA_LIBS)
 
-$(test_targets): $(test_obj) libbase.a libruntime.a libnet.a base/base.ld
-	$(LD) $(LDFLAGS) -o $@ $@.o libruntime.a libnet.a libbase.a -lpthread -lrdmacm -libverbs
+rmlib: $(rmlib_obj) librmem.a libbase.a je_jemalloc
+	$(LD) $(CFLAGS) $(LDFLAGS) -shared $(rmlib_obj) -o rmlib.so		\
+		librmem.a libbase.a -lpthread $(RDMA_LIBS) $(JE_LDFLAGS)
 
-# general build rules for all targets
-src = $(base_src) $(net_src) $(runtime_src) $(iokernel_src) $(test_src) $(rcntrl_src) $(memserver_src)
+## tests
+$(test_targets): $(test_obj) libbase.a libruntime.a librmem.a libnet.a base/base.ld
+	$(LD) $(LDFLAGS) -o $@ $@.o libruntime.a librmem.a libnet.a libbase.a 	\
+		-lpthread $(RDMA_LIBS)
+
+## dependencies
+je_jemalloc: ${JE_ROOT_DIR} ${JE_BUILD_DIR}
+${JE_BUILD_DIR}:
+	cd ${JE_ROOT_DIR} && autoconf && mkdir -p ${JE_BUILD_DIR} && 			\
+	cd ${JE_BUILD_DIR} && ${JE_ROOT_DIR}/configure 							\
+	--with-jemalloc-prefix=rmlib_je_ --config-cache  > build.log && 		\
+	$(MAKE) -j$(nproc) > build.log
+je_clean:
+	-rm -rf ${JE_BUILD_DIR}
+	touch ${JE_ROOT_DIR}
+
+## general build rules for all targets
+src = $(base_src) $(net_src) $(rmem_src) $(runtime_src) $(iokernel_src) $(test_src) $(tools_src)
 asm = $(runtime_asm)
-obj = $(src:.c=.o) $(asm:.S=.o) $(iokernel_src:.c=-noht.o) $(rcntrl_src:.c=.o) $(memserver_src:.c=.o)
+obj = $(src:.c=.o) $(asm:.S=.o) $(iokernel_src:.c=-noht.o)
 dep = $(obj:.o=.d)
 
 ifneq ($(MAKECMDGOALS),clean)
@@ -191,5 +252,5 @@ sparse: $(src)
 
 .PHONY: clean
 clean:
-	rm -f $(obj) $(dep) libbase.a libnet.a libruntime.a \
+	rm -f $(obj) $(dep) libbase.a libnet.a librmem.a libruntime.a \
 	iokerneld iokerneld-noht rcntrl memserver $(test_targets)

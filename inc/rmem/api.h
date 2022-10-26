@@ -1,9 +1,9 @@
 /*
- * rmem.h - remote memory definitions
+ * api.h - remote memory custom allocation API
  */
 
-#ifndef __RMEM_H__
-#define __RMEM_H__
+#ifndef __RMEM_API_H__
+#define __RMEM_API_H__
 
 #include <stddef.h>
 #include "base/types.h"
@@ -20,4 +20,4 @@ int rmpin(void *addr, size_t size);
 int rmflush(void *addr, size_t size, bool evict);
 
 
-#endif  // __RMEM_H__
+#endif  // __RMEM_API_H__

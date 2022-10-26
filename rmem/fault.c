@@ -12,11 +12,11 @@
 
 #include "base/list.h"
 #include "rmem/backend.h"
+#include "rmem/common.h"
 #include "rmem/fault.h"
 #include "rmem/page.h"
+#include "rmem/stats.h"
 #include "rmem/uffd.h"
-
-#include "../defs.h"
 
 /* fault handling common state */
 __thread void* zero_page = NULL;
