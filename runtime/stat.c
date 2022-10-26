@@ -270,14 +270,16 @@ static void* stat_worker_local(void *arg)
 		/* TODO BUG: enabling stats core with this method is causing the 
 		 * runtime to fail WHEN multiple handler cores are present AND
 		 * stdout/stderr are being redirected to a file */
-		ret = rstat_write_buf(buf, buf_hthr, UDP_MAX_PAYLOAD);
-		if (ret < 0) {
-			log_err("rstat err %d: couldn't generate rmem stat buffer", ret);
-			continue;
+		if (rmem_enabled) {
+			ret = rstat_write_buf(buf, buf_hthr, UDP_MAX_PAYLOAD);
+			if (ret < 0) {
+				log_err("rstat err %d: couldn't generate rstat buffer", ret);
+				continue;
+			}
+			fprintf(rfp, "%lu total-%s\n", now, buf);
+			fprintf(rfp, "%lu handler-%s\n", now, buf_hthr);
+			fflush(rfp);
 		}
-		fprintf(rfp, "%lu total-%s\n", now, buf);
-		fprintf(rfp, "%lu handler-%s\n", now, buf_hthr);
-		fflush(rfp);
 
 		// /* print thread state */
 		// len = thread_state_buf(buf, UDP_MAX_PAYLOAD);

@@ -7,6 +7,7 @@
 #include "base/assert.h"
 #include "rmem/backend.h"
 #include "rmem/page.h"
+#include "rmem/common.h"
 #include "rmem/region.h"
 
 /**
@@ -21,7 +22,7 @@
 #define hint_fault(addr,write,rd)                           \
     do {                                                    \
         if (__is_fault_pending(addr, write))                \
-            thread_park_on_fault(addr, write, rd);        \
+            thread_park_on_fault(addr, write, rd);          \
     } while (0);
 #define hint_read_fault_rdahead(addr,rd)    hint_fault(addr, false, rd)
 #define hint_write_fault_rdahead(addr,rd)   hint_fault(addr, true,  rd)
@@ -52,16 +53,17 @@ extern __thread struct region_t* __cached_mr;
  * (inlining in header file for low-overhead access) */
 static inline bool __is_fault_pending(void* address, bool write)
 {
-#ifndef REMOTE_MEMORY_HINTS
-    log_err("%s not supported without remote memory + hints", __func__);
-    BUG();
-#endif
-
     bool nofault;
 #ifndef USE_VDSO_CHECKS
     pflags_t pflags;
     bool page_present, page_dirty;
     struct region_t* mr = NULL;
+#endif
+
+    /* check support */
+    assert(rmem_enabled);
+
+#ifndef USE_VDSO_CHECKS
 #ifdef NO_DYNAMIC_REGIONS
     /* we only support one region now so caching an unsafe reference for future 
      * fast path accesses. this is neither correct nor safe when we have 

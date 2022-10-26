@@ -40,6 +40,7 @@ int rmem_common_init()
     int i, ret;
     log_debug("rmem_init with %.2lf GB local memory", 
         local_memory * 1.0 / (1 << 30));
+    BUG_ON(!rmem_enabled);
 
     /* init global data structures */
     CIRCLEQ_INIT(&region_list);
@@ -98,6 +99,11 @@ int rmem_common_init()
  */
 int rmem_common_init_thread(int* new_chan_id, uint64_t* stats_ptr)
 {
+    /* save rstats ptr as a first thing */
+    assert(stats_ptr);
+    BUG_ON(rstats_ptr); /* can't set twice */
+    rstats_ptr = stats_ptr;
+
     /* init per-thread data */
     fault_tcache_init_thread();
     bkend_buf_tcache_init_thread();
@@ -108,18 +114,6 @@ int rmem_common_init_thread(int* new_chan_id, uint64_t* stats_ptr)
     assert(new_chan_id);
     *new_chan_id = rmbackend->get_new_data_channel();
     assert(*new_chan_id >= 0);
-    return 0;
-
-    /* save rstats ptr */
-    assert(stats_ptr);
-    rstats_ptr = stats_ptr;
-}
-
-/**
- * rmem_init_late - remote memory post-init actions
- */
-int rmem_init_late()
-{
     return 0;
 }
 

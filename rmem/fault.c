@@ -146,7 +146,7 @@ enum fault_status handle_page_fault(int chan_id, fault_t* fault,
                 log_debug("%s - serving zero page", FSTR(fault));
                 
                 /* first time should naturally be a write */
-                fault_upgrade_to_write(fault, "fresh serving");
+                // fault_upgrade_to_write(fault, "fresh serving");  /* UNDO */
 
 #ifndef NO_ZERO_PAGE
                 /* copy zero page. TODO; Use UFFD_ZERO instead? */

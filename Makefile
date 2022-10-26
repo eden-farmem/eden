@@ -43,7 +43,7 @@ endif
 
 ifneq ($(SAFEMODE),)
 CFLAGS += -DSAFEMODE
-CFLAGS += -O0	# TODO: SAFEMODE fails iokernel with -O3; cause unknown.
+CFLAGS += -g -O0	# TODO: SAFEMODE fails iokernel with -O3; cause unknown.
 endif
 
 ifneq ($(NUMA_NODE),)

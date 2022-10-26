@@ -184,6 +184,20 @@ static int parse_remote_memory_flag(const char *name, const char *val)
 	return 0;
 }
 
+static int parse_rmem_hints_flag(const char *name, const char *val)
+{
+	long tmp;
+	int ret;
+
+	ret = str_to_long(val, &tmp);
+	if (ret) {
+		log_err("Expecting 0 or 1 for %s", name);
+		return ret;
+	}
+	rmem_hints_enabled = (tmp != 0);
+	return 0;
+}
+
 static int parse_rmem_backend_flag(const char *name, const char *val)
 {
 	if (strcmp("local", val) == 0)
@@ -270,6 +284,7 @@ static const struct cfg_handler cfg_handlers[] = {
 	{ "log_level", parse_log_level, false },
 	{ "disable_watchdog", parse_watchdog_flag, false },
 	{ "remote_memory", parse_remote_memory_flag, false },
+	{ "rmem_hints", parse_rmem_hints_flag, false },
 	{ "rmem_backend", parse_rmem_backend_flag, false },
 	{ "rmem_local_memory", parse_rmem_local_memory_flag, false },
 };

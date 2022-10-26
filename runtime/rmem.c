@@ -18,12 +18,20 @@
 
 #include "defs.h"
 
+/* state */
+bool rmem_hints_enabled = false;
+
 /**
  * rmem_init - initializes remote memory
  */
 int rmem_init()
 {
     int r;
+
+    if (!rmem_enabled) {
+        log_info("rmem not enabled, skipping init");
+        return 0;
+    }
 
     /* remote memory does not support burstable or on-demand cores for now */
     if (guaranteedks != maxks || spinks != maxks){
@@ -50,16 +58,13 @@ int rmem_init()
  */
 int rmem_init_thread()
 {
+    if (!rmem_enabled) {
+        log_info("rmem not enabled, skipping per-thread init");
+        return 0;
+    }
+
     struct kthread *k = myk();
     rmem_common_init_thread(&k->bkend_chan_id, k->rstats);
-    return 0;
-}
-
-/**
- * rmem_init_late - remote memory post-init actions
- */
-int rmem_init_late()
-{
     return 0;
 }
 
@@ -70,6 +75,7 @@ int rmem_init_late()
  */
 int rmem_destroy_thread()
 {
+    BUG_ON(!rmem_enabled);
     rmem_common_destroy_thread();
     assert(list_empty(&myk()->fault_wait_q));
     assert(list_empty(&myk()->fault_cq_steals_q));
@@ -83,5 +89,6 @@ int rmem_destroy_thread()
  */
 int rmem_destroy()
 {
+    BUG_ON(!rmem_enabled);
     return rmem_common_destroy();
 }

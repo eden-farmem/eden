@@ -296,26 +296,27 @@ static bool steal_work(struct kthread *l, struct kthread *r)
 		return true;
 	}
 
-#ifdef REMOTE_MEMORY_HINTS
-	/* then steal remote memory work */
-	if (steal_remote_memory_work(l ,r)) {
-		spin_unlock(&r->lock);
-		
-		/* we have some stolen faults, however it is not ready to run as the 
-		 * faults need further handling before releasing threads, and
-		 * let's handle stolen completions immediately so we don't run out of 
-		 * bkend_bufs; we also release locks on both l and r for stealing 
-		 * while handling the faults */
-		if (do_remote_memory_work(l)) {
-			/* found ready work, return */
-			return true;
-		}
+	if (rmem_hints_enabled) {
+		assert(rmem_enabled);
+		/* then steal remote memory work */
+		if (steal_remote_memory_work(l ,r)) {
+			spin_unlock(&r->lock);
+			
+			/* we have some stolen faults, however it is not ready to run as 
+			 * the faults need further handling before releasing threads, and
+			 * let's handle stolen completions immediately so we don't run out 
+			 * of bkend_bufs; we also release locks on both l and r for 
+			 * stealing while handling the faults */
+			if (do_remote_memory_work(l)) {
+				/* found ready work, return */
+				return true;
+			}
 
-		/* stole work but none of it was ready just yet, let's return now and 
-		 * come back here later */
-		return false;
+			/* stole work but none of it was ready just yet, let's return now and 
+			* come back here later */
+			return false;
+		}
 	}
-#endif
 
 	/* then steal other work */
 	if (steal_softirq_work(l, r)) {
@@ -405,10 +406,8 @@ again:
 	l->rq_head = l->rq_tail = 0;
 
 	/* then handle remote memory */
-#ifdef REMOTE_MEMORY_HINTS
-	if(do_remote_memory_work(l))
+	if(rmem_hints_enabled && do_remote_memory_work(l))
 		goto done;
-#endif
 
 	/* then check for local softirqs */
 	th = softirq_run_thread(l, RUNTIME_SOFTIRQ_BUDGET);
@@ -524,11 +523,9 @@ void join_kthread(struct kthread *k)
 	list_append_list(&tmp, &k->rq_overflow);
 	k->rq_overflow_len = 0;
 
-#ifdef REMOTE_MEMORY
 	/* REMOTE MEMORY TODO: */
 	/* also drain the remote memory waiting faults and stolen completions */
-	BUG();
-#endif
+	BUG_ON(rmem_enabled);
 
 	/* detach the kthread */
 	kthread_detach(k);
@@ -709,12 +706,12 @@ schedule:
  */
 void thread_park_on_fault(void* address, bool write, int rdahead)
 {
-#ifndef REMOTE_MEMORY_HINTS
-    log_err("%s not supported without remote memory", __func__);
-    BUG();
-#endif
     struct fault* fault;
 	thread_t *myth;
+
+    /* check pre-conditions */
+    BUG_ON(!rmem_enabled);
+    BUG_ON(!rmem_hints_enabled);
 
 	/* entering runtime */
 	preempt_disable();

@@ -507,6 +507,7 @@ extern void thread_yield_kthread();
 extern void join_kthread(struct kthread *k);
 
 /* kthread fault handling helpers */
+extern bool rmem_hints_enabled;
 extern struct bkend_completion_cbs kthr_owner_cbs;
 extern struct bkend_completion_cbs kthr_stealer_cbs;
 int kthr_fault_done(fault_t* f);
