@@ -20,9 +20,9 @@
 /* externed global settings */
 bool rmem_enabled = false;
 rmem_backend_t rmbackend_type = RMEM_BACKEND_DEFAULT;
-double eviction_threshold = EVICTION_THRESHOLD;
-double eviction_done_threshold = EVICTION_DONE_THRESHOLD;
 uint64_t local_memory = LOCAL_MEMORY_SIZE;
+double eviction_threshold = EVICTION_THRESHOLD;
+int evict_batch_size = 1;
 
 /* global state for remote memory */
 struct rmem_backend_ops* rmbackend = NULL;
@@ -38,8 +38,9 @@ __thread uint64_t* rstats_ptr = NULL;
 int rmem_common_init()
 {
     int i, ret;
-    log_debug("rmem_init with %.2lf GB local memory", 
-        local_memory * 1.0 / (1 << 30));
+    log_info("rmem_init with: ");
+    log_info("local memory - %.2lf GB", local_memory * 1.0 / (1 << 30));
+    log_info("evict batch size - %d", evict_batch_size);
     BUG_ON(!rmem_enabled);
 
     /* init global data structures */
@@ -80,10 +81,12 @@ int rmem_common_init()
     ret = rmpage_node_tcache_init();
     assertz(ret);
 
-    /* init lru lists */
+    /* init lru lists and other eviction state */
+    eviction_init();
     lru_lists_init();
 
-    /* kick off rmem handlers */
+    /* kick off rmem handlers - need at least one for kernel faults */
+    BUG_ON(nhandlers <= 0);
     BUG_ON(nhandlers > (RMEM_HANDLER_CORE_HIGH - RMEM_HANDLER_CORE_LOW + 1));
     handlers = malloc(nhandlers*sizeof(hthread_t*));
     for (i = 0; i < nhandlers; i++)

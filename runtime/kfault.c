@@ -266,8 +266,8 @@ int kthr_handle_waiting_faults(struct kthread* k)
                 if (nevicts_needed > 0) {
                     nevicts = 0;
                     while(nevicts < nevicts_needed)
-                        nevicts += do_eviction(k->bkend_chan_id, &kthr_owner_cbs, 
-                            min(nevicts_needed, EVICTION_MAX_BATCH_SIZE));
+                        nevicts += do_eviction(k->bkend_chan_id,
+                            &kthr_owner_cbs, evict_batch_size);
                 }
                 break;
             case FAULT_IN_PROGRESS:

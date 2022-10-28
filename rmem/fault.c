@@ -31,9 +31,11 @@ __thread struct list_head fault_wait_q;
 
 void zero_page_init_thread()
 {
-    zero_page = aligned_alloc(CHUNK_SIZE, CHUNK_SIZE);
+    size_t size;
+    size = CHUNK_SIZE * RMEM_MAX_CHUNKS_PER_OP;
+    zero_page = aligned_alloc(CHUNK_SIZE, size);
     assert(zero_page);
-    memset(zero_page, 0, CHUNK_SIZE);
+    memset(zero_page, 0, size);
 }
 
 void zero_page_free_thread()
@@ -49,7 +51,7 @@ void zero_page_free_thread()
 /* are we already in the state that the fault hoped to acheive? */
 bool is_fault_serviced(fault_t* f)
 {    
-    pflags_t pflags;
+    pgflags_t pflags;
     bool page_present, page_dirty, page_evicting;
 
     pflags = get_page_flags(f->mr, f->page);
@@ -70,14 +72,37 @@ bool is_fault_serviced(fault_t* f)
     return false;
 }
 
+/* checks if a page is in the same state as the faulting page to batch it 
+ * together as a part of rdahead. this function only checks page flags and 
+ * assumes that page locations relative to each other are already evaluated 
+ * for read-ahead */
+bool fault_can_rdahead(pgflags_t rdahead_page, pgflags_t base_page)
+{
+    /* both pages must be present or not-present */
+    if ((base_page & PFLAG_PRESENT) != (rdahead_page & PFLAG_PRESENT))
+        return false;
+
+    /* if present, both must be dirty or non-dirty */
+    if (!!(base_page & PFLAG_PRESENT)) 
+        if ((base_page & PFLAG_DIRTY) != (rdahead_page & PFLAG_DIRTY))
+            return false;
+    
+    /* both pages must be registered or not-registered */
+    if ((base_page & PFLAG_REGISTERED) != (rdahead_page & PFLAG_REGISTERED))
+        return false;
+
+    /* TODO: anything else? */
+    return true;
+}
+
 /* after receiving page fault */
 enum fault_status handle_page_fault(int chan_id, fault_t* fault, 
     int* nevicts_needed, struct bkend_completion_cbs* cbs)
 {
-    pflags_t pflags, oldflags;
     struct region_t* mr;
     bool page_present, was_locked, no_wake;
     int i, ret, n_retries, nchunks;
+    pgflags_t pflags, rflags, oldflags;
     unsigned long addr;
     unsigned long long pressure;
     uint64_t start_tsc, duration;
@@ -109,21 +134,58 @@ enum fault_status handle_page_fault(int chan_id, fault_t* fault,
         }
         else {
             /* we are handling it */
+            nchunks = 1;
             log_debug("%s - no ongoing work, start handling", FSTR(fault));
+
+            /* at this point, we can check for read-ahead. see if we can get 
+             * a lock on the next few pages that have similar requirements 
+             * as the current page so we can make the same choices for them 
+             * throughout the fault handling */
+            for (i = 1; i <= fault->rdahead_max; i++) {
+                addr = fault->page + i * CHUNK_SIZE;
+                if(!is_in_memory_region_unsafe(mr, addr))
+                    break;
+
+                /* see if the page has similar faulting requirements as the 
+                 * the base page */
+                rflags = get_page_flags(mr, addr);
+                if (!fault_can_rdahead(rflags, pflags))
+                    break;
+
+                /* try locking */
+                rflags = set_page_flags(mr, addr, PFLAG_WORK_ONGOING, &oldflags);
+                was_locked = !!(oldflags & PFLAG_WORK_ONGOING);
+                if (was_locked) 
+                    break;
+
+                /* check again after locking */
+                if (!fault_can_rdahead(rflags, pflags))
+                    break;
+                
+                nchunks++;
+                fault->rdahead++;
+            }
+            if (nchunks > 1) {
+                RSTAT(RDAHEADS)++;
+                RSTAT(RDAHEAD_PAGES) += fault->rdahead;
+            }
 
             /* we can handle write-protect right away */
             page_present = !!(pflags & PFLAG_PRESENT);
             if (page_present && (fault->is_wrprotect | fault->is_write)) {
                 no_wake = fault->from_kernel ? false : true;
-                ret = uffd_wp_remove(userfault_fd, fault->page, CHUNK_SIZE, 
-                    no_wake, true, &n_retries);
+                ret = uffd_wp_remove(userfault_fd, fault->page, 
+                    nchunks * CHUNK_SIZE, no_wake, true, &n_retries);
                 assertz(ret);
                 RSTAT(UFFD_RETRIES) += n_retries;
 
-                /* TODO: bump this item in the LRU lists */
+                /* TODO: bump this item (and the rdaheads) in the LRU lists */
 
                 /* done */
-                log_debug("%s - removed write protection", FSTR(fault));
+                log_debug("%s - removed wp for %d pages", FSTR(fault), nchunks);
+                ret = set_page_flags_range(mr, fault->page, 
+                    nchunks * CHUNK_SIZE, PFLAG_DIRTY);
+                assert(ret == nchunks);
                 return FAULT_DONE;
             }
             
@@ -140,50 +202,37 @@ enum fault_status handle_page_fault(int chan_id, fault_t* fault,
 #endif
 
             /* first time adding page, use zero page */
-            nchunks = 1;
             if (!(pflags & PFLAG_REGISTERED)) {
-                assert(nchunks == 1);
-                log_debug("%s - serving zero page", FSTR(fault));
-                
                 /* first time should naturally be a write */
                 // fault_upgrade_to_write(fault, "fresh serving");  /* UNDO */
 
-#ifndef NO_ZERO_PAGE
-                /* copy zero page. TODO; Use UFFD_ZERO instead? */
+#ifdef NO_ZERO_PAGE
+                /* no zero page allowed for first serving; mark them 
+                 * registered and proceed to read from remote */
+                ret = set_page_flags_range(mr, fault->page, 
+                    nchunks * CHUNK_SIZE, PFLAG_REGISTERED);
+                assert(ret == nchunks);
+#else
+                log_debug("%s - serving %d zero pages", FSTR(fault), nchunks);
+
+                /* copy zero page. TODO: Use UFFD_ZERO instead? */
                 bool wrprotect;
                 wrprotect = fault->is_read;
                 no_wake = !fault->from_kernel;
                 ret = uffd_copy(userfault_fd, fault->page, (unsigned long) 
-                    zero_page, CHUNK_SIZE, wrprotect, no_wake, true, &n_retries);
+                    zero_page, nchunks * CHUNK_SIZE, wrprotect, no_wake, 
+                    true, &n_retries);
                 assertz(ret);
                 RSTAT(UFFD_RETRIES) += n_retries;
                 RSTAT(FAULTS_ZP)++;
-                log_debug("%s - added zero page", FSTR(fault));
+                log_debug("%s - added %d zero pages", FSTR(fault), nchunks);
                 
                 /* done */
-                set_page_flags(mr, fault->page, PFLAG_REGISTERED, NULL);
+                ret = set_page_flags_range(mr, fault->page, 
+                    nchunks * CHUNK_SIZE, PFLAG_REGISTERED | PFLAG_PRESENT);
+                assert(ret == nchunks);
                 return FAULT_DONE;
 #endif
-            }
-
-            /* at this point, we can support read-ahead. see if we can get 
-                * a lock on the next few pages that are missing */
-            for (i = 1; i <= fault->rdahead_max; i++) {
-                addr = fault->page + i * CHUNK_SIZE;
-                if(!is_in_memory_region_unsafe(mr, addr))
-                    break;
-                /* try lock */
-                pflags = set_page_flags(mr, addr, PFLAG_WORK_ONGOING, &oldflags);
-                was_locked = !!(oldflags & PFLAG_WORK_ONGOING);
-                page_present = !!(pflags & PFLAG_PRESENT);
-                if (page_present || was_locked) 
-                    break;
-                nchunks++;
-                fault->rdahead++;
-            }
-            if (nchunks > 1) {
-                RSTAT(RDAHEADS)++;
-                RSTAT(RDAHEAD_PAGES) += (nchunks - 1);
             }
 
             /* send off page read */
@@ -235,7 +284,8 @@ int fault_read_done(fault_t* f)
     size_t size;
     struct rmpage_node* pgnode;
     struct list_head tmp;
-    pflags_t pgidx;
+    pgidx_t pgidx;
+    pgflags_t flags;
 
     /* uffd copy the page back */
     assert(f->bkend_buf);
@@ -257,13 +307,15 @@ int fault_read_done(fault_t* f)
         pgnode = rmpage_node_alloc();
         assert(pgnode);
 
-        /* TODO: shall we take mr references on active pages too? */
+        /* each page node gets an MR reference too which gets removed 
+         * when the page is evicted out */
+        __get_mr(f->mr);
         pgnode->mr = f->mr;
         pgnode->addr = f->page;
         list_add_tail(&tmp, &pgnode->link);
 
         pgidx = rmpage_get_node_id(pgnode);
-        pgidx = set_page_index_atomic(f->mr, f->page, pgidx);
+        pgidx = set_page_index(f->mr, f->page, pgidx);
         assertz(pgidx); /* old index must be 0 */
     }
 
@@ -274,7 +326,7 @@ int fault_read_done(fault_t* f)
     spin_unlock(&cold_pages.lock);
 
     /* set page flags */
-    pflags_t flags = PFLAG_PRESENT;
+    flags = PFLAG_PRESENT;
     if (!wrprotect) flags |= PFLAG_DIRTY;
     set_page_flags_range(f->mr, f->page, size, flags);
     return 0;

@@ -218,6 +218,12 @@ static int parse_rmem_local_memory_flag(const char *name, const char *val)
 	return ret;
 }
 
+static int parse_rmem_evict_batch_size_flag(const char *name, const char *val)
+{
+	int ret = str_to_long(val, (long int *)&evict_batch_size);
+	return ret;
+}
+
 static int parse_static_arp_entry(const char *name, const char *val)
 {
 	int ret;
@@ -287,6 +293,7 @@ static const struct cfg_handler cfg_handlers[] = {
 	{ "rmem_hints", parse_rmem_hints_flag, false },
 	{ "rmem_backend", parse_rmem_backend_flag, false },
 	{ "rmem_local_memory", parse_rmem_local_memory_flag, false },
+	{ "rmem_evict_batch_size", parse_rmem_evict_batch_size_flag, false },
 };
 
 /**

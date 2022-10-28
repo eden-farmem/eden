@@ -16,6 +16,7 @@ extern bool rmem_enabled;
 extern rmem_backend_t rmbackend_type;
 extern uint64_t local_memory;
 extern double eviction_threshold;
+extern int evict_batch_size;
 
 /* global state */
 extern int nhandlers;

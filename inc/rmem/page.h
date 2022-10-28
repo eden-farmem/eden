@@ -25,7 +25,7 @@ enum {
     PSHIFT_HOT_MARKER2,
     PAGE_FLAGS_NUM
 };
-BUILD_ASSERT(sizeof(pflags_t) * 8 >= PAGE_FLAGS_NUM);
+BUILD_ASSERT(sizeof(pgflags_t) * 8 >= PAGE_FLAGS_NUM);
 
 #define PFLAG_REGISTERED    (1u << PSHIFT_REGISTERED)
 #define PFLAG_PRESENT       (1u << PSHIFT_PRESENT)
@@ -36,57 +36,87 @@ BUILD_ASSERT(sizeof(pflags_t) * 8 >= PAGE_FLAGS_NUM);
 #define PFLAG_HOT_MARKER2   (1u << PSHIFT_HOT_MARKER2)
 #define PAGE_FLAGS_MASK     ((1u << PAGE_FLAGS_NUM) - 1)
 
-static inline atomic_pflags_t *page_ptr(struct region_t *mr, unsigned long addr)
+static inline atomic_pginfo_t *page_ptr(struct region_t *mr, unsigned long addr)
 {
     int offset = ((addr - mr->addr) >> CHUNK_SHIFT);
-    return &mr->page_flags[offset];
+    return &mr->page_info[offset];
 }
 
-static inline pflags_t get_page_flags(struct region_t *mr, unsigned long addr)
+/**
+ * Gets page metadata, includes flags and page node index
+ */
+static inline pginfo_t get_page_info(struct region_t *mr, unsigned long addr)
 {
-    atomic_pflags_t *ptr = page_ptr(mr, addr);
-    return (*ptr) & PAGE_FLAGS_MASK;
+    atomic_pginfo_t *ptr = page_ptr(mr, addr);
+    return *ptr;
 }
 
-/* sets flags on a page and returns new flags (and oldflags in ptr) */
-static inline pflags_t set_page_flags(struct region_t *mr, unsigned long addr, 
-    pflags_t flags, pflags_t* oldflags_out)
+/**
+ * Gets page flags from pginfo
+ */
+static inline pgflags_t get_flags_from_pginfo(pginfo_t pginfo)
 {
-    pflags_t oldflags, new_flags;
-    atomic_pflags_t *ptr;
+    return (pgflags_t) (pginfo & PAGE_FLAGS_MASK);
+}
+
+/**
+ * Gets page flags
+ */
+static inline pgflags_t get_page_flags(struct region_t *mr, unsigned long addr)
+{
+    return get_flags_from_pginfo(get_page_info(mr, addr));
+}
+
+/**
+ * Sets flags on a page and returns new flags (and oldflags in ptr)
+ */
+static inline pgflags_t set_page_flags(struct region_t *mr, unsigned long addr, 
+    pgflags_t flags, pgflags_t* oldflags_out)
+{
+    pginfo_t oldinfo;
+    pgflags_t oldflags, new_flags;
+    atomic_pginfo_t *ptr;
     assert((flags & ~PAGE_FLAGS_MASK) == 0);  /* only page flags */
 
+    log_debug("setting flags 0x%x on page 0x%lx", flags, addr);
     ptr = page_ptr(mr, addr);
-    oldflags = atomic_fetch_or(ptr, flags);
-    oldflags = oldflags & PAGE_FLAGS_MASK;
+    oldinfo = atomic_fetch_or(ptr, flags);
+    oldflags = oldinfo & PAGE_FLAGS_MASK;
     if (oldflags_out)
         *oldflags_out = oldflags;
     new_flags = oldflags | flags;
     return new_flags;
 }
 
-/* clears flags on a page and returns new flags (and oldflags in ptr) */
-static inline pflags_t clear_page_flags(struct region_t *mr, unsigned long addr, 
-    pflags_t flags, pflags_t* oldflags_out)
+/**
+ * Clears flags on a page and returns new flags (and oldflags in ptr)
+ */
+static inline pgflags_t clear_page_flags(struct region_t *mr, unsigned long addr, 
+    pgflags_t flags, pgflags_t* oldflags_out)
 {
-    pflags_t oldflags, new_flags;
-    atomic_pflags_t *ptr;
+    pginfo_t oldinfo;
+    pgflags_t oldflags, new_flags;
+    atomic_pginfo_t *ptr;
     assert((flags & ~PAGE_FLAGS_MASK) == 0);  /* only page flags */
     
+    log_debug("clearing flags 0x%x on page 0x%lx", flags, addr);
     ptr = page_ptr(mr, addr);
-    oldflags = atomic_fetch_and(ptr, ~flags);
-    oldflags = oldflags & PAGE_FLAGS_MASK;
+    oldinfo = atomic_fetch_and(ptr, ~flags);
+    oldflags = oldinfo & PAGE_FLAGS_MASK;
     if (oldflags_out)
         *oldflags_out = oldflags;
     new_flags = oldflags & (~flags);
     return new_flags;
 }
 
+/**
+ * Sets page flags on each page in the range
+ */
 static inline int set_page_flags_range(struct region_t *mr, unsigned long addr,
-    size_t size, pflags_t flags)
+    size_t size, pgflags_t flags)
 {
     unsigned long offset;
-    pflags_t oldflags;
+    pgflags_t oldflags;
     int chunks = 0;
 
     for (offset = 0; offset < size; offset += CHUNK_SIZE) {
@@ -101,12 +131,15 @@ static inline int set_page_flags_range(struct region_t *mr, unsigned long addr,
     return chunks;
 }
 
+/**
+ * Clears page flags on each page in the range
+ */
 static inline int clear_page_flags_range(struct region_t *mr, 
-    unsigned long addr, size_t size, pflags_t flags)
+    unsigned long addr, size_t size, pgflags_t flags)
 {
     unsigned long offset;
     int chunks = 0;
-    pflags_t oldflags;
+    pgflags_t oldflags;
 
     for (offset = 0; offset < size; offset += CHUNK_SIZE) {
         clear_page_flags(mr, addr + offset, flags, &oldflags);
@@ -124,47 +157,59 @@ static inline int clear_page_flags_range(struct region_t *mr,
  * Page node index in metadata - definition and helpers
  */
 #define PAGE_INDEX_SHIFT    (PAGE_FLAGS_NUM)
-#define PAGE_INDEX_LEN      (sizeof(pflags_t) * 8 - PAGE_INDEX_SHIFT)
+#define PAGE_INDEX_LEN      (sizeof(pginfo_t) * 8 - PAGE_INDEX_SHIFT)
 #define PAGE_INDEX_MASK     (((1ULL << PAGE_INDEX_LEN) - 1) << PAGE_INDEX_SHIFT)
 BUILD_ASSERT(PAGE_INDEX_MASK > 0);
 
-/* get the page structure index from provided page flags */
-static inline pflags_t get_page_index_from_flags(pflags_t flags)
+/**
+ * Gets page node index from pginfo
+ */
+static inline pgidx_t get_index_from_pginfo(pginfo_t pginfo)
 {
-    assert(!!(flags & PFLAG_WORK_ONGOING)); /*require a page lock to read index*/
-    return (flags & PAGE_INDEX_MASK) >> PAGE_INDEX_SHIFT;
+    /* requires that page be locked to read index */
+    assert(!!(pginfo & PFLAG_WORK_ONGOING));
+    return (pgidx_t) ((pginfo & PAGE_INDEX_MASK) >> PAGE_INDEX_SHIFT);
 }
 
-/* get the page structure index from page metadata */
-static inline pflags_t get_page_index_atomic(struct region_t *mr,
-    unsigned long addr)
+/**
+ * Gets page node index
+ */
+static inline pgidx_t get_page_index(struct region_t *mr, unsigned long addr)
 {
-    atomic_pflags_t *ptr;
-    ptr = page_ptr(mr, addr);
-    return get_page_index_from_flags(atomic_load(ptr));
+    return get_index_from_pginfo(get_page_info(mr, addr));
 }
 
-/* saves the provided page structure index in page flags and returns old idx */
-static inline pflags_t set_page_index_atomic(struct region_t *mr,
-    unsigned long addr, pflags_t index)
+/**
+ * Sets page node index on a page and returns the old index
+ */
+static inline pgidx_t set_page_index(struct region_t *mr,
+    unsigned long addr, pgidx_t index)
 {
-    pflags_t flags, new_flags;
-    atomic_pflags_t *ptr;
+    pginfo_t pginfo, newinfo;
+    atomic_pginfo_t *ptr;
     bool swapped;
     assert((index & ~((1 << PAGE_INDEX_LEN) - 1)) == 0); /* check index fits */
 
     /* compare-and-swap to not affect other flags */
     ptr = page_ptr(mr, addr);
     do {
-        flags = atomic_load(ptr);
-        assert(!!(flags & PFLAG_WORK_ONGOING)); /* require a page lock to set */
-        new_flags = (flags & ~PAGE_INDEX_MASK); /* keep non-index bits */
-        new_flags |= (index << PAGE_INDEX_SHIFT);
-        swapped = atomic_compare_exchange_weak(ptr, &flags, new_flags);
+        pginfo = atomic_load(ptr);
+        assert(!!(pginfo & PFLAG_WORK_ONGOING)); /* require a page lock to set */
+        newinfo = (pginfo & ~PAGE_INDEX_MASK);   /* keep non-index bits */
+        newinfo |= (index << PAGE_INDEX_SHIFT);
+        swapped = atomic_compare_exchange_weak(ptr, &pginfo, newinfo);
     } while(!swapped);
 
     /* old index */
-    return (flags & PAGE_INDEX_MASK) >> PAGE_INDEX_SHIFT;
+    return (pginfo & PAGE_INDEX_MASK) >> PAGE_INDEX_SHIFT;
+}
+
+/**
+ * Clears page node index on a page and returns the old index
+ */
+static inline pgidx_t clear_page_index(struct region_t *mr, unsigned long addr)
+{
+    return set_page_index(mr, addr, 0);
 }
 
 /**
@@ -211,13 +256,13 @@ static inline void rmpage_node_free(rmpage_node_t* node)
 
 /* rmpage_get_node_id - gets a shortened index to a page node that can be saved 
  * in page metadata and used to retrieve the node later */
-static inline pflags_t rmpage_get_node_id(rmpage_node_t* node)
+static inline pgidx_t rmpage_get_node_id(rmpage_node_t* node)
 {
     assert(rmpage_is_node_valid(node));
-    return (pflags_t)(node - rmpage_nodes);
+    return (pgidx_t)(node - rmpage_nodes);
 }
 
-static inline rmpage_node_t* rmpage_get_node_by_id(pflags_t id)
+static inline rmpage_node_t* rmpage_get_node_by_id(pgidx_t id)
 {
     assert(id >= 0 && id < rmpage_node_count);
     return &rmpage_nodes[id];

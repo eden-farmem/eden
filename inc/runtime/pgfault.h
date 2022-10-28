@@ -55,7 +55,7 @@ static inline bool __is_fault_pending(void* address, bool write)
 {
     bool nofault;
 #ifndef USE_VDSO_CHECKS
-    pflags_t pflags;
+    pgflags_t pflags;
     bool page_present, page_dirty;
     struct region_t* mr = NULL;
 #endif

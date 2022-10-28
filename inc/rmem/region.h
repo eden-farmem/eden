@@ -15,9 +15,11 @@
 #include "rmem/rdma.h"
 
 /* Smallest native type that can support metadata for each page */
-typedef unsigned int pflags_t;
-typedef _Atomic(pflags_t) atomic_pflags_t;
-BUILD_ASSERT(sizeof(atomic_pflags_t) == sizeof(pflags_t));
+typedef unsigned int pginfo_t;
+typedef pginfo_t pgflags_t;
+typedef pginfo_t pgidx_t;
+typedef _Atomic(pginfo_t) atomic_pginfo_t;
+BUILD_ASSERT(sizeof(atomic_pginfo_t) == sizeof(pginfo_t));
 
 /**
  * Region definition
@@ -30,11 +32,12 @@ struct region_t {
     atomic_ullong current_offset;
 
     /* page metadata */
-    atomic_pflags_t *page_flags;
+    atomic_pginfo_t *page_info;
 
     /* RDMA-specific data. TODO: move into rdma backend */
     struct server_conn_t *server;
 
+    /* ref counter for each local page and ongoing fault */
     atomic_int ref_cnt;
     CIRCLEQ_ENTRY(region_t) link;
 } __aligned(CACHE_LINE_SIZE);

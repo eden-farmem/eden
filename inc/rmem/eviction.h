@@ -32,6 +32,7 @@ extern page_list_t hot_pages;
 extern page_list_t warm_pages;
 extern page_list_t cold_pages;
 
+int eviction_init(void);
 void lru_lists_init(void);
 
 #endif  // __EVICTION_H__

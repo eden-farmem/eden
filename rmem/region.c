@@ -20,24 +20,29 @@ struct region_t* last_evicted = NULL;
 int nregions = 0;
 DEFINE_SPINLOCK(regions_lock);
 
-void deregister_memory_region(struct region_t *mr) {
-    int r = 0;
+void deregister_memory_region(struct region_t *mr)
+{
+    int r;
+    size_t pginfo_size, npages;
+
     log_debug("deregistering region %p", mr);
     if (mr->addr != 0) {
         uffd_unregister(userfault_fd, mr->addr, mr->size);
         r = munmap((void *)mr->addr, mr->size);
         if (r < 0) log_warn("munmap failed");
-        size_t page_flags_size = 
-            align_up((mr->size >> CHUNK_SHIFT), 8) * PAGE_FLAGS_NUM / 8;
-        r = munmap(mr->page_flags, page_flags_size);
+
+        npages = (mr->size >> CHUNK_SHIFT);
+        pginfo_size = align_up(npages, 8) * sizeof(atomic_pginfo_t);
+        r = munmap(mr->page_info, pginfo_size);
         if (r < 0) log_warn("munmap page_flags failed");
     }
     mr->addr = 0;
 }
 
-int register_memory_region(struct region_t *mr, int writeable) {
+int register_memory_region(struct region_t *mr, int writeable)
+{
     void *ptr = NULL;
-    size_t page_flags_size, npages;
+    size_t pginfo_size, npages;
     int r;
 
     log_debug("registering region %p", mr);
@@ -62,10 +67,10 @@ int register_memory_region(struct region_t *mr, int writeable) {
 
     /* initalize metadata */
     npages = (mr->size >> CHUNK_SHIFT);
-    page_flags_size = align_up(npages, 8) * sizeof(atomic_pflags_t);
-    mr->page_flags = (atomic_pflags_t*) mmap(NULL, page_flags_size, 
+    pginfo_size = align_up(npages, 8) * sizeof(atomic_pginfo_t);
+    mr->page_info = (atomic_pginfo_t*) mmap(NULL, pginfo_size, 
         PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
-    if (mr->page_flags == NULL) 
+    if (mr->page_info == NULL) 
         goto error;
     mr->ref_cnt = ATOMIC_VAR_INIT(0);
     mr->current_offset = ATOMIC_VAR_INIT(0);

@@ -156,7 +156,7 @@ static void* rmem_handler(void *arg)
     bool need_eviction;
     unsigned long long pressure;
     fault_t *fault, *next;
-    int nevicts, nevicts_needed, batchsz, r;
+    int nevicts, nevicts_needed, batch, r;
     enum fault_status fstatus;
     struct region_t* mr;
     assert(arg != NULL);        /* expecting a hthread_t */
@@ -256,10 +256,10 @@ eviction:
             nevicts = 0;
             do {
                 /* can use bigger batches in handler threads if idling */
-                batchsz = EVICTION_MAX_BATCH_SIZE;
+                batch = evict_batch_size;
                 if (nevicts_needed > 0) 
-                    batchsz = min(nevicts_needed, EVICTION_MAX_BATCH_SIZE);
-                nevicts += do_eviction(my_hthr->bkend_chan_id, &hthr_cbs, batchsz);
+                    batch = EVICTION_MAX_BATCH_SIZE;
+                nevicts += do_eviction(my_hthr->bkend_chan_id, &hthr_cbs, batch);
             } while(nevicts < nevicts_needed);
         }
 

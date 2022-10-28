@@ -147,7 +147,9 @@ int rmunmap(void *addr, size_t length)
     int ret = 0, marked;
     bool locked;
     unsigned long offset, page, max_addr, size;
-    pflags_t oldflags, flags, clrflags, pgidx;
+    pgflags_t oldflags, flags, clrflags;
+    pgidx_t pgidx;
+    pginfo_t pginfo;
     struct rmpage_node *pgnode;
 
     log_debug("rmunmap at %p", addr);
@@ -199,10 +201,11 @@ int rmunmap(void *addr, size_t length)
             clrflags |= PFLAG_REGISTERED;
 
             /* if the page was present, drop it and release the page node */
-            flags = get_page_flags(mr, page);
+            pginfo = get_page_info(mr, page);
+            flags = get_flags_from_pginfo(pginfo);
             assert(!!(flags & PFLAG_WORK_ONGOING));
             if (!!(flags && PFLAG_PRESENT)) {
-                pgidx = get_page_index_from_flags(flags);
+                pgidx = get_index_from_pginfo(pginfo);
                 pgnode = rmpage_get_node_by_id(pgidx);
                 rmpage_node_free(pgnode);
                 marked++;
@@ -241,9 +244,10 @@ int rmadvise(void *addr, size_t length, int advice)
     struct region_t *mr;
     unsigned long offset, page, max_addr, size;
     int ret = 0, marked;
-    pflags_t oldflags, flags, clrflags, pgidx;
+    pgidx_t oldflags, flags, clrflags, pgidx;
     bool locked;
     struct rmpage_node *pgnode;
+    pginfo_t pginfo;
 
     log_debug("rmadvise at %p size %ld advice %d", addr, length, advice);
     if (!addr) 
@@ -295,10 +299,11 @@ int rmadvise(void *addr, size_t length, int advice)
 
         if (ret == 0) {
             /* if the page was present, drop it and release the page node */
-            flags = get_page_flags(mr, page);
+            pginfo = get_page_info(mr, page);
+            flags = get_flags_from_pginfo(pginfo);
             assert(!!(flags & PFLAG_WORK_ONGOING));
             if (!!(flags && PFLAG_PRESENT)) {
-                pgidx = get_page_index_from_flags(flags);
+                pgidx = get_index_from_pginfo(pginfo);
                 pgnode = rmpage_get_node_by_id(pgidx);
                 rmpage_node_free(pgnode);
                 marked++;

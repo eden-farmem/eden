@@ -691,7 +691,7 @@ eviction:
     /* start eviction; evict only as much as needed on shenango cores */
     while(nevicts < nevicts_needed)
         nevicts += do_eviction(k->bkend_chan_id, &kthr_owner_cbs, 
-            min(nevicts_needed - nevicts, EVICTION_MAX_BATCH_SIZE));
+            evict_batch_size);
 
 schedule:
 	enter_schedule(th);
