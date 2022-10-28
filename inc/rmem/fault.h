@@ -48,10 +48,10 @@ BUILD_ASSERT(FAULT_MAX_RDAHEAD_SIZE < UINT8_MAX);   /* due to rdahead */
 #define __FAULT_STR_LEN 100
 extern __thread char fstr[__FAULT_STR_LEN];
 static inline char* fault_to_str(fault_t* f) {
-    snprintf(fstr, __FAULT_STR_LEN, "F[%s:%s:%lx]", 
+    snprintf(fstr, __FAULT_STR_LEN, "F[%s:%s:%lx:%d]", 
         f->from_kernel ? "kern" : "user",
         f->is_read ? "r" : (f->is_write ? "w" : "wp"),
-        f->page);
+        f->page, f->rdahead);
     return fstr;
 }
 #define FSTR(f) fault_to_str(f)

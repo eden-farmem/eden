@@ -166,7 +166,15 @@ static int parse_mac_address(const char *name, const char *val)
 
 static int parse_watchdog_flag(const char *name, const char *val)
 {
-	disable_watchdog = true;
+	long tmp;
+	int ret;
+
+	ret = str_to_long(val, &tmp);
+	if (ret) {
+		log_err("Expecting 0 or 1 for %s", name);
+		return ret;
+	}
+	disable_watchdog = (tmp != 0);
 	return 0;
 }
 

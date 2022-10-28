@@ -129,8 +129,8 @@ int uffd_copy(int fd, unsigned long dst, unsigned long src, size_t size,
     };
 
     do {
-        log_debug("uffd_copy from src %lx, size %lu to dst %lx wpmode %d nowake %d", 
-            src, size, dst, wrprotect, no_wake);
+        log_debug("uffd_copy from src %lx, size %lu to dst %lx wpmode %d "
+            "nowake %d", src, size, dst, wrprotect, no_wake);
         errno = 0;
 
         /* TODO: Use UFFD_USE_PWRITE (see kona)? */
@@ -230,7 +230,7 @@ int uffd_zero(int fd, unsigned long addr, size_t size, bool no_wake,
     int mode = 0;
 
     if (no_wake)    
-        mode |= UFFDIO_WRITEPROTECT_MODE_DONTWAKE;
+        mode |= UFFDIO_ZEROPAGE_MODE_DONTWAKE;
     struct uffdio_zeropage zero = {
         .mode = mode,
         .range = {.start = addr, .len = size}
@@ -241,7 +241,8 @@ int uffd_zero(int fd, unsigned long addr, size_t size, bool no_wake,
         errno = 0;
         r = ioctl(fd, UFFDIO_ZEROPAGE, &zero);
         if (r < 0) {
-            log_debug("uffd_zero copied %lld bytes, errno=%d", zero.zeropage, errno);
+            log_debug("uffd_zero copied %lld bytes, errno=%d", 
+                zero.zeropage, errno);
 
             if (errno == ENOSPC) {
                 // The child process has exited.

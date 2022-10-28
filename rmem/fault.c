@@ -203,9 +203,6 @@ enum fault_status handle_page_fault(int chan_id, fault_t* fault,
 
             /* first time adding page, use zero page */
             if (!(pflags & PFLAG_REGISTERED)) {
-                /* first time should naturally be a write */
-                // fault_upgrade_to_write(fault, "fresh serving");  /* UNDO */
-
 #ifdef NO_ZERO_PAGE
                 /* no zero page allowed for first serving; mark them 
                  * registered and proceed to read from remote */
@@ -215,21 +212,30 @@ enum fault_status handle_page_fault(int chan_id, fault_t* fault,
 #else
                 log_debug("%s - serving %d zero pages", FSTR(fault), nchunks);
 
-                /* copy zero page. TODO: Use UFFD_ZERO instead? */
-                bool wrprotect;
-                wrprotect = fault->is_read;
+                /* Two options for zero page: UFFD_ZERO or UFFD_COPY a zero page.
+                 * UFFD_ZERO currently maps a zero page where a write results in
+                 * a minor fault that never reaches the handler. UFFD_ZERO as 
+                 * a standalone operation is faster than UFFD_COPYing with zeros 
+                 * but when followed by dirtying (which is expected in most 
+                 * cases) UFFD_COPY is better as it avoids the minor fault. 
+                 * So we always treat zero page fault as a write fault */
                 no_wake = !fault->from_kernel;
                 ret = uffd_copy(userfault_fd, fault->page, (unsigned long) 
-                    zero_page, nchunks * CHUNK_SIZE, wrprotect, no_wake, 
+                    zero_page, nchunks * CHUNK_SIZE, false, no_wake, 
                     true, &n_retries);
                 assertz(ret);
+
+                fault_upgrade_to_write(fault, "zero page");
                 RSTAT(UFFD_RETRIES) += n_retries;
                 RSTAT(FAULTS_ZP)++;
                 log_debug("%s - added %d zero pages", FSTR(fault), nchunks);
                 
                 /* done */
+                pgflags_t bits = PFLAG_REGISTERED | PFLAG_PRESENT;
+                if (!fault->is_read) 
+                    bits = PFLAG_DIRTY;
                 ret = set_page_flags_range(mr, fault->page, 
-                    nchunks * CHUNK_SIZE, PFLAG_REGISTERED | PFLAG_PRESENT);
+                    nchunks * CHUNK_SIZE, bits);
                 assert(ret == nchunks);
                 return FAULT_DONE;
 #endif
@@ -302,7 +308,7 @@ int fault_read_done(fault_t* f)
 
     /* newly fetched pages - alloc page nodes */
     list_head_init(&tmp);
-    for (i = 0; i <= f->rdahead; i++) { 
+    for (i = 1; i <= f->rdahead; i++) { 
         /* get a page node */
         pgnode = rmpage_node_alloc();
         assert(pgnode);
@@ -315,7 +321,7 @@ int fault_read_done(fault_t* f)
         list_add_tail(&tmp, &pgnode->link);
 
         pgidx = rmpage_get_node_id(pgnode);
-        pgidx = set_page_index(f->mr, f->page, pgidx);
+        pgidx = set_page_index(f->mr, f->page + i * CHUNK_SIZE , pgidx);
         assertz(pgidx); /* old index must be 0 */
     }
 

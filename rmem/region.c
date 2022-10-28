@@ -57,8 +57,7 @@ int register_memory_region(struct region_t *mr, int writeable)
         goto error;
     }
     mr->addr = (unsigned long)ptr;
-    log_info("mmap ptr %p addr mr %p, size %ld\n", 
-        ptr, (void *)mr->addr, mr->size);
+    log_info("mmap ptr %p mr %p, size %ld", ptr, (void*)mr->addr, mr->size);
 
     /* register it with userfaultfd */
     assert(userfault_fd >= 0);
