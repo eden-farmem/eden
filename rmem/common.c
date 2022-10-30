@@ -40,7 +40,7 @@ int rmem_common_init()
     int i, ret;
     log_info("rmem_init with: ");
     log_info("local memory - %.2lf GB", local_memory * 1.0 / (1 << 30));
-    log_info("evict batch size - %d", evict_batch_size);
+    log_info("evict thr %.2lf, batch %d", eviction_threshold, evict_batch_size);
     BUG_ON(!rmem_enabled);
 
     /* init global data structures */

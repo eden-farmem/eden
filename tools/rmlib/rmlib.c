@@ -65,7 +65,6 @@ int parse_env_settings()
 {
     char *memory_limit, *evict_thr; 
     
-
     /* set local memory */
     memory_limit = getenv("LOCAL_MEMORY");
     /* Hack: fix a bug wheren env variable has non-printable chars at start */

@@ -184,7 +184,7 @@ static int parse_remote_memory_flag(const char *name, const char *val)
 	int ret;
 
 	ret = str_to_long(val, &tmp);
-	if (ret) {
+	if (ret || (tmp != 0 && tmp != 1)) {
 		log_err("Expecting 0 or 1 for %s", name);
 		return ret;
 	}
@@ -198,7 +198,7 @@ static int parse_rmem_hints_flag(const char *name, const char *val)
 	int ret;
 
 	ret = str_to_long(val, &tmp);
-	if (ret) {
+	if (ret || (tmp != 0 && tmp != 1)) {
 		log_err("Expecting 0 or 1 for %s", name);
 		return ret;
 	}
@@ -224,6 +224,20 @@ static int parse_rmem_local_memory_flag(const char *name, const char *val)
 {
 	int ret = str_to_long(val, (long int *)&local_memory);
 	return ret;
+}
+
+static int parse_rmem_evict_thr_flag(const char *name, const char *val)
+{
+	long tmp;
+	int ret;
+
+	ret = str_to_long(val, &tmp);
+	if (ret || !(tmp >= 0 && tmp <= 100)) {
+		log_err("Expecting 0 to 100 for %s", name);
+		return ret;
+	}
+	eviction_threshold = tmp * 1.0 / 100;
+	return 0;
 }
 
 static int parse_rmem_evict_batch_size_flag(const char *name, const char *val)
@@ -301,6 +315,7 @@ static const struct cfg_handler cfg_handlers[] = {
 	{ "rmem_hints", parse_rmem_hints_flag, false },
 	{ "rmem_backend", parse_rmem_backend_flag, false },
 	{ "rmem_local_memory", parse_rmem_local_memory_flag, false },
+	{ "rmem_evict_threshold", parse_rmem_evict_thr_flag, false },
 	{ "rmem_evict_batch_size", parse_rmem_evict_batch_size_flag, false },
 };
 

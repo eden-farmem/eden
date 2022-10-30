@@ -306,9 +306,10 @@ int fault_read_done(fault_t* f)
     /* free backend buffer */
     bkend_buf_free(f->bkend_buf);
 
-    /* newly fetched pages - alloc page nodes */
+    /* newly fetched pages - alloc page nodes (for both the base page and 
+     * the read-ahead) */
     list_head_init(&tmp);
-    for (i = 1; i <= f->rdahead; i++) { 
+    for (i = 0; i <= f->rdahead; i++) { 
         /* get a page node */
         pgnode = rmpage_node_alloc();
         assert(pgnode);
@@ -317,11 +318,11 @@ int fault_read_done(fault_t* f)
          * when the page is evicted out */
         __get_mr(f->mr);
         pgnode->mr = f->mr;
-        pgnode->addr = f->page;
+        pgnode->addr = f->page + i * CHUNK_SIZE;
         list_add_tail(&tmp, &pgnode->link);
 
         pgidx = rmpage_get_node_id(pgnode);
-        pgidx = set_page_index(f->mr, f->page + i * CHUNK_SIZE , pgidx);
+        pgidx = set_page_index(pgnode->mr, pgnode->addr, pgidx);
         assertz(pgidx); /* old index must be 0 */
     }
 

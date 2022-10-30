@@ -136,14 +136,15 @@ static inline int find_candidate_pages(struct list_head* pglist,
         page = list_pop(&cold_pages.pages, rmpage_node_t, link);
         if (page == NULL)
             break;
+        assert(cold_pages.npages > 0);
         cold_pages.npages--;
         list_add_tail(pglist, &page->link);
         npages++;
-    } while(npages < batch_size);
+    } while (npages < batch_size);
     spin_unlock(&cold_pages.lock);
 
     /* we cannot be asking for eviction when the cold list is empty */
-    BUG_ON(npages == 0);  
+    assert(npages > 0);
 
     /* see if they're available */
     list_head_init(&tmplist);
@@ -347,8 +348,7 @@ static inline void evict_page_done(struct region_t* mr, unsigned long pgaddr,
 {
     pgflags_t clrbits, oldflags;
 
-    /* check present and locked */
-    assert(!!(get_page_flags(mr, pgaddr) & PFLAG_PRESENT));
+    /* assert locked */
     assert(!!(get_page_flags(mr, pgaddr) & PFLAG_WORK_ONGOING));
 
     /* bits to clear */
@@ -364,6 +364,7 @@ static inline void evict_page_done(struct region_t* mr, unsigned long pgaddr,
          * clear most bits, including the lock, and let them go */
         log_debug("evict done, unlocking page %lx", pgaddr);
         clear_page_flags(mr, pgaddr, clrbits | PFLAG_WORK_ONGOING, &oldflags);
+        assert(!!(oldflags & PFLAG_PRESENT));
         goto evict_done;
     }
     else {
@@ -379,6 +380,7 @@ static inline void evict_page_done(struct region_t* mr, unsigned long pgaddr,
         clear_page_flags(mr, pgaddr, clrbits, &oldflags);
         if (!!(oldflags & PFLAG_EVICT_ONGOING)) {
             /* first to get here, do not release */
+            assert(!!(oldflags & PFLAG_PRESENT));
             log_debug("evict one step done for page %lx", pgaddr);
             return;
         }
