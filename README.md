@@ -1,3 +1,8 @@
+
+# Eden
+Eden is built on Shenango, a user-level thread scheduler & runtime.
+
+
 # Shenango
 
 Shenango is a system that enables servers in datacenters to
