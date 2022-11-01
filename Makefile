@@ -6,11 +6,8 @@
 # Common
 #
 
-DPDK_PATH = dpdk
-PKGCONF ?= pkg-config
 INC     = -I./inc
 CFLAGS  = -g -Wall -std=gnu11 -D_GNU_SOURCE $(INC) -mssse3
-CFLAGS += $(shell $(PKGCONF) --cflags libdpdk)
 LDFLAGS = -T base/base.ld -no-pie
 LD	= gcc
 CC	= gcc
@@ -91,15 +88,26 @@ endif
 RDMA_LIBS=-lrdmacm -libverbs
 
 # dpdk
-DPDK_LIBS = $(shell $(PKGCONF) --static --libs libdpdk)
+DPDK_PATH = ${MKFILE_DIR}/dpdk
+DPDK_INCLUDES = $(shell cat $(DPDK_PATH)/dpdk_includes)
+DPDK_LIBS = $(shell cat $(DPDK_PATH)/dpdk_libs)
+ifneq ($(MAKECMDGOALS),clean)
+ifeq ($(DPDK_LIBS),)
+$(error DPDK libs not found. Please run ./setup.sh)
+endif
+endif
+CFLAGS += $(DPDK_INCLUDES)
 
 # jemalloc
-JE_ROOT_DIR=${MKFILE_DIR}/jemalloc
-JE_BUILD_DIR=${JE_ROOT_DIR}/build
-JE_LIB_DIR=${JE_BUILD_DIR}/lib
-JE_INCLUDE_DIR=${JE_BUILD_DIR}/include
-JE_LDFLAGS += -L${JE_LIB_DIR} -Wl,-rpath,${JE_LIB_DIR} -ljemalloc
-CFLAGS += -I${JE_INCLUDE_DIR}
+JEMALLOC_PATH = ${MKFILE_DIR}/jemalloc
+JEMALLOC_INC = $(shell cat $(JEMALLOC_PATH)/je_includes)
+JEMALLOC_LIBS = $(shell cat $(JEMALLOC_PATH)/je_libs)
+ifneq ($(MAKECMDGOALS),clean)
+ifeq ($(JEMALLOC_LIBS),)
+$(error JEMALLOC libs not found. Please run ./setup.sh)
+endif
+endif
+CFLAGS += $(JEMALLOC_INC)
 
 # handy for debugging
 print-%  : ; @echo $* = $($*)
@@ -203,7 +211,7 @@ memserver: $(memserver_obj) libbase.a
 
 rmlib: $(rmlib_obj) librmem.a libbase.a je_jemalloc
 	$(LD) $(CFLAGS) $(LDFLAGS) -shared $(rmlib_obj) -o rmlib.so		\
-		librmem.a libbase.a -lpthread $(RDMA_LIBS) $(JE_LDFLAGS)
+		librmem.a libbase.a -lpthread $(RDMA_LIBS) $(JEMALLOC_LIBS)
 
 ## tests
 $(test_targets): $(test_obj) libbase.a libruntime.a librmem.a libnet.a base/base.ld

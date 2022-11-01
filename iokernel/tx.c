@@ -2,15 +2,9 @@
  * tx.c - the transmission path for the I/O kernel (runtimes -> network)
  */
 
-#include <rte_ethdev.h>
-#include <rte_ether.h>
-#include <rte_hash.h>
-#include <rte_ip.h>
-#include <rte_mbuf.h>
-#include <rte_tcp.h>
-
 #include <base/log.h>
 #include <iokernel/queue.h>
+#include <iokernel/dpdk.h>
 
 #include "defs.h"
 
@@ -70,8 +64,8 @@ static void tx_prepare_tx_mbuf(struct rte_mbuf *buf,
 		if (net_hdr->olflags & OLFLAG_IPV6)
 			buf->ol_flags |= PKT_TX_IPV6;
 
-		buf->l4_len = sizeof(struct rte_tcp_hdr);
-		buf->l3_len = sizeof(struct rte_ipv4_hdr);
+		buf->l4_len = sizeof(iok_rte_tcp_hdr_t);
+		buf->l3_len = sizeof(iok_rte_ipv4_hdr_t);
 		buf->l2_len = RTE_ETHER_HDR_LEN;
 	}
 

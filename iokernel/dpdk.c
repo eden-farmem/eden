@@ -36,12 +36,9 @@
  */
 
 #include <inttypes.h>
-#include <rte_eal.h>
-#include <rte_ethdev.h>
-#include <rte_ether.h>
-#include <rte_lcore.h>
 
 #include <base/log.h>
+#include <iokernel/dpdk.h>
 
 #include "defs.h"
 
@@ -50,14 +47,14 @@
 
 static const struct rte_eth_conf port_conf_default = {
 	.rxmode = {
-		.max_rx_pkt_len = ETH_MAX_LEN,
+		.max_rx_pkt_len = IOK_ETH_MAX_LEN,
 		.offloads = DEV_RX_OFFLOAD_IPV4_CKSUM,
 		.mq_mode = ETH_MQ_RX_RSS | ETH_MQ_RX_RSS_FLAG,
 	},
 	.rx_adv_conf = {
 		.rss_conf = {
 			.rss_key = NULL,
-			.rss_hf = ETH_RSS_NONFRAG_IPV4_TCP | ETH_RSS_NONFRAG_IPV4_UDP,
+			.rss_hf = IOK_ETH_RSS_TCP | IOK_ETH_RSS_UDP,
 		},
 	},
 	.txmode = {
@@ -124,7 +121,7 @@ static inline int dpdk_port_init(uint8_t port, struct rte_mempool *mbuf_pool)
 		return retval;
 
 	/* Display the port MAC address. */
-	struct rte_ether_addr addr;
+	iok_rte_eth_addr_t addr;
 	rte_eth_macaddr_get(port, &addr);
 	log_info("dpdk: port %u MAC: %02" PRIx8 " %02" PRIx8 " %02" PRIx8
 			" %02" PRIx8 " %02" PRIx8 " %02" PRIx8 "",

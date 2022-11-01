@@ -11,6 +11,8 @@
 #include <rte_mbuf.h>
 #include <rte_udp.h>
 
+#include "iokernel/dpdk.h"
+
 #define RX_RING_SIZE 128
 #define TX_RING_SIZE 128
 
@@ -24,7 +26,7 @@
 
 static const struct rte_eth_conf port_conf_default = {
 	.rxmode = {
-		.max_rx_pkt_len = RTE_ETHER_MAX_LEN,
+		.max_rx_pkt_len = IOK_ETH_ADDR_LEN,
 		.offloads = DEV_RX_OFFLOAD_IPV4_CKSUM,
 		.mq_mode = ETH_MQ_RX_RSS,
 	},
