@@ -19,6 +19,11 @@
 #include "base/log.h"
 #include "base/assert.h"
 
+#ifdef REMOTE_MEMORY
+/* Some UFFD features are only available in recent kernel versions (i.e., 
+ * headers) so putting this under the REMOTE_MEMORY flag so that we can still 
+ * build Shenango without remote memory on earlier kernels. */
+
 int userfaultfd(int flags) { 
     return syscall(SYS_userfaultfd, flags); 
 }
@@ -284,3 +289,49 @@ int uffd_wake(int fd, unsigned long addr, size_t size) {
     if (r < 0) log_err("UFFDIO_WAKE");
     return r;
 }
+
+#else   //REMOTE_MEMORY
+
+int rmem_undefined_error() {
+    log_err("REMOTE_MEMORY not defined, not supporting UFFD");
+    BUG();
+    return 1;
+}
+
+int userfaultfd(int flags) { 
+    return rmem_undefined_error();
+}
+int uffd_init(void) {
+    return rmem_undefined_error();
+}
+int uffd_register(int fd, unsigned long addr, size_t size, int writeable) {
+    return rmem_undefined_error();
+}
+int uffd_unregister(int fd, unsigned long addr, size_t size) {
+    return rmem_undefined_error();
+}
+int uffd_copy(int fd, unsigned long dst, unsigned long src, size_t size, 
+    bool wrprotect, bool no_wake, bool retry, int *n_retries) {
+    return rmem_undefined_error();
+}
+int uffd_wp(int fd, unsigned long addr, size_t size, bool wrprotect, 
+    bool no_wake, bool retry, int *n_retries) {
+    return rmem_undefined_error();
+}
+int uffd_wp_add(int fd, unsigned long fault_addr, size_t size, bool no_wake, 
+    bool retry, int *n_retries) {
+    return rmem_undefined_error();
+}
+int uffd_wp_remove(int fd, unsigned long fault_addr, size_t size, bool no_wake, 
+    bool retry, int *n_retries) {
+    return rmem_undefined_error();
+}
+int uffd_zero(int fd, unsigned long addr, size_t size, bool no_wake, 
+    bool retry, int *n_retries) {
+    return rmem_undefined_error();
+}
+int uffd_wake(int fd, unsigned long addr, size_t size) {
+    return rmem_undefined_error();
+}
+
+#endif

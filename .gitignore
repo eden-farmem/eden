@@ -12,3 +12,7 @@ iokerneld-noht
 run.*
 rcntrl
 memserver
+
+# ignore dpdk submodule since we dynamically switch between commits
+# (any updates to these modules must be forced with -f)
+dpdk

@@ -20,6 +20,7 @@
 /* from DPDK 19.11 */
 #define IOK_ETH_MAX_LEN         ETH_MAX_LEN
 #define IOK_ETH_ADDR_LEN        ETH_ADDR_LEN
+#define IOK_ETH_HDR_LEN         RTE_ETHER_HDR_LEN
 #define IOK_ETH_RSS_TCP         ETH_RSS_NONFRAG_IPV4_TCP
 #define IOK_ETH_RSS_UDP         ETH_RSS_NONFRAG_IPV4_UDP
 typedef struct rte_ether_addr   iok_rte_eth_addr_t;
@@ -33,6 +34,7 @@ typedef struct rte_ipv4_hdr     iok_rte_ipv4_hdr_t;
 /* from DPDK 18.11 */
 #define IOK_ETH_MAX_LEN         ETHER_MAX_LEN
 #define IOK_ETH_ADDR_LEN        ETHER_ADDR_LEN
+#define IOK_ETH_HDR_LEN         ETHER_HDR_LEN
 #define IOK_ETH_RSS_TCP         ETH_RSS_TCP
 #define IOK_ETH_RSS_UDP         ETH_RSS_UDP
 typedef struct ether_addr       iok_rte_eth_addr_t;

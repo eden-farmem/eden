@@ -66,7 +66,7 @@ static void tx_prepare_tx_mbuf(struct rte_mbuf *buf,
 
 		buf->l4_len = sizeof(iok_rte_tcp_hdr_t);
 		buf->l3_len = sizeof(iok_rte_ipv4_hdr_t);
-		buf->l2_len = RTE_ETHER_HDR_LEN;
+		buf->l2_len = IOK_ETH_HDR_LEN;
 	}
 
 	/* initialize the private data, used to send completion events */

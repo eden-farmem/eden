@@ -80,15 +80,21 @@ then
 fi
 
 # Initialize & setup DPDK
-if git submodule status ${DPDK_DIR} | grep -q '^-'; then
+if [ ! -d ${DPDK_DIR} ]; then
     git submodule update --init ${DPDK_DIR}
     if lspci | grep -q 'ConnectX-5'; then
         echo "ConnectX-5 detected, applying mlx5 patch"
+        echo "Make sure mlnx ofed is installed; I'm not gonna do this"
+        echo "Tried and tested ofed version for this config: ${MLX_OFED}"
+        echo "Use this command: sudo ./mlnxofedinstall --dpdk --upstream-libs --add-kernel-support"
     else
         echo "This script does not support non-ConnectX-5 NICs"
         exit 1
     fi
-    patch -p 1 -d ${DPDK_DIR} < patches/${MLX_PATCH}
+    pushd ${DPDK_DIR}
+    git checkout ${DPDK_COMMIT}
+    patch -p 1 -d . < ../patches/${MLX_PATCH}
+    popd
 fi
 
 # (for ConnectX-3 if we need in future)
@@ -98,10 +104,10 @@ fi
 # Build dpdk
 pushd ${DPDK_DIR}
 if [ "$DPDK_BUILD_TYPE" == "make" ]; then
-    if [[ $FORCE ]]; then   make clean;   fi
+    if [[ $FORCE ]]; then   rm -rf build;   fi
     make config T=x86_64-native-linuxapp-gcc
     make -j $(nproc)
-    libs="-L$$(pwd)/build/lib"
+    libs="-L$(pwd)/build/lib"
     libs="$libs -Wl,-whole-archive -lrte_pmd_e1000 -Wl,-no-whole-archive"
     libs="$libs -Wl,-whole-archive -lrte_pmd_ixgbe -Wl,-no-whole-archive"
     libs="$libs -Wl,-whole-archive -lrte_mempool_ring -Wl,-no-whole-archive"
@@ -142,7 +148,7 @@ fi
 popd
 
 # Initialize & setup jemalloc
-if git submodule status ${JEMALLOC_DIR} | grep -q '^-'; then
+if [ ! -d ${JEMALLOC_DIR} ]; then
     git submodule update --init ${JEMALLOC_DIR}
 fi
 
