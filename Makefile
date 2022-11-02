@@ -201,7 +201,7 @@ iokerneld-noht: $(iokernel_noht_obj) libbase.a libnet.a base/base.ld
 		$(DPDK_LIBS) -lpthread -lnuma -ldl
 
 ## tools
-tools: rcntrl memserver rmlib
+tools: rcntrl memserver rmlib.so
 
 rcntrl: $(rcntrl_obj) libbase.a 
 	$(LD) $(LDFLAGS) -o $@ $(rcntrl_obj) libbase.a -lpthread $(RDMA_LIBS)
@@ -209,25 +209,14 @@ rcntrl: $(rcntrl_obj) libbase.a
 memserver: $(memserver_obj) libbase.a 
 	$(LD) $(LDFLAGS) -o $@ $(memserver_obj) libbase.a -lpthread $(RDMA_LIBS)
 
-rmlib: $(rmlib_obj) librmem.a libbase.a je_jemalloc
-	$(LD) $(CFLAGS) $(LDFLAGS) -shared $(rmlib_obj) -o rmlib.so		\
+rmlib.so: $(rmlib_obj) librmem.a libbase.a
+	$(LD) $(CFLAGS) $(LDFLAGS) -shared $(rmlib_obj) -o $@	\
 		librmem.a libbase.a -lpthread $(RDMA_LIBS) $(JEMALLOC_LIBS)
 
 ## tests
 $(test_targets): $(test_obj) libbase.a libruntime.a librmem.a libnet.a base/base.ld
 	$(LD) $(LDFLAGS) -o $@ $@.o libruntime.a librmem.a libnet.a libbase.a 	\
 		-lpthread $(RDMA_LIBS)
-
-## dependencies
-je_jemalloc: ${JE_ROOT_DIR} ${JE_BUILD_DIR}
-${JE_BUILD_DIR}:
-	cd ${JE_ROOT_DIR} && autoconf && mkdir -p ${JE_BUILD_DIR} && 			\
-	cd ${JE_BUILD_DIR} && ${JE_ROOT_DIR}/configure 							\
-	--with-jemalloc-prefix=rmlib_je_ --config-cache  > build.log && 		\
-	$(MAKE) -j$(nproc) > build.log
-je_clean:
-	-rm -rf ${JE_BUILD_DIR}
-	touch ${JE_ROOT_DIR}
 
 ## general build rules for all targets
 src = $(base_src) $(net_src) $(rmem_src) $(runtime_src) $(iokernel_src) $(test_src) $(tools_src)
@@ -260,5 +249,5 @@ sparse: $(src)
 
 .PHONY: clean
 clean:
-	rm -f $(obj) $(dep) libbase.a libnet.a librmem.a libruntime.a \
+	rm -f $(obj) $(dep) libbase.a libnet.a librmem.a libruntime.a rmlib.so 	\
 	iokerneld iokerneld-noht rcntrl memserver $(test_targets)
