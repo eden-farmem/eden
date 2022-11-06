@@ -181,8 +181,8 @@ static inline bool do_remote_memory_work(struct kthread *k)
 	 * stolen from the ready queue by the time we get here. After taking the 
 	 * lock again, the ready_q should reflect the real count of ready threads 
 	 * still waiting to be scheduled on the current kthread, not "nready" */
-	log_debug("have %d ready threads after checking on rmem work",
-		(k->rq_head - k->rq_tail));
+	// log_debug("have %d ready threads after checking on rmem work",
+	// 	(k->rq_head - k->rq_tail));
 	return (k->rq_head - k->rq_tail) > 0;
 }
 

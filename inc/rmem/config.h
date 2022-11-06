@@ -22,8 +22,8 @@ typedef enum {
 #define RMEM_BACKEND_DEFAULT    RMEM_BACKEND_LOCAL
 #define RMEM_SLAB_SIZE          (128 * 1024L)
 #define RMEM_MAX_CHANNELS       32
-#define RMEM_MAX_CHUNKS_PER_OP  8
-#define RMEM_MAX_COMP_PER_OP    4
+#define RMEM_MAX_CHUNKS_PER_OP  64
+#define RMEM_MAX_COMP_PER_OP    16
 
 /********* Cluster *******************************************/
 #define VRG_SC2             // Intel Skylake - CX5
@@ -105,8 +105,9 @@ BUILD_ASSERT(CHUNK_SIZE >= PGSIZE_4KB);
 /* Eviction settings */
 #define LOCAL_MEMORY_SIZE           (4 * 1024 * 1024 * 1024L)
 #define EVICTION_THRESHOLD          0.95
-#define EVICTION_MAX_BATCH_SIZE     8
+#define EVICTION_MAX_BATCH_SIZE     64
 #define EVICTION_REGION_SWITCH_THR  1000
+#define EVICTION_TLB_FLUSH_MIN      2       /* TODO: must be 32 or something */
 BUILD_ASSERT(EVICTION_MAX_BATCH_SIZE <= RMEM_MAX_CHUNKS_PER_OP);
 
 /* Fault handling */
