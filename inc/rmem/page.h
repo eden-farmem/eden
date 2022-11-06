@@ -220,6 +220,7 @@ static inline pgidx_t clear_page_index(struct region_t *mr, unsigned long addr)
 struct rmpage_node {
     struct region_t *mr;
     unsigned long addr;
+    unsigned long epoch;    /* epoch when page was last accessed */
     struct list_node link;
     struct page_list* listhead;
 };

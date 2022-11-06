@@ -83,7 +83,6 @@ int rmem_common_init()
 
     /* init lru lists and other eviction state */
     eviction_init();
-    lru_lists_init();
 
     /* kick off rmem handlers - need at least one for kernel faults */
     BUG_ON(nhandlers <= 0);
