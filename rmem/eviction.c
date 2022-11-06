@@ -26,6 +26,8 @@ __thread struct region_t *eviction_region_safe = NULL;
 __thread uint64_t last_evict_try_count = 0;
 __thread struct iovec madv_iov[EVICTION_MAX_BATCH_SIZE];
 __thread struct page_list tmp_lru_lists[EVICTION_MAX_LRU_GENS];
+__thread struct iovec mprotect_iov[EVICTION_MAX_BATCH_SIZE];
+__thread struct region_t* mprotect_mr[EVICTION_MAX_BATCH_SIZE];
 int madv_pidfd = -1;
 
 /* lru state */
@@ -355,12 +357,11 @@ found_enough:
 }
 
 /* remove pages from virtual memory using madvise */
-static inline int remove_pages(struct list_head* evict_list, int npages) 
+static inline int remove_pages(struct list_head* pglist, int npages) 
 {
     int r, i;
     ssize_t ret;
     struct rmpage_node *page;
-    log_debug("removing %d pages", npages);
     bool vectored_madv = false;
 
 #ifdef REGISTER_MADVISE_REMOVE
@@ -373,11 +374,15 @@ static inline int remove_pages(struct list_head* evict_list, int npages)
     BUILD_ASSERT(0);
 #endif
 #ifdef VECTORED_MADVISE
-    vectored_madv = true;
+    /* process_madvise supported. This always flushes the TLB so we may only 
+     * want to use it on very big batches. Although, UFFD_WRITEPROTECT currently
+     * flushes TLB on every op so if we write-protected pages before getting 
+     * here, we don't have to think twice about flushing again */
+    vectored_madv = wrprotected || npages >= EVICTION_TLB_FLUSH_MIN;
 #endif
 
     i = 0;
-    list_for_each(evict_list, page, link)
+    list_for_each(pglist, page, link)
     {
         if (vectored_madv) {
             /* prepare the io vector */
@@ -468,45 +473,83 @@ static unsigned int write_region_to_backend(int chan_id, struct region_t *mr,
 /* flush pages (with write-back if necessary). 
  * Returns whether any of the pages were written to backend and should be 
  * monitored for completions */
-static bool flush_pages(int chan_id, struct list_head* evict_list, int npages,
+static bool flush_pages(int chan_id, struct list_head* pglist, int npages,
     pgflags_t* pflags, bitmap_ptr write_map, struct bkend_completion_cbs* cbs)
 {
-    int i, r;
-    pgflags_t flags;
+    int i, r, niov;
     int nretries;
     struct rmpage_node *page;
+    bool vectored_mprotect = false;
+    size_t wpbytes;
+
+#ifdef VECTORED_MPROTECT
+    /* process_mprotect supported. mprotect operations flush the TLB always 
+     * so batching multiple mprotects is always a strict win */
+    vectored_mprotect = (npages > 1);
+#endif
 
     log_debug("flushing %d pages", npages);
 
     /* write back pages that are dirty */
     i = 0;
+    niov = 0;
     bitmap_init(write_map, npages, false);
-    list_for_each(evict_list, page, link)
+    list_for_each(pglist, page, link)
     {
-        flags = pflags[i];
-        if (!needs_write_back(flags)) {
+        /* check dirty */
+        if (!needs_write_back(pflags[i])) {
             i++;
             continue;
         }
-        
-        /* protect the page first (we don't have a vectored op for wrprotect
-         * but hopefully we will soon) */
-        nretries = 0;
-        r = uffd_wp_add(userfault_fd, page->addr, CHUNK_SIZE, false, true, 
-                &nretries);
-        assertz(r);
-        RSTAT(EVICT_WP_RETRIES) += nretries;
-        RSTAT(EVICT_WBACK)++;
 
-        /* write to backend */
-        write_region_to_backend(chan_id, page->mr, page->addr, CHUNK_SIZE, cbs);
+        /* prepare the io vector */
+        mprotect_mr[niov] = page->mr;
+        mprotect_iov[niov].iov_base = (void*) page->addr;
+        mprotect_iov[niov].iov_len = CHUNK_SIZE;
+        niov++;
+        assert(niov <= EVICTION_MAX_BATCH_SIZE);
+
         bitmap_set(write_map, i);
         i++;
     }
     assert(i == npages);
 
+    /* protect and write-back dirty pages */
+    if (niov > 0)
+    {
+        if (vectored_mprotect) {
+            /* if batch mprotect is available, use it to mprotect all at once */
+            nretries = 0;
+            r = uffd_wp_add_vec(userfault_fd, mprotect_iov, niov, 
+                false, true, &nretries, &wpbytes);
+            assertz(r);
+            assert(wpbytes == niov * CHUNK_SIZE);
+            RSTAT(EVICT_WP_RETRIES) += nretries;
+        }
+       
+        /* for each page */
+        for (i = 0; i < niov; i++) {
+            if (!vectored_mprotect) {
+                /* batch mprotect is not available, mprotect individually */
+                nretries = 0;
+                r = uffd_wp_add(userfault_fd, 
+                    (unsigned long) mprotect_iov[i].iov_base, 
+                    mprotect_iov[i].iov_len, false, true, &nretries);
+                assertz(r);
+                RSTAT(EVICT_WP_RETRIES) += nretries;
+            }
+
+            /* write-back. TODO: there is an optimization here we can do 
+             * using backend scatter-gather op to write all at once */
+            write_region_to_backend(chan_id, mprotect_mr[i], 
+                (unsigned long) mprotect_iov[i].iov_base, 
+                mprotect_iov[i].iov_len, cbs);
+            RSTAT(EVICT_WBACK)++;
+        }
+    }
+
     /* remove pages from UFFD */
-    r = remove_pages(evict_list, npages);
+    r = remove_pages(pglist, npages);
     assertz(r);
     return npages;
 }

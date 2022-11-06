@@ -207,6 +207,7 @@ int rmunmap(void *addr, size_t length)
             if (!!(flags && PFLAG_PRESENT)) {
                 pgidx = get_index_from_pginfo(pginfo);
                 pgnode = rmpage_get_node_by_id(pgidx);
+                assert(pgnode->addr == page);
                 rmpage_node_free(pgnode);
                 marked++;
                 clrflags |= PFLAG_PRESENT;
@@ -305,6 +306,7 @@ int rmadvise(void *addr, size_t length, int advice)
             if (!!(flags && PFLAG_PRESENT)) {
                 pgidx = get_index_from_pginfo(pginfo);
                 pgnode = rmpage_get_node_by_id(pgidx);
+                assert(pgnode->addr == page);
                 rmpage_node_free(pgnode);
                 marked++;
                 clrflags |= PFLAG_PRESENT;
