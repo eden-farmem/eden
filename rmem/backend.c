@@ -29,7 +29,7 @@ int backend_get_data_channel()
         chan_id = atomic_load(&nchans_bkend);
         BUG_ON(chan_id > RMEM_MAX_CHANNELS);
         if (chan_id == RMEM_MAX_CHANNELS) {
-            log_warn("out of rdma channels!");
+            log_warn("out of backend channels!");
             return -1;
         }
     } while(!atomic_compare_exchange_weak(&nchans_bkend, &chan_id, chan_id+1));

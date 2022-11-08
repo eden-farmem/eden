@@ -25,27 +25,27 @@ __thread uint64_t last_seen_faults = 0;
 __thread struct region_t *eviction_region_safe = NULL;
 __thread uint64_t last_evict_try_count = 0;
 __thread struct iovec madv_iov[EVICTION_MAX_BATCH_SIZE];
-__thread struct page_list tmp_lru_lists[EVICTION_MAX_LRU_GENS];
+__thread struct page_list tmp_evict_gens[EVICTION_MAX_GENS];
 __thread struct iovec mprotect_iov[EVICTION_MAX_BATCH_SIZE];
 __thread struct region_t* mprotect_mr[EVICTION_MAX_BATCH_SIZE];
 int madv_pidfd = -1;
 
 /* lru state */
-page_list_t lru_lists[EVICTION_MAX_LRU_GENS];
-int nr_lru_gen = 1;
-int lru_gen_mask = 0;
+struct page_list evict_gens[EVICTION_MAX_GENS];
+int nr_evict_gens = 1;
+int evict_gen_mask = 0;
 unsigned long epoch_start_tsc;
-unsigned long epoch_tsc_shift;
+int epoch_tsc_shift;
 
 /**
  * All these are write-protected by the lock of the current LRU generation 
- * the pages are being evicted out of i.e., lru_list[lru_gen_now].lock
+ * the pages are being evicted out of i.e., evict_gens[evict_gen_now].lock
  * Place variables in a different cache line to avoid false sharing with 
  * constants.
  */
-unsigned long epoch_now __aligned(CACHE_LINE_SIZE) = 0;
-unsigned long epoch_min = 0;
-int lru_gen_now = 0;
+unsigned long evict_epoch_now __aligned(CACHE_LINE_SIZE) = 0;
+unsigned long evict_epoch_min = 0;
+int evict_gen_now = 0;
 
 /* get process memory from OS */
 unsigned long long get_process_mem()
@@ -98,32 +98,188 @@ void verify_eviction()
     }
 }
 
+/**
+ * Update evict_epoch_now based on the current timer
+ */
+static __always_inline void update_evict_epoch_now(void)
+{
+#ifdef LRU_EVICTION
+    unsigned long tmp_evict_epoch_now;
+    tmp_evict_epoch_now = (rdtsc() - epoch_start_tsc) >> epoch_tsc_shift;
+    assert(tmp_evict_epoch_now >= evict_epoch_now);
+    evict_epoch_now = tmp_evict_epoch_now;
+    log_debug("evict_epoch_now updated to %lu", evict_epoch_now);
+#endif
+}
+
+/*
+ * Update evict_epoch_min to the oldest of the evicted pages in this round
+ */
+static __always_inline void update_evict_epoch_min(
+    unsigned long *new_evict_epoch_min)
+{
+#ifdef LRU_EVICTION
+    assert(new_evict_epoch_min);
+    if (*new_evict_epoch_min != UINT64_MAX) {
+        assert(*new_evict_epoch_min >= evict_epoch_min && 
+            *new_evict_epoch_min <= evict_epoch_now);
+        evict_epoch_min = *new_evict_epoch_min;
+        *new_evict_epoch_min = UINT64_MAX;
+        log_debug("evict_epoch_min updated to %lu", evict_epoch_min);
+    }
+#endif
+}
+
+/* Destiny of a page with LRU eviction */
+static __always_inline int get_page_next_gen_lru(struct rmpage_node* page, 
+    unsigned long* oldest_page_epoch)
+{
+    int next_gen_id;
+    unsigned long pgepoch;
+    unsigned long slope;
+
+    /* check and sort pages */
+    assert(evict_gen_mask);
+    assert(evict_epoch_now > evict_epoch_min);
+
+    /* get page's epoch; may get updated concurrently so just read it once */
+    pgepoch = ACCESS_ONCE(page->epoch);
+    assert(pgepoch == 0 || pgepoch <= evict_epoch_now);
+
+    /* reset the page's access epoch. we're either gonna evict it or 
+     * bump it to higher list, either of which require resetting it */
+    page->epoch = 0;
+
+    next_gen_id = 0;
+    assert(evict_epoch_now >= evict_epoch_min);
+    if (pgepoch && evict_epoch_now > evict_epoch_min) {
+        /* page epoch was set by a hint, indicating a more recent access 
+         * after the page fault. figure out the next gen for this page 
+         * depending on how recent the access was */
+        slope = (evict_epoch_now - pgepoch) * nr_evict_gens 
+            / (evict_epoch_now - evict_epoch_min);
+        next_gen_id = slope & evict_gen_mask;
+    }
+
+    if (next_gen_id == 0) {
+        /* save the minimum valid epoch that was set on an evicting page */
+        assert(oldest_page_epoch);
+        if (!pgepoch && pgepoch < *oldest_page_epoch)
+            *oldest_page_epoch = pgepoch;
+    }
+
+    log_debug("page %lx had epoch %lu, next generation id %d", 
+        page->addr, pgepoch, next_gen_id);
+    return next_gen_id;
+}
+
+/* Destiny of a page with SC (second-chance) eviction */
+static int __always_inline get_page_next_gen_sc(struct rmpage_node* page)
+{
+    pgflags_t flags;
+
+    /* check page accessed bit */
+    flags = get_page_flags(page->mr, page->addr);
+    if (!!(flags & PFLAG_ACCESSED)) {
+        /* reset the access bit. we're either gonna evict it or bump it
+         * to higher list, either of which require resetting it */
+        clear_page_flags(page->mr, page->addr, PFLAG_ACCESSED, NULL);
+
+        /* bump it to the next list 
+         * (we only maintain two lists in second-chance eviction) */
+        log_debug("page %lx had accessed bit set, bumping up", page->addr);
+        return 1;
+    }
+
+    log_debug("page %lx had accessed bit clear, evicting", page->addr);
+    return 0;
+}
+
+/**
+ * Figure out the eviction destiny of a page. If the page was recently accessed
+ * and needs to be bumped up to a higher list according to the eviction policy,
+ * return the the number of the new generation. Or returns 0 if the page can 
+ * be evicted
+ **/
+static int __always_inline get_page_next_gen(struct rmpage_node* page,
+    unsigned long* oldest_page_epoch)
+{
+#ifdef LRU_EVICTION
+    return get_page_next_gen_lru(page, oldest_page_epoch);
+#endif
+#ifdef SC_EVICTION
+    return get_page_next_gen_sc(page);
+#endif
+    return 0;
+}
+
+/* drain some of the pages reserved for bumping to higher lists into the 
+ * the eviction lists (because we ran out of pages in the original lists) */
+int drain_tmp_lists(struct list_head* evict_list, int max_drain,
+    bitmap_ptr tmplist_nonzero)
+{
+    int npages, gen_id;
+    struct rmpage_node* page;
+
+    assert(nr_evict_gens > 0);
+    assert(list_empty(&tmp_evict_gens[0].pages)); /* we don't use tmplist 0 */
+
+    /* start from the bottom */
+    log_debug("draining tmp lists");
+    npages = 0;
+    for (gen_id = 1; gen_id < nr_evict_gens; gen_id++) {
+        if (tmp_evict_gens[gen_id].npages == 0)
+            continue;
+
+        if (tmp_evict_gens[gen_id].npages <= (max_drain - npages)) {
+            /* move all pages in one go */
+            list_append_list(evict_list, &tmp_evict_gens[gen_id].pages);
+            assert(list_empty(&tmp_evict_gens[gen_id].pages));
+            npages += tmp_evict_gens[gen_id].npages;
+            tmp_evict_gens[gen_id].npages = 0;
+            bitmap_clear(tmplist_nonzero, gen_id);
+        }
+        else {
+            /* move as many as needed one-by-one */
+            while(npages < max_drain) {
+                page = list_pop(&tmp_evict_gens[gen_id].pages, 
+                    rmpage_node_t, link);
+                list_add_tail(evict_list, &page->link);
+                npages++;
+                assert(tmp_evict_gens[gen_id].npages > 0);
+                tmp_evict_gens[gen_id].npages--;
+            }
+        }
+    }
+    assert(npages <= max_drain);
+    return npages;
+}
+
 /* finds eviction candidates - returns the number of candidates found and 
  * sends out the list of page nodes */
 static inline int find_candidate_pages(struct list_head* evict_list,
     int batch_size)
 {
     int ntmp, npages, npopped;
-    int start_gen, gen_id, pg_gen_id;;
+    int start_gen, gen_id, pg_next_gen;;
     pgflags_t flags, oldflags;
     struct rmpage_node *page, *next;
-    struct page_list *lru_list;
+    struct page_list *evict_gen;
     struct list_head locked;
-    unsigned long epoch_tmp, slope, span;
-    unsigned long pgepoch, pgepoch_oldest;
+    unsigned long oldest_page_epoch;
     bool out_of_gens = false;
-    DEFINE_BITMAP(tmplists_map, nr_lru_gen);
+    DEFINE_BITMAP(tmplist_used, nr_evict_gens);
 
     /* quickly pop the first few pages off current lru list */
     gen_id = start_gen = -1;
     npages = npopped = 0;
-    bitmap_init(&tmplists_map, nr_lru_gen, 0);
-    pgepoch_oldest = UINT64_MAX;
+    bitmap_init(tmplist_used, nr_evict_gens, 0);
+    oldest_page_epoch = UINT64_MAX;
     do {
         /* get current lru gen */
-        assert(gen_id != lru_gen_now);
-        gen_id = lru_gen_now;
-        assert(gen_id >= 0 && gen_id < nr_lru_gen);
+        assert(gen_id != evict_gen_now);
+        gen_id = evict_gen_now;
+        assert(gen_id >= 0 && gen_id < nr_evict_gens);
 
         /* circled back to the started list */
         if (start_gen == gen_id) {
@@ -133,73 +289,43 @@ static inline int find_candidate_pages(struct list_head* evict_list,
         
         if (start_gen < 0)
             start_gen = gen_id;
-        
-        /* calculate new epoch (outside the lock) */
-        epoch_tmp = (rdtsc() - epoch_start_tsc) >> epoch_tsc_shift;
 
         /* lock current gen (make sure things move fast until we unlock) */
-        lru_list = &lru_lists[gen_id];
-        spin_lock(&lru_list->lock);
+        evict_gen = &evict_gens[gen_id];
+        spin_lock(&evict_gen->lock);
 
         /* update epoch */
-        if (epoch_tmp > epoch_now)
-            epoch_now = epoch_tmp;
-        assert(epoch_now >= epoch_min);
-        span = epoch_now - epoch_min;
+        update_evict_epoch_now();
 
         /* pop pages off the list */
         do {
-            page = list_pop(&lru_list->pages, rmpage_node_t, link);
+            page = list_pop(&evict_gen->pages, rmpage_node_t, link);
             if (page == NULL)
                 break;
 
             /* removed a page */
-            assert(lru_list->npages > 0);
-            lru_list->npages--;
+            assert(evict_gen->npages > 0);
+            evict_gen->npages--;
             npopped++;
 
-            /* check and sort pages */
-            assert(lru_gen_mask);
-            assert(epoch_now > epoch_min);
+            /* check page's destiny */
+            pg_next_gen = get_page_next_gen(page, &oldest_page_epoch);
 
-            /* get page's epoch; this may get updated concurrently so 
-             * just read it once */
-            pgepoch = ACCESS_ONCE(page->epoch);
-            assert(pgepoch == 0 || pgepoch <= epoch_now);
-
-            /* reset the page's access epoch. we're either gonna evict it or 
-             * bump it to higher list, either of which require resetting it */
-            page->epoch = 0;
-
-            pg_gen_id = 0;
-            if (pgepoch && span) {
-                /* page epoch was set by a hint, indicating a more recent 
-                 * access after the page fault */
-                slope = (epoch_now - pgepoch) * nr_lru_gen / span;
-                pg_gen_id = slope & lru_gen_mask;
-            }
-
-            if (pg_gen_id == 0) {
-                /* page never accessed or is old enough for eviction */
+            if (pg_next_gen == 0) {
+                /* page good for eviction */
                 list_add_tail(evict_list, &page->link);
                 npages++;
-
-                /* keep track of least epoch id that was set on an 
-                 * evicting page */
-                if (!pgepoch && pgepoch < pgepoch_oldest)
-                    pgepoch_oldest = pgepoch;
             }
             else {
-                /* page was accessed more recently, we need to bump 
-                 * these up to later gens */
-                assert(pg_gen_id > 0 && pg_gen_id < nr_lru_gen);
-                assert(bitmap_test(&tmplists_map, pg_gen_id)
-                    || (lru_lists[pg_gen_id].npages == 0
-                        && list_empty(&lru_lists[pg_gen_id].pages)));
+                /* page selected to bumping to a higher list */
+                assert(pg_next_gen < nr_evict_gens);
+                assert(bitmap_test(tmplist_used, pg_next_gen)
+                    || (evict_gens[pg_next_gen].npages == 0
+                        && list_empty(&evict_gens[pg_next_gen].pages)));
 
-                list_add_tail(&tmp_lru_lists[pg_gen_id].pages, &page->link);
-                tmp_lru_lists[pg_gen_id].npages++;
-                bitmap_set(&tmplists_map, pg_gen_id);
+                list_add_tail(&tmp_evict_gens[pg_next_gen].pages, &page->link);
+                tmp_evict_gens[pg_next_gen].npages++;
+                bitmap_set(tmplist_used, pg_next_gen);
             }
 
             /* enough searching for candidates so that we don't keep pulling 
@@ -218,25 +344,18 @@ static inline int find_candidate_pages(struct list_head* evict_list,
             goto found_enough;
 
         /* not enough candidates in this list, move to next list */
-        assert(list_empty(&lru_list->pages) && !lru_list->npages);
-        lru_gen_now = (gen_id + 1) % nr_lru_gen;
-        spin_unlock(&lru_list->lock);
+        assert(list_empty(&evict_gen->pages) && !evict_gen->npages);
+        evict_gen_now = (gen_id + 1) % nr_evict_gens;
+        update_evict_epoch_min(&oldest_page_epoch);
+        spin_unlock(&evict_gen->lock);
         continue;
 
 found_enough:
-        /* update epoch_min to the oldest evicted page */
-        if (pgepoch_oldest != UINT64_MAX) {
-            assert(pgepoch_oldest >= epoch_min && pgepoch_oldest <= epoch_now);
-            epoch_min = pgepoch_oldest;
-        }
-        spin_unlock(&lru_list->lock);
+        update_evict_epoch_min(&oldest_page_epoch);
+        spin_unlock(&evict_gen->lock);
         break;
 
     } while(1);
-
-    /* unlock the last list we looked at */
-    if (!out_of_gens)
-        spin_unlock(&lru_list->lock);
 
     /* if we didn't get enough for a batch, introspect */
     if (npages < batch_size)
@@ -244,41 +363,16 @@ found_enough:
         /* if the reason is that we were completely out of pages, 
          * get the remaining from the bump lists if they have any */
         if (unlikely(out_of_gens)) {
-            /* start from the bottom */
-            assert(nr_lru_gen > 0 && list_empty(tmp_lru_lists[0].pages));
-            for (gen_id = 1; gen_id < nr_lru_gen; gen_id++) {
-                if (tmp_lru_lists[gen_id].npages == 0)
-                    continue;
-
-                if (tmp_lru_lists[gen_id].npages <= (batch_size - npages)) {
-                    /* move all pages in one go */
-                    list_append_list(evict_list, &tmp_lru_lists[gen_id].pages);
-                    assert(list_empty(&tmp_lru_lists[gen_id].pages));
-                    npages += tmp_lru_lists[gen_id].npages;
-                    tmp_lru_lists[gen_id].npages = 0;
-                    bitmap_clear(&tmplists_map, gen_id);
-                }
-                else {
-                    /* move as many as needed one-by-one */
-                    while(npages < batch_size) {
-                        page = list_pop(&tmp_lru_lists[gen_id].pages, 
-                            rmpage_node_t, link);
-                        list_add_tail(evict_list, &page->link);
-                        npages++;
-                        assert(tmp_lru_lists[gen_id].npages > 0);
-                        tmp_lru_lists[gen_id].npages--;
-                    }
-                }
-            }
-
-            /* if we couldn't find anything anywhere */
-            BUG_ON(npages == 0);
+            npages += drain_tmp_lists(evict_list, 
+                batch_size - npages, tmplist_used);
+            BUG_ON(npages == 0); /* couldn't find anything anywhere */
         }
         
         /* if the reason is that we had to give up the hunt after a while as 
-         * most pages were non-evictible, then we either need to increase the 
-         * epoch interval or decrease the number of generations to make more 
-         * page evictible; for now, we won't do take any self-correcting 
+         * most pages were non-evictible, then we need to make more pages 
+         * evictible; how this is done depends on the eviction policy (such as 
+         * increasing the epoch interval or decreasing the number of generations
+         * for LRU). For now, we won't take any self-correcting 
          * measures here and let this overhead reflect in the EVICT_SUBOPTIMAL 
          * and evict effective batch size (EVICT_PAGES/EVICTS) metrics. 
          * We'll leave it to the developer to judge if this eviction overhead 
@@ -291,26 +385,26 @@ found_enough:
             BUG();
     }
 
-    /* add bumped pages back to the higher lists. note that lru_gen_now may 
+    /* add bumped pages back to the higher lists. note that evict_gen_now may 
      * be updated by other evictors in this process but adding pages in the 
      * wrong lists doesn't affect correctness, just performance. we will get 
      * to these pages sooner or later. */
-    bitmap_for_each_set(&tmplists_map, nr_lru_gen, gen_id) {
-        assert(tmp_lru_lists[gen_id].npages > 0);
+    bitmap_for_each_set(tmplist_used, nr_evict_gens, gen_id) {
+        assert(tmp_evict_gens[gen_id].npages > 0);
         assert(gen_id != 0);
-        lru_list = &lru_lists[(lru_gen_now + gen_id) & lru_gen_mask];
-        spin_lock(&lru_list->lock);
-        list_append_list(&lru_list->pages, &tmp_lru_lists[gen_id].pages);
-        lru_list->npages += tmp_lru_lists[gen_id].npages;
-        tmp_lru_lists[gen_id].npages = 0;
-        spin_unlock(&lru_list->lock);
+        evict_gen = &evict_gens[(evict_gen_now + gen_id) & evict_gen_mask];
+        spin_lock(&evict_gen->lock);
+        list_append_list(&evict_gen->pages, &tmp_evict_gens[gen_id].pages);
+        evict_gen->npages += tmp_evict_gens[gen_id].npages;
+        tmp_evict_gens[gen_id].npages = 0;
+        spin_unlock(&evict_gen->lock);
     }
 
 #if defined(DEBUG) || defined(SAFEMODE)
     /* check that we didn't leak any pages */
-    bitmap_for_each(&tmplists_map, nr_lru_gen, gen_id)
-        assert(list_empty(tmp_lru_lists[gen_id].pages) && 
-            tmp_lru_lists[gen_id].npages == 0);
+    bitmap_for_each_cleared(tmplist_used, nr_evict_gens, gen_id)
+        assert(list_empty(&tmp_evict_gens[gen_id].pages) && 
+            tmp_evict_gens[gen_id].npages == 0);
 #endif
 
     /* couldn't find anything evictible this time around */
@@ -322,11 +416,11 @@ found_enough:
     ntmp = 0;
     list_for_each_safe(evict_list, page, next, link)
     {
-        flags = set_page_flags(page->mr, page->addr, PFLAG_WORK_ONGOING, 
-            &oldflags);
+        flags = set_page_flags(page->mr, page->addr,
+            PFLAG_WORK_ONGOING, &oldflags);
         if (unlikely(!!(oldflags & PFLAG_WORK_ONGOING))) {
             /* page was locked by someone (presumbly for write-protect fault 
-            * handling), add it the locked list so we can put it back */
+             * handling), add it the locked list so we can put it back */
             list_del_from(evict_list, &page->link);
             list_add_tail(&locked, &page->link);
             ntmp++;
@@ -345,19 +439,20 @@ found_enough:
      * lru list is fine as these pages are currently being worked on and 
      * they deserve to be on the latest list anyway */
     if (!list_empty(&locked)) {
-        gen_id = (lru_gen_now + nr_lru_gen - 1) & lru_gen_mask;
-        lru_list = &lru_lists[gen_id];
-        spin_lock(&lru_list->lock);
-        list_append_list(&lru_list->pages, &locked);
-        lru_list->npages += ntmp;
-        spin_unlock(&lru_list->lock);
+        gen_id = (evict_gen_now + nr_evict_gens - 1) & evict_gen_mask;
+        evict_gen = &evict_gens[gen_id];
+        spin_lock(&evict_gen->lock);
+        list_append_list(&evict_gen->pages, &locked);
+        evict_gen->npages += ntmp;
+        spin_unlock(&evict_gen->lock);
     }
 
     return npages;
 }
 
 /* remove pages from virtual memory using madvise */
-static inline int remove_pages(struct list_head* pglist, int npages) 
+static inline int remove_pages(struct list_head* pglist, int npages,
+    bool wrprotected) 
 {
     int r, i;
     ssize_t ret;
@@ -382,6 +477,7 @@ static inline int remove_pages(struct list_head* pglist, int npages)
 #endif
 
     i = 0;
+    log_debug("removing %d pages (vectored: %d)", npages, vectored_madv);
     list_for_each(pglist, page, link)
     {
         if (vectored_madv) {
@@ -549,7 +645,7 @@ static bool flush_pages(int chan_id, struct list_head* pglist, int npages,
     }
 
     /* remove pages from UFFD */
-    r = remove_pages(pglist, npages);
+    r = remove_pages(pglist, npages, niov > 0);
     assertz(r);
     return npages;
 }
@@ -570,8 +666,7 @@ static inline void evict_page_done(struct region_t* mr, unsigned long pgaddr,
     clrbits |= PFLAG_EVICT_ONGOING;
     clrbits |= PFLAG_PRESENT;
     clrbits |= PFLAG_DIRTY;
-    clrbits |= PFLAG_HOT_MARKER;
-    clrbits |= PFLAG_HOT_MARKER2;
+    clrbits |= PFLAG_ACCESSED;
 
     if (discarded) {
         /* for pages that were discarded and not written-back, we can just 
@@ -680,16 +775,20 @@ int do_eviction(int chan_id, struct bkend_completion_cbs* cbs,
     RSTAT(EVICTS)++;
     RSTAT(EVICT_PAGES) += npages;
 
+    /* once we get a lock, we're gonna evict them no matter what. decrease the 
+     * memory used now so others don't overwork for the same memory that we 
+     * are about to release */
+    size = npages * CHUNK_SIZE;
+    pressure = atomic64_sub_and_fetch(&memory_used, size);
+    log_debug("Freed %d page(s), new pressure %lld", npages, pressure);
+
     /* flush pages */
     flushed = flush_pages(chan_id, &evict_list, npages, flags, write_map, cbs);
     assert(npages == flushed);
 
     /* memory accounting */
-    if (flushed > 0) {
-        size = flushed * CHUNK_SIZE;
-        pressure = atomic_fetch_sub_explicit(&memory_used, size, memory_order_acquire);
-        log_debug("Freed %d page(s), pressure=%lld", npages, pressure - size);
-
+    if (flushed > 0)
+    {
         /* work for each removed page */
         i = 0;
         list_for_each(&evict_list, page, link)
@@ -720,24 +819,45 @@ int do_eviction(int chan_id, struct bkend_completion_cbs* cbs,
 }
 
 /**
- * eviction_init - initializes eviction state
+ * Init functions
+ */
+
+/**
+ * eviction_init - initializes eviction global state
  */
 int eviction_init(void)
 {
     int i;
     unsigned long interval_tsc;
+    char* policy;
 
-    /* init LRU mask and page lists */
-    BUG_ON(nr_lru_gen & (nr_lru_gen - 1));  /* power of 2 */
-    lru_gen_mask = nr_lru_gen - 1;
-    for(i = 0; i < nr_lru_gen; i++) {
-        list_head_init(&lru_lists[i].pages);
-        lru_lists[i].npages = 0;
-        spin_lock_init(&lru_lists[i].lock);
-        tmp_lru_lists[i].npages = 0;
-        spin_lock_init(&tmp_lru_lists[i].lock);
+    /* get eviction policy */
+    policy = NULL;
+#if defined(SC_EVICTION)
+    /* two levels enough for second-chance eviction */
+    nr_evict_gens = 2;
+    policy = "second-chance";
+#elif defined(LRU_EVICTION)
+    /* no more useful than default without at least two gens */
+    policy = "lru";
+    nr_evict_gens = EVICTION_MAX_GENS;
+    BUG_ON(nr_evict_gens <= 1);
+#else
+    policy = "default";
+    BUG_ON(nr_evict_gens > 1);
+#endif
+    assert(policy);
+
+    /* init page lists for all generations and the gen mask */
+    BUG_ON(nr_evict_gens & (nr_evict_gens - 1));  /* power of 2 */
+    evict_gen_mask = nr_evict_gens - 1;
+    for(i = 0; i < nr_evict_gens; i++) {
+        list_head_init(&evict_gens[i].pages);
+        evict_gens[i].npages = 0;
+        spin_lock_init(&evict_gens[i].lock);
     }
-    log_info("inited %d LRU lists. lru mask: %x", nr_lru_gen, lru_gen_mask);
+    log_info("inited %s eviction with %d gens. gen mask: %x", 
+        policy, nr_evict_gens, evict_gen_mask);
 
     /* init epoch */
     epoch_start_tsc = rdtsc();
@@ -747,8 +867,9 @@ int eviction_init(void)
         epoch_tsc_shift++;
         interval_tsc >>= 1;
     }
-    log_info("eviction epoch length: %d mus, closest bit shift: %d", 
-        EVICTION_EPOCH_LEN_MUS, epoch_tsc_shift);
+    log_info("evict epoch: %d mus, closest bit-shift: %d, real epoch: %d mus",
+        EVICTION_EPOCH_LEN_MUS, epoch_tsc_shift, 
+        (1 << epoch_tsc_shift) / cycles_per_us);
 
     /* pid fd required for process madvise */
 #ifdef VECTORED_MADVISE
@@ -757,5 +878,21 @@ int eviction_init(void)
     assert(madv_pidfd >= 0);
 #endif
     
+    return 0;
+}
+
+/**
+ * eviction_thread_init - initializes per-thread eviction state
+ */
+int eviction_init_thread(void)
+{
+    int i;
+
+    for(i = 0; i < nr_evict_gens; i++) {
+        list_head_init(&tmp_evict_gens[i].pages);
+        tmp_evict_gens[i].npages = 0;
+        spin_lock_init(&tmp_evict_gens[i].lock);
+    }
+
     return 0;
 }

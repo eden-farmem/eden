@@ -247,7 +247,7 @@ eviction:
         if (!need_eviction) {
             /* if eviction wasn't already signaled by the earlier fault, 
              * see if we need one in general (since this is the handler thread)*/
-            pressure = atomic_load_explicit(&memory_used, memory_order_relaxed);
+            pressure = atomic64_read(&memory_used);
             need_eviction = (pressure >= local_memory * eviction_threshold);
         }
 

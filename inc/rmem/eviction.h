@@ -23,11 +23,13 @@ struct page_list {
     size_t npages;
     spinlock_t lock;
 };
-typedef struct page_list page_list_t;
-extern page_list_t lru_lists;
-extern int nr_lru_gen;
-extern unsigned long epoch_now;
+extern struct page_list evict_gens[EVICTION_MAX_GENS];
+extern int nr_evict_gens;
+extern int evict_gen_mask;
+extern int evict_gen_now;
+extern unsigned long evict_epoch_now;
 
 int eviction_init(void);
+int eviction_init_thread(void);
 
 #endif  // __EVICTION_H__

@@ -6,7 +6,6 @@
 #ifndef __RMEM_COMMON_H__
 #define __RMEM_COMMON_H__
 
-#include <stdatomic.h>
 #include <stddef.h>
 #include "base/types.h"
 #include "rmem/handler.h"
@@ -21,7 +20,7 @@ extern int evict_batch_size;
 /* global state */
 extern int nhandlers;
 extern hthread_t** handlers;
-extern atomic_ullong memory_used;
+extern atomic64_t memory_used;
 
 /* init & destroy */
 int rmem_common_init(void);

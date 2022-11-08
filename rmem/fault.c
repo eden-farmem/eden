@@ -101,11 +101,14 @@ enum fault_status handle_page_fault(int chan_id, fault_t* fault,
 {
     struct region_t* mr;
     bool page_present, was_locked, no_wake;
-    int i, ret, n_retries, nchunks;
+    int i, ret, n_retries, nchunks, noverflow;
     pgflags_t pflags, rflags, oldflags;
     unsigned long addr;
     unsigned long long pressure;
     uint64_t start_tsc, duration;
+    enum fault_status status;
+
+    assert(nevicts_needed);
     *nevicts_needed = 0;
 
     /* see if this fault needs to be acted upon, because some other fault 
@@ -159,8 +162,14 @@ enum fault_status handle_page_fault(int chan_id, fault_t* fault,
                     break;
 
                 /* check again after locking */
-                if (!fault_can_rdahead(rflags, pflags))
+                if (unlikely(!fault_can_rdahead(rflags, pflags))) {
+                    /* this shouldn't happen unless there is an extreme race;
+                     * someone locked the page, changed its state and released
+                     * it all in between our earlier check and taking a lock */
+                    clear_page_flags(mr, addr, PFLAG_WORK_ONGOING, &oldflags);
+                    assert(!!(oldflags & PFLAG_WORK_ONGOING));
                     break;
+                }
                 
                 nchunks++;
                 fault->rdahead++;
@@ -178,8 +187,6 @@ enum fault_status handle_page_fault(int chan_id, fault_t* fault,
                     nchunks * CHUNK_SIZE, no_wake, true, &n_retries);
                 assertz(ret);
                 RSTAT(UFFD_RETRIES) += n_retries;
-
-                /* TODO: bump this item (and the rdaheads) in the LRU lists */
 
                 /* done */
                 log_debug("%s - removed wp for %d pages", FSTR(fault), nchunks);
@@ -237,7 +244,9 @@ enum fault_status handle_page_fault(int chan_id, fault_t* fault,
                 ret = set_page_flags_range(mr, fault->page, 
                     nchunks * CHUNK_SIZE, bits);
                 assert(ret == nchunks);
-                return FAULT_DONE;
+                
+                status = FAULT_DONE;
+                goto pages_added_out;
 #endif
             }
 
@@ -269,17 +278,37 @@ enum fault_status handle_page_fault(int chan_id, fault_t* fault,
                 RSTAT(BACKEND_WAIT_CYCLES) += duration;
             }
 
-            /* book some memory for the pages */
-            pressure = atomic_fetch_add_explicit(&memory_used, 
-                nchunks * CHUNK_SIZE, memory_order_relaxed);
-            pressure += nchunks * CHUNK_SIZE;
-            if (pressure > local_memory)
-                *nevicts_needed = nchunks;
-
-            return FAULT_READ_POSTED;
+            status = FAULT_READ_POSTED;
+            goto pages_added_out;
         }
     }
-    unreachable();
+
+pages_added_out:
+    /* book some memory for the pages */
+    assert(nchunks > 0);
+    pressure = atomic64_add_and_fetch(&memory_used, nchunks * CHUNK_SIZE);
+    if (pressure > local_memory) {
+        noverflow = (pressure - local_memory) / CHUNK_SIZE;
+        *nevicts_needed = (noverflow < nchunks) ? noverflow : nchunks;
+    }
+
+    log_debug("%s - %d page(s) added with return status %d, pressure %llu"
+        "evicts %d", FSTR(fault), nchunks, status, pressure, *nevicts_needed);
+    return status;
+}
+
+/* get the eviction list farthest from the current evicting list (based on 
+ * policy) to add the faulting page to */
+int __always_inline get_highest_evict_gen(void)
+{
+#ifdef SC_EVICTION
+    assert(nr_evict_gens == 2 && evict_gen_mask == 1);
+    return (ACCESS_ONCE(evict_gen_now) + 1) & 1;
+#endif
+#ifdef LRU_EVICTION
+    return (ACCESS_ONCE(evict_gen_now) + nr_evict_gens - 1) & evict_gen_mask;
+#endif
+    return 0;
 }
 
 /* after reading the pages for a fault completed */
@@ -290,6 +319,7 @@ int fault_read_done(fault_t* f)
     size_t size;
     struct rmpage_node* pgnode;
     struct list_head tmp;
+    struct page_list* evict_gen;
     pgidx_t pgidx;
     pgflags_t flags;
 
@@ -326,11 +356,12 @@ int fault_read_done(fault_t* f)
         assertz(pgidx); /* old index must be 0 */
     }
 
-    /* add to page list */
-    spin_lock(&cold_pages.lock);
-    list_append_list(&cold_pages.pages, &tmp);
-    cold_pages.npages += (1 + f->rdahead);
-    spin_unlock(&cold_pages.lock);
+    /* add to the most recent page list */
+    evict_gen = &evict_gens[get_highest_evict_gen()];
+    spin_lock(&evict_gen->lock);
+    list_append_list(&evict_gen->pages, &tmp);
+    evict_gen->npages += (1 + f->rdahead);
+    spin_unlock(&evict_gen->lock);
 
     /* set page flags */
     flags = PFLAG_PRESENT;

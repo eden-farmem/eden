@@ -102,16 +102,23 @@ BUILD_ASSERT(RMEM_HANDLER_CORE_LOW <= RMEM_HANDLER_CORE_HIGH);
 #define CHUNK_MASK  PGMASK_4KB
 BUILD_ASSERT(CHUNK_SIZE >= PGSIZE_4KB);
 
-/* Eviction settings */
+/* Eviction core settings */
 #define LOCAL_MEMORY_SIZE           (4 * 1024 * 1024 * 1024L)
 #define EVICTION_THRESHOLD          0.95
 #define EVICTION_MAX_BATCH_SIZE     64
 #define EVICTION_REGION_SWITCH_THR  1000
-#define EVICTION_MAX_LRU_GENS       8
+#define EVICTION_MAX_GENS           8
 #define EVICTION_EPOCH_LEN_MUS      100
 #define EVICTION_TLB_FLUSH_MIN      2       /* TODO: must be 32 or something */
 #define EVICTION_MAX_BUMPS_PER_OP   (5*EVICTION_MAX_BATCH_SIZE)
 BUILD_ASSERT(EVICTION_MAX_BATCH_SIZE <= RMEM_MAX_CHUNKS_PER_OP);
+
+/* Eviction policy (default is none) */
+// #define SC_EVICTION     /* second-chance eviction */
+// #define LRU_EVICTION    /* LRU eviction */
+#if (defined(SC_EVICTION) && defined(LRU_EVICTION))
+#pragma GCC error "Only one policy (SC_EVICTION/LRU_EVICTION) can be defined"
+#endif
 
 /* Fault handling */
 #define RUNTIME_MAX_FAULTS          2048

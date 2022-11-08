@@ -60,25 +60,23 @@ static __always_inline bool __is_fault_pending_vdso(void *address, bool write)
         : __is_page_mapped_and_readonly_vdso(address);
 }
 
-
 /* use Eden's page state to determine an impending page fault */
 static __always_inline bool __is_fault_pending_eden(void* address, bool write)
 {
     bool nofault;
     pgflags_t pflags;
     pginfo_t pginfo;
-    pgidx_t pgidx;
-    bool page_present, page_dirty,page_evicting;
+    bool page_present, page_dirty;
     struct region_t* mr;
-    struct rmpage_node* page;
 
     /* check support */
     assert(rmem_enabled);
 
+    /* find the region the page belongs to */
 #ifdef NO_DYNAMIC_REGIONS
     /* we only support one region now so caching an unsafe reference for future 
-     * fast path accesses. this is neither correct nor safe when we have 
-     * multiple regions along with regular region updates */
+     * fast path accesses. this is not safe when we have multiple regions along
+     * with dynamic region updates */
     if (unlikely(!__cached_mr)) {
         __cached_mr = get_first_region_safe();
         assert(__cached_mr);
@@ -87,17 +85,25 @@ static __always_inline bool __is_fault_pending_eden(void* address, bool write)
 #else
     mr = get_region_by_addr_unsafe((unsigned long) address);
 #endif
+
     assert(is_in_memory_region_unsafe(mr, (unsigned long) address));
     pginfo = get_page_info(mr, (unsigned long) address);
     pflags = get_flags_from_pginfo(pginfo);
     page_present = !!(pflags & PFLAG_PRESENT);
     page_dirty = !!(pflags & PFLAG_DIRTY);
-    page_evicting = !!(pflags & PFLAG_EVICT_ONGOING);
     nofault = page_dirty || (!write && page_present);
+    log_debug("fault hinted on %p. faulting? %d", address, !nofault);
 
-#ifdef HINT_EVICTION
+    /* regardless of fault or not, this check is a signal that page was going 
+     * to be accessed. see if eviction wants to use that information */
+#ifdef SC_EVICTION2
+    /* set the accessed bit if not already set */
+    if (page_present && !(pflags & PFLAG_ACCESSED))
+        set_page_flags(mr, (unsigned long) address, PFLAG_ACCESSED, NULL);
+#endif
+#ifdef LRU_EVICTION
     /* update time on the page to help with better eviction */
-    if (nofault && !page_evicting) {
+    if (page_present && !(pflags & PFLAG_EVICT_ONGOING)) {
         /* PFLAG_EVICT_ONGOING is not enough to ensure that page node will 
          * exist when we access it below as we don't lock it. However, it takes
          * a long time from eviction start (when PFLAG_EVICT_ONGOING is set) to
@@ -106,12 +112,16 @@ static __always_inline bool __is_fault_pending_eden(void* address, bool write)
          * is released, it will only get assigned to another page and we would 
          * just be updating epoch on a wrong page in the rarest case - which is 
          * not that bad as it only effects when the page is evicted out. */
-        pgidx = get_index_from_pginfo(pginfo);
-        page = rmpage_get_node_by_id(mr, pgidx);
+        pgidx_t pgidx;
+        struct rmpage_node* page;
+        pgidx = get_index_from_pginfo_unsafe(pginfo);
+        page = rmpage_get_node_by_id(pgidx);
 
         /* this may not always be true due to the comment above */
-        assert(page->addr == (unsigned long) address);
-        page->epoch = epoch_now;
+        log_debug("fault hint on %p. updating epoch on page idx %d addr %lx",
+            address, pgidx, page->addr);
+        assert((page->addr & ~CHUNK_MASK) == ((unsigned long) address & ~CHUNK_MASK));
+        page->epoch = evict_epoch_now;
     }
 #endif
 
@@ -123,7 +133,7 @@ static __always_inline bool __is_fault_pending_eden(void* address, bool write)
  * (inlining in header file for low-overhead access) */
 static inline bool __is_fault_pending(void* address, bool write)
 {
-#ifndef USE_VDSO_CHECKS
+#ifdef USE_VDSO_CHECKS
     return __is_fault_pending_vdso(address, write);
 #else
     return __is_fault_pending_eden(address, write);

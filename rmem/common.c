@@ -29,7 +29,7 @@ struct rmem_backend_ops* rmbackend = NULL;
 int userfault_fd = -1;
 hthread_t** handlers = NULL;
 int nhandlers = 1;
-atomic_ullong memory_used;
+atomic64_t memory_used = ATOMIC_INIT(0);
 __thread uint64_t* rstats_ptr = NULL;
 
 /**
@@ -45,7 +45,6 @@ int rmem_common_init()
 
     /* init global data structures */
     CIRCLEQ_INIT(&region_list);
-    memory_used = ATOMIC_VAR_INIT(0);
 
     /* init userfaultfd */
     userfault_fd = uffd_init();
@@ -111,6 +110,7 @@ int rmem_common_init_thread(int* new_chan_id, uint64_t* stats_ptr)
     bkend_buf_tcache_init_thread();
     rmpage_node_tcache_init_thread();
     zero_page_init_thread();
+    eviction_init_thread();
 
     /* get a dedicated backend channel */
     assert(new_chan_id);
