@@ -248,6 +248,7 @@ extern size_t rmpage_node_count;
 int rmpage_node_tcache_init(void);
 void rmpage_node_tcache_init_thread(void);
 bool rmpage_is_node_valid(rmpage_node_t* pgnode);
+int rmpage_node_tcache_destroy(void);
 
 /* rmpage_node_alloc - allocates a page node from pool */
 static inline rmpage_node_t* rmpage_node_alloc(void)

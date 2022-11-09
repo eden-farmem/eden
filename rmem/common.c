@@ -142,7 +142,11 @@ int rmem_common_destroy()
     }
     free(handlers);
 
-    /* TODO: anyway to destroy fault tcache? */
+    /* destroy fault tcache pool */
+    fault_tcache_destroy();
+
+    /* free rmmem page node pool */
+    rmpage_node_tcache_destroy();
 
     /* ensure all regions freed */
     struct region_t *mr = NULL;
