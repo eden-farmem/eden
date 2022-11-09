@@ -13,28 +13,67 @@ BUILD_ASSERT(sizeof(pthread_rwlock_t) >= sizeof(rwmutex_t));
 int pthread_mutex_init(pthread_mutex_t *mutex,
 		       const pthread_mutexattr_t *mutexattr)
 {
+	if (unlikely(!__self)) {
+		static int (*fn)(pthread_mutex_t*, const pthread_mutexattr_t *);
+		if (!fn)
+			fn = dlsym(RTLD_NEXT, "pthread_mutex_init");
+		return fn(mutex, mutexattr);
+	}
+
 	mutex_init((mutex_t *)mutex);
 	return 0;
 }
 
 int pthread_mutex_lock(pthread_mutex_t *mutex)
 {
+	if (unlikely(!__self)) {
+		static int (*fn)(pthread_mutex_t*);
+		if (!fn)
+			fn = dlsym(RTLD_NEXT, "pthread_mutex_lock");
+		return fn(mutex);
+	}
+
 	mutex_lock((mutex_t *)mutex);
 	return 0;
 }
 
 int pthread_mutex_trylock(pthread_mutex_t *mutex)
 {
+	if (unlikely(!__self)) {
+		static int (*fn)(pthread_mutex_t*);
+		if (!fn)
+			fn = dlsym(RTLD_NEXT, "pthread_mutex_trylock");
+		return fn(mutex);
+	}
+
 	return mutex_try_lock((mutex_t *)mutex) ? 0 : EBUSY;
 }
 
 int pthread_mutex_unlock(pthread_mutex_t *mutex)
 {
+
+	if (unlikely(!__self)) {
+		static int (*fn)(pthread_mutex_t*);
+		if (!fn)
+			fn = dlsym(RTLD_NEXT, "pthread_mutex_unlock");
+		return fn(mutex);
+	}
+
 	mutex_unlock((mutex_t *)mutex);
 	return 0;
 }
 
-int pthread_mutex_destroy(pthread_mutex_t *mutex) { return 0; }
+int pthread_mutex_destroy(pthread_mutex_t *mutex)
+{
+	if (unlikely(!__self)) {
+		static int (*fn)(pthread_mutex_t*);
+		if (!fn)
+			fn = dlsym(RTLD_NEXT, "pthread_mutex_destroy");
+		return fn(mutex);
+	}
+
+	return 0;
+}
 
 int pthread_barrier_init(pthread_barrier_t *restrict barrier,
 			 const pthread_barrierattr_t *restrict attr,
