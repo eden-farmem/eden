@@ -133,4 +133,5 @@ int rmpage_node_tcache_destroy(void)
 {
 	munmap(free_rmpage_nodes, max_rmpage_nodes * sizeof(rmpage_node_t*));
 	munmap(rmpage_nodes, max_rmpage_nodes * sizeof(rmpage_node_t));
+    return 0;
 }

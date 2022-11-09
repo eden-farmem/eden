@@ -59,7 +59,7 @@ int rmem_init()
 int rmem_init_thread()
 {
     if (!rmem_enabled) {
-        log_info("rmem not enabled, skipping per-thread init");
+        log_debug("rmem not enabled, skipping per-thread init");
         return 0;
     }
 

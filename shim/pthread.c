@@ -4,6 +4,7 @@
 #include <pthread.h>
 
 #include <base/lock.h>
+#include <base/log.h>
 #include <runtime/sync.h>
 #include <runtime/thread.h>
 
@@ -141,4 +142,17 @@ int pthread_yield(void)
 
 	thread_yield();
 	return 0;
+}
+
+int pthread_setaffinity_np(pthread_t thread, size_t cpusetsize,
+	const cpu_set_t *cpuset)
+{
+	static int (*fn)(pthread_t, size_t, const cpu_set_t *);
+	if (unlikely(!__self)) {
+		if (!fn)
+			fn = dlsym(RTLD_NEXT, "pthread_setaffinity_np");
+		return fn(thread, cpusetsize, cpuset);
+	}
+
+	panic("pthread_setaffinity_np not supported for shenango threads");
 }
