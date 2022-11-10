@@ -108,7 +108,7 @@ bool bkend_is_buf_valid(void* buf)
 	region_end = (unsigned long) backend_buf_region + backend_region_size;
 	return buf >= backend_buf_region 
 		&& buf < (void*) region_end 
-		&& (unsigned long) buf % BACKEND_BUF_SIZE == 0;
+		&& (unsigned long) (buf - backend_buf_region) % BACKEND_BUF_SIZE == 0;
 }
 
 /**
@@ -129,7 +129,10 @@ int bkend_buf_tcache_init(void)
     /* create backing region */
     backend_region_size = MAX_BACKEND_BUFS * BACKEND_BUF_SIZE;
 	BUILD_ASSERT(is_power_of_two(BACKEND_BUF_SIZE));
-    backend_buf_region = aligned_alloc(BACKEND_BUF_SIZE, backend_region_size);
+    backend_buf_region = 
+		mem_map_anom(NULL, backend_region_size, PGSIZE_2MB, NUMA_NODE);
+	BUG_ON((unsigned long) backend_buf_region % PGSIZE_2MB != 0);
+	
     if(!backend_buf_region)
         return -ENOMEM;
 
