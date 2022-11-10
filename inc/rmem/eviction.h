@@ -18,21 +18,18 @@ int do_eviction(int chan_id, struct bkend_completion_cbs* cbs, int max_batch_siz
  * Page LRU lists support
  */
 
-#define HOT_LRU_PERCENT     20
-#define WARM_LRU_PERCENT    40
-
 struct page_list {
     struct list_head pages;
     size_t npages;
-    size_t max_pages;
     spinlock_t lock;
 };
-typedef struct page_list page_list_t;
-extern page_list_t hot_pages;
-extern page_list_t warm_pages;
-extern page_list_t cold_pages;
+extern struct page_list evict_gens[EVICTION_MAX_GENS];
+extern int nr_evict_gens;
+extern int evict_gen_mask;
+extern int evict_gen_now;
+extern unsigned long evict_epoch_now;
 
 int eviction_init(void);
-void lru_lists_init(void);
+int eviction_init_thread(void);
 
 #endif  // __EVICTION_H__

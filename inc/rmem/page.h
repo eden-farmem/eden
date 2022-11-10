@@ -21,8 +21,7 @@ enum {
     PSHIFT_DIRTY,
     PSHIFT_WORK_ONGOING,
     PSHIFT_EVICT_ONGOING,
-    PSHIFT_HOT_MARKER,
-    PSHIFT_HOT_MARKER2,
+    PSHIFT_ACCESSED,
     PAGE_FLAGS_NUM
 };
 BUILD_ASSERT(sizeof(pgflags_t) * 8 >= PAGE_FLAGS_NUM);
@@ -32,8 +31,7 @@ BUILD_ASSERT(sizeof(pgflags_t) * 8 >= PAGE_FLAGS_NUM);
 #define PFLAG_DIRTY         (1u << PSHIFT_DIRTY)
 #define PFLAG_WORK_ONGOING  (1u << PSHIFT_WORK_ONGOING)
 #define PFLAG_EVICT_ONGOING (1u << PSHIFT_EVICT_ONGOING)
-#define PFLAG_HOT_MARKER    (1u << PSHIFT_HOT_MARKER)
-#define PFLAG_HOT_MARKER2   (1u << PSHIFT_HOT_MARKER2)
+#define PFLAG_ACCESSED      (1u << PSHIFT_ACCESSED)
 #define PAGE_FLAGS_MASK     ((1u << PAGE_FLAGS_NUM) - 1)
 
 static inline atomic_pginfo_t *page_ptr(struct region_t *mr, unsigned long addr)
@@ -162,13 +160,23 @@ static inline int clear_page_flags_range(struct region_t *mr,
 BUILD_ASSERT(PAGE_INDEX_MASK > 0);
 
 /**
- * Gets page node index from pginfo
+ * Gets page node index from pginfo (doesn't check that page is locked, which 
+ * means the page node pointed to by the index may not exist, so use it with 
+ * extreme care)
+ */
+static inline pgidx_t get_index_from_pginfo_unsafe(pginfo_t pginfo)
+{
+    return (pgidx_t) ((pginfo & PAGE_INDEX_MASK) >> PAGE_INDEX_SHIFT);
+}
+
+/**
+ * Gets page node index from pginfo (checks that page is locked)
  */
 static inline pgidx_t get_index_from_pginfo(pginfo_t pginfo)
 {
     /* requires that page be locked to read index */
     assert(!!(pginfo & PFLAG_WORK_ONGOING));
-    return (pgidx_t) ((pginfo & PAGE_INDEX_MASK) >> PAGE_INDEX_SHIFT);
+    return get_index_from_pginfo_unsafe(pginfo);
 }
 
 /**
@@ -221,7 +229,14 @@ struct rmpage_node {
     struct region_t *mr;
     unsigned long addr;
     struct list_node link;
-    struct page_list* listhead;
+
+    /* time epoch when page was last accessed. this is set by hints and consumed 
+     * by the eviction routines to make smarter eviction choices. we treat it 
+     * merely as a performance hint that can be inaccurate to avoid the overhead
+     * of locking the page node or ensuring the node is valid. that means, in 
+     * rare cases, this field can be set when the page node does not exist for 
+     * a page or is associated with a different page. */
+    unsigned long epoch;
 };
 typedef struct rmpage_node rmpage_node_t;
 
@@ -233,6 +248,7 @@ extern size_t rmpage_node_count;
 int rmpage_node_tcache_init(void);
 void rmpage_node_tcache_init_thread(void);
 bool rmpage_is_node_valid(rmpage_node_t* pgnode);
+int rmpage_node_tcache_destroy(void);
 
 /* rmpage_node_alloc - allocates a page node from pool */
 static inline rmpage_node_t* rmpage_node_alloc(void)

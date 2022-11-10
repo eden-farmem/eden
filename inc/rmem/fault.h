@@ -64,6 +64,8 @@ DECLARE_PERTHREAD(struct tcache_perthread, fault_pt);
 /* inits */
 int fault_tcache_init(); 
 void fault_tcache_init_thread();
+bool fault_is_node_valid(struct fault* f);
+void fault_tcache_destroy(void);
 
 /* fault_alloc - allocates a fault object */
 static inline fault_t *fault_alloc(void)

@@ -111,7 +111,7 @@ extern void __jmp_thread_direct(struct thread_tf *oldtf,
 				struct thread_tf *newtf,
 				unsigned int *stack_busy);
 extern void __jmp_runtime(struct thread_tf *tf, runtime_fn_t fn,
-			  void *stack);
+			  void *stack, unsigned int *stack_busy);
 extern void __jmp_runtime_nosave(runtime_fn_t fn, void *stack) __noreturn;
 
 

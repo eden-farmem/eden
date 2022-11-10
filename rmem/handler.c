@@ -247,7 +247,7 @@ eviction:
         if (!need_eviction) {
             /* if eviction wasn't already signaled by the earlier fault, 
              * see if we need one in general (since this is the handler thread)*/
-            pressure = atomic_load_explicit(&memory_used, memory_order_relaxed);
+            pressure = atomic64_read(&memory_used);
             need_eviction = (pressure >= local_memory * eviction_threshold);
         }
 
@@ -293,7 +293,6 @@ hthread_t* new_rmem_handler_thread(int pincore_id)
         log_err("pthread_create for rmem handler failed: %d", errno);
         return NULL;
     }
-    pthread_setname_np(hthr->thread, "rmem_handler");
 
     /* pin thread */
     r = cpu_pin_thread(hthr->thread, pincore_id);
@@ -305,14 +304,10 @@ hthread_t* new_rmem_handler_thread(int pincore_id)
 /* stop and deallocate a fault handler thread */
 int stop_rmem_handler_thread(hthread_t* hthr)
 {
-    int r;
-
     /* signal and wait for thread to stop */
     assert(!hthr->stop);
     hthr->stop = true;
-	struct timespec wait = {.tv_nsec = 5E8 }; /* 1/2 second */
-    r = pthread_timedjoin_np(hthr->thread, NULL, &wait);
-    assertz(r);
+	pthread_join(hthr->thread, NULL);
 
     /* destroy per thread */
     rmem_common_destroy_thread();

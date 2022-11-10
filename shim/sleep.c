@@ -9,12 +9,26 @@
 
 int usleep(useconds_t usec)
 {
+	if (unlikely(!__self)) {
+		static int (*fn)(useconds_t);
+		if (!fn)
+			fn = dlsym(RTLD_NEXT, "usleep");
+		return fn(usec);
+	}
+
 	timer_sleep(usec);
 	return 0;
 }
 
 unsigned int sleep(unsigned int seconds)
 {
+	if (unlikely(!__self)) {
+		static int (*fn)(unsigned int);
+		if (!fn)
+			fn = dlsym(RTLD_NEXT, "sleep");
+		return fn(seconds);
+	}
+
 	timer_sleep(seconds * ONE_SECOND);
 	return 0;
 }
@@ -36,4 +50,18 @@ int nanosleep(const struct timespec *req, struct timespec *rem)
 	}
 
 	return 0;
+}
+
+void exit(int status)
+{
+	/* this means exit no matter where it is called from. we intercept it to 
+	 * reset __self because we can get here from shenango threads without going 
+	 * into runtime but exit() processing might require original std lib 
+	 * functions */
+	__self = NULL;
+
+	static void (*fn)(int);
+	if (!fn)
+		fn = dlsym(RTLD_NEXT, "exit");
+	fn(status);
 }

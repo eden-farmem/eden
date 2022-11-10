@@ -151,6 +151,7 @@ int rmunmap(void *addr, size_t length)
     pgidx_t pgidx;
     pginfo_t pginfo;
     struct rmpage_node *pgnode;
+    unsigned long pressure;
 
     log_debug("rmunmap at %p", addr);
     if (!addr) 
@@ -207,6 +208,7 @@ int rmunmap(void *addr, size_t length)
             if (!!(flags && PFLAG_PRESENT)) {
                 pgidx = get_index_from_pginfo(pginfo);
                 pgnode = rmpage_get_node_by_id(pgidx);
+                assert(pgnode->addr == page);
                 rmpage_node_free(pgnode);
                 marked++;
                 clrflags |= PFLAG_PRESENT;
@@ -221,9 +223,8 @@ int rmunmap(void *addr, size_t length)
     /* update memory usage */
     if (marked) {
         size = marked * CHUNK_SIZE;
-        atomic_fetch_sub_explicit(&memory_used, size, memory_order_relaxed);
-        log_debug("Freed %d page(s), pressure=%lld", marked, 
-            atomic_load(&memory_used));
+        pressure = atomic64_sub_and_fetch(&memory_used, size);
+        log_debug("Freed %d page(s), pressure=%ld", marked, pressure);
     }
 
     if (ret == 0)
@@ -248,6 +249,7 @@ int rmadvise(void *addr, size_t length, int advice)
     bool locked;
     struct rmpage_node *pgnode;
     pginfo_t pginfo;
+    unsigned long pressure;
 
     log_debug("rmadvise at %p size %ld advice %d", addr, length, advice);
     if (!addr) 
@@ -305,6 +307,7 @@ int rmadvise(void *addr, size_t length, int advice)
             if (!!(flags && PFLAG_PRESENT)) {
                 pgidx = get_index_from_pginfo(pginfo);
                 pgnode = rmpage_get_node_by_id(pgidx);
+                assert(pgnode->addr == page);
                 rmpage_node_free(pgnode);
                 marked++;
                 clrflags |= PFLAG_PRESENT;
@@ -319,9 +322,8 @@ int rmadvise(void *addr, size_t length, int advice)
     /* update memory usage */
     if (marked) {
         size = marked * CHUNK_SIZE;
-        atomic_fetch_sub_explicit(&memory_used, size, memory_order_relaxed);
-        log_debug("Freed %d page(s), pressure=%lld", marked, 
-            atomic_load(&memory_used));
+        pressure = atomic64_sub_and_fetch(&memory_used, size);
+        log_debug("Freed %d page(s), pressure=%ld", marked, pressure);
     }
 
     if (ret == 0)

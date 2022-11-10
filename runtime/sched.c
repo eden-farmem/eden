@@ -96,6 +96,26 @@ static void jmp_thread_direct(thread_t *oldth, thread_t *newth)
 }
 
 /**
+ * jmp_runtime_explicit - saves the current trap frame (of the thread that is 
+ *  explicitly specified) and jumps to a function in the runtime
+ * @fn: the runtime function to call
+ * @th: the thread to save the trap frame of
+ *
+ * WARNING: Only threads can call this function.
+ *
+ * This function saves state of the running thread and switches to the runtime
+ * stack, making it safe to run the thread elsewhere.
+ */
+static void jmp_runtime_explicit(runtime_fn_t fn, thread_t *th)
+{
+	assert_preempt_disabled();
+	assert(th != NULL);
+
+	RUNTIME_ENTER();
+	__jmp_runtime(&th->tf, fn, runtime_stack, &th->stack_busy);
+}
+
+/**
  * jmp_runtime - saves the current trap frame and jumps to a function in the
  *               runtime
  * @fn: the runtime function to call
@@ -108,10 +128,7 @@ static void jmp_thread_direct(thread_t *oldth, thread_t *newth)
 static void jmp_runtime(runtime_fn_t fn)
 {
 	assert_preempt_disabled();
-	assert(thread_self() != NULL);
-
-	RUNTIME_ENTER();
-	__jmp_runtime(&thread_self()->tf, fn, runtime_stack);
+	jmp_runtime_explicit(fn, thread_self());
 }
 
 /**
@@ -181,8 +198,8 @@ static inline bool do_remote_memory_work(struct kthread *k)
 	 * stolen from the ready queue by the time we get here. After taking the 
 	 * lock again, the ready_q should reflect the real count of ready threads 
 	 * still waiting to be scheduled on the current kthread, not "nready" */
-	log_debug("have %d ready threads after checking on rmem work",
-		(k->rq_head - k->rq_tail));
+	// log_debug("have %d ready threads after checking on rmem work",
+	// 	(k->rq_head - k->rq_tail));
 	return (k->rq_head - k->rq_tail) > 0;
 }
 
@@ -557,7 +574,7 @@ static __always_inline void enter_schedule(thread_t *myth)
 	if (k->rq_head == k->rq_tail || 
 	    (visit_runtime && unlikely(rdtsc() - last_tsc > 
 			cycles_per_us * RUNTIME_VISIT_US))) {
-		jmp_runtime(schedule);
+		jmp_runtime_explicit(schedule, myth);
 		RUNTIME_EXIT();
 		return;
 	}
@@ -580,6 +597,8 @@ static __always_inline void enter_schedule(thread_t *myth)
 	if (unlikely(th == myth)) {
 		th->state = THREAD_STATE_RUNNING;
 		th->stack_busy = false;
+		assert(!__self || __self == th);
+		__self = th;
 		preempt_enable();
 		RUNTIME_EXIT();
 		return;
@@ -629,7 +648,7 @@ void thread_yield(void)
 	assert(myth->state == THREAD_STATE_RUNNING);
 	myth->state = THREAD_STATE_SLEEPING;
 	store_release(&myth->stack_busy, true);
-	thread_ready(myth);
+	thread_ready_np(myth);
 
 	enter_schedule(myth);
 }
@@ -713,15 +732,21 @@ void thread_park_on_fault(void* address, bool write, int rdahead)
     BUG_ON(!rmem_enabled);
     BUG_ON(!rmem_hints_enabled);
 
-	/* entering runtime */
+	/* entering runtime; note that we'd still running in the current thread's 
+	 * stack frame until we get to jmp_runtime but we signal entering runtime 
+	 * early by resetting __self as what follows is all runtime work that we 
+	 * chose to do, to try and avoid context-switching if we can) */
 	preempt_disable();
+	myth = thread_self();
+	__self = NULL;
+	assert(myth);
 	RUNTIME_ENTER();
 
 	/* park thread */
-	myth = thread_self();
 	assert(myth->state == THREAD_STATE_RUNNING);
 	myth->state = THREAD_STATE_SLEEPING;
-	myth->stack_busy = true;
+	store_release(&myth->stack_busy, true);
+
 
 	/* alloc fault object */
     fault = fault_alloc();
@@ -737,7 +762,7 @@ void thread_park_on_fault(void* address, bool write, int rdahead)
     fault->rdahead_max = rdahead;
 	BUG_ON(1 + rdahead > RMEM_MAX_CHUNKS_PER_OP);	/* read ahead limit */
     fault->rdahead = 0;
-    fault->thread = thread_self();
+    fault->thread = myth;
     log_debug("fault posted at %lx write %d", fault->page, write);
 
 	/* enter scheduler with fault */

@@ -228,6 +228,79 @@ int uffd_wp_remove(int fd, unsigned long fault_addr, size_t size, bool nowake,
     return uffd_wp(fd, fault_addr, size, false, nowake, retry, n_retries);
 }
 
+int uffd_wp_vec(int fd, struct iovec* iov, int iov_len, bool wrprotect, 
+    bool no_wake, bool retry, int *n_retries, size_t* wp_bytes) 
+{
+#ifndef VECTORED_MPROTECT
+    /* UFFDIO_WRITEPROTECTV is only available as a patch right now, so keeping
+     * it under a flag to not affect build on unpatched kernels */
+    BUG();
+#else
+    int r;
+    int mode = 0;
+
+    if (wrprotect)  
+        mode |= UFFDIO_WRITEPROTECT_MODE_WP;
+    if (no_wake)    
+        mode |= UFFDIO_WRITEPROTECT_MODE_DONTWAKE;
+    struct uffdio_writeprotectv wpv = {
+        .mode = mode,
+        .iovec = iov,
+        .vlen = iov_len,
+    };
+
+    do {
+        log_debug("uffd_wp_vec %d items mode %d nowake %d", 
+            iov_len, wrprotect, no_wake);
+        errno = 0;
+        r = ioctl(fd, UFFDIO_WRITEPROTECTV, &wpv);
+        log_debug("uffd_wp_vec returned %d handled=%llu bytes errno=%d", 
+          r, wpv.writeprotected, errno);
+        if (r < 0) {
+            if (errno == EEXIST || errno == ENOSPC) {
+                /* This page is already write-protected OR the child process 
+                    has exited. We should drop this request. */
+                r = 0;
+                break;
+            } else if (errno == EAGAIN) {
+                /* layout change in progress; try again */
+                if (retry == false) {
+                    /* do not retry, let the caller handle it */
+                    r = EAGAIN;
+                    break;
+                }
+                (*n_retries)++;
+            } else {
+                log_err("uffd_wp errno=%d: unhandled error", errno);
+                BUG();
+            }
+        }
+    } while (r && errno == EAGAIN);
+
+    /* currently we get the bytes in the return value which is a bug that 
+     * we're fixing here */
+    if (r > 0) {
+      *wp_bytes = r;
+      r = 0;
+    }
+    return r;
+#endif
+}
+
+int uffd_wp_add_vec(int fd, struct iovec* iov, int iov_len, bool no_wake, 
+    bool retry, int *n_retries, size_t* wp_bytes)
+{
+    return uffd_wp_vec(fd, iov, iov_len, true, no_wake, retry, n_retries, 
+        wp_bytes);
+}
+
+int uffd_wp_remove_vec(int fd, struct iovec* iov, int iov_len, bool no_wake, 
+    bool retry, int *n_retries, size_t* wp_bytes)
+{
+    return uffd_wp_vec(fd, iov, iov_len, false, no_wake, retry, n_retries, 
+        wp_bytes);
+}
+
 int uffd_zero(int fd, unsigned long addr, size_t size, bool no_wake, 
     bool retry, int *n_retries) 
 {

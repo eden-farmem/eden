@@ -147,6 +147,7 @@ __jmp_thread_direct:
  * @tf: the struct thread_tf to save state (%rdi)
  * @fn: the function pointer to call (%rsi)
  * @stack: the start of the runtime stack (%rdx)
+ * @stack_busy: a pointer to the busy stack flag owned by the thread (%rcx)
  *
  * This low-level variant isn't intended to be called directly.
  * Must be called with preemption disabled.
@@ -169,6 +170,9 @@ __jmp_runtime:
 	movq    %r8, RIP(%rdi)
 	leaq    8(%rsp), %r8
 	movq    %r8, RSP(%rdi)
+
+	/* clear the stack busy flag */
+	movl	$0, (%rcx)
 
 	/* jump into runtime function */
 	movq    %rdx, %rsp

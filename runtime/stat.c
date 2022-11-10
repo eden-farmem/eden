@@ -72,7 +72,8 @@ static const char *rstat_names[] = {
     /* eviction stats */
     "evict_ops",
     "evict_pages",
-    "evict_retries",
+	"evict_no_candidates",
+	"evict_incomplete_batch",
     "evict_writes",
     "evict_wp_retries",
     "evict_madv",
