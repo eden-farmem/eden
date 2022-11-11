@@ -151,9 +151,13 @@ memserver_src = tools/rmserver/memserver.c tools/rmserver/rdma.c
 memserver_obj = $(memserver_src:.c=.o)
 
 # rmlib - rmclient library
+RMLIB = rmlib.so
 rmlib_src = $(wildcard tools/rmlib/*.c)
 rmlib_obj = $(rmlib_src:.c=.o)
-CFLAGS += -fPIC		# (rmlib is a shared library)
+ifeq ($(MAKECMDGOALS),$(RMLIB))
+CFLAGS += -fPIC # (rmlib is a shared library)
+CFLAGS += -DRMEM_STANDALONE
+endif
 
 tools_src = $(wildcard tools/*/*.c)
 tools_obj = $(tools_src:.c=.o)
@@ -201,7 +205,7 @@ iokerneld-noht: $(iokernel_noht_obj) libbase.a libnet.a base/base.ld
 		$(DPDK_LIBS) -lpthread -lnuma -ldl
 
 ## tools
-tools: rcntrl memserver rmlib
+tools: rcntrl memserver
 
 rcntrl: $(rcntrl_obj) libbase.a 
 	$(LD) $(LDFLAGS) -o $@ $(rcntrl_obj) libbase.a -lpthread $(RDMA_LIBS)
@@ -209,8 +213,10 @@ rcntrl: $(rcntrl_obj) libbase.a
 memserver: $(memserver_obj) libbase.a 
 	$(LD) $(LDFLAGS) -o $@ $(memserver_obj) libbase.a -lpthread $(RDMA_LIBS)
 
-rmlib: $(rmlib_obj) librmem.a libbase.a je_jemalloc
-	$(LD) $(CFLAGS) $(LDFLAGS) -shared $(rmlib_obj) -o rmlib.so		\
+# rmlib.so has to be built separately as it uses different flags
+# use "make rmlib.so"
+$(RMLIB): $(rmlib_obj) librmem.a libbase.a je_jemalloc
+	$(LD) $(CFLAGS) $(LDFLAGS) -shared $(rmlib_obj) -o $(RMLIB)		\
 		librmem.a libbase.a -lpthread $(RDMA_LIBS) $(JEMALLOC_LIBS)
 
 ## tests
@@ -261,4 +267,4 @@ sparse: $(src)
 .PHONY: clean
 clean:
 	rm -f $(obj) $(dep) libbase.a libnet.a librmem.a libruntime.a \
-	iokerneld iokerneld-noht rcntrl memserver $(test_targets)
+	iokerneld iokerneld-noht rcntrl memserver $(RMLIB) $(test_targets)

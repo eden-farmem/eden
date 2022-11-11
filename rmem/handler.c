@@ -12,6 +12,7 @@
 #include "base/cpu.h"
 #include "rmem/backend.h"
 #include "rmem/common.h"
+#include "rmem/dump.h"
 #include "rmem/config.h"
 #include "rmem/eviction.h"
 #include "rmem/fault.h"
@@ -267,9 +268,11 @@ eviction:
         rmbackend->check_for_completions(my_hthr->bkend_chan_id, &hthr_cbs, 
             RMEM_MAX_COMP_PER_OP, NULL, NULL);
 
-#ifdef SECOND_CHANCE_EVICTION
-        /* TODO: clear all hot bits once in a while */
-#endif
+        /* check for remote memory dump */
+        if (unlikely(dump_rmem_state_and_exit)) {
+            dump_rmem_state();
+            unreachable();
+        }
     }
 
     /* destroy state */
