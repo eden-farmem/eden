@@ -665,6 +665,7 @@ static __always_inline void enter_schedule_with_fault(thread_t *th, fault_t* f)
 	k = myk();
 
 	/* accounting */
+	RSTAT(FAULTS)++;
     if (f->is_read)         RSTAT(FAULTS_R)++;
     if (f->is_write)        RSTAT(FAULTS_W)++;
     if (f->is_wrprotect)    RSTAT(FAULTS_WP)++;

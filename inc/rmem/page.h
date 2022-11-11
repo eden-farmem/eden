@@ -76,13 +76,14 @@ static inline pgflags_t set_page_flags(struct region_t *mr, unsigned long addr,
     atomic_pginfo_t *ptr;
     assert((flags & ~PAGE_FLAGS_MASK) == 0);  /* only page flags */
 
-    log_debug("setting flags 0x%x on page 0x%lx", flags, addr);
     ptr = page_ptr(mr, addr);
     oldinfo = atomic_fetch_or(ptr, flags);
     oldflags = oldinfo & PAGE_FLAGS_MASK;
     if (oldflags_out)
         *oldflags_out = oldflags;
     new_flags = oldflags | flags;
+    log_debug("set flags 0x%x on page 0x%lx; old: 0x%x, new: 0x%x", 
+        flags, addr, oldflags, new_flags);
     return new_flags;
 }
 
@@ -97,13 +98,14 @@ static inline pgflags_t clear_page_flags(struct region_t *mr, unsigned long addr
     atomic_pginfo_t *ptr;
     assert((flags & ~PAGE_FLAGS_MASK) == 0);  /* only page flags */
     
-    log_debug("clearing flags 0x%x on page 0x%lx", flags, addr);
     ptr = page_ptr(mr, addr);
     oldinfo = atomic_fetch_and(ptr, ~flags);
     oldflags = oldinfo & PAGE_FLAGS_MASK;
     if (oldflags_out)
         *oldflags_out = oldflags;
     new_flags = oldflags & (~flags);
+    log_debug("cleared flags 0x%x on page 0x%lx; old: 0x%x, new: 0x%x", 
+        flags, addr, oldflags, new_flags);
     return new_flags;
 }
 

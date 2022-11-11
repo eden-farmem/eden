@@ -230,7 +230,7 @@ int local_post_read(int chan_id, fault_t* f)
     /* copy from remote */
     log_debug("%s - READ remote_addr %lx into local_addr %p, size %lu", FSTR(f), 
         remote_addr, local_addr, size);
-    // memcpy(local_addr, (void*) remote_addr, size);
+    memcpy(local_addr, (void*) remote_addr, size);
 
     /* post completion */
     cq_id = chan->cq_post_idx;
@@ -320,7 +320,7 @@ int local_post_write(int chan_id, struct region_t* mr, unsigned long addr,
     /* copy to remote */
     log_debug("WRITE remote_addr %lx from local_addr %p, size %lu", 
         remote_addr, local_addr, size);
-    // memcpy((void*) remote_addr, local_addr, size);
+    memcpy((void*) remote_addr, local_addr, size);
 
     /* post completion */
     cq_id = chan->cq_post_idx;

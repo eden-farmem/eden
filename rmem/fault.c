@@ -95,7 +95,153 @@ bool fault_can_rdahead(pgflags_t rdahead_page, pgflags_t base_page)
     return true;
 }
 
-/* after receiving page fault */
+/* get the eviction list farthest from the current evicting list (based on 
+ * policy) to add the faulting page to */
+int __always_inline get_highest_evict_gen(void)
+{
+#ifdef SC_EVICTION
+    assert(nr_evict_gens == 2 && evict_gen_mask == 1);
+    return (ACCESS_ONCE(evict_gen_now) + 1) & 1;
+#endif
+#ifdef LRU_EVICTION
+    return (ACCESS_ONCE(evict_gen_now) + nr_evict_gens - 1) & evict_gen_mask;
+#endif
+    return 0;
+}
+
+/* after the faulting page (and read-ahead) has been uffd-copied into the 
+ * address space, we must allocate new page nodes to track them and add the 
+ * nodes to the eviction lists */
+static inline void fault_alloc_page_nodes(fault_t* f)
+{
+    int i;
+    struct rmpage_node* pgnode;
+    struct list_head tmp;
+    struct page_list* evict_gen;
+    pgidx_t pgidx;
+
+    /* newly fetched pages - alloc page nodes (for both the base page and 
+     * the read-ahead) */
+    list_head_init(&tmp);
+    for (i = 0; i <= f->rdahead; i++) { 
+        /* get a page node */
+        pgnode = rmpage_node_alloc();
+        assert(pgnode);
+
+        /* each page node gets an MR reference too which gets removed 
+         * when the page is evicted out */
+        __get_mr(f->mr);
+        pgnode->mr = f->mr;
+        pgnode->addr = f->page + i * CHUNK_SIZE;
+        list_add_tail(&tmp, &pgnode->link);
+
+        pgidx = rmpage_get_node_id(pgnode);
+        pgidx = set_page_index(pgnode->mr, pgnode->addr, pgidx);
+        assertz(pgidx); /* old index must be 0 */
+    }
+
+    /* add to the most recent page list */
+    evict_gen = &evict_gens[get_highest_evict_gen()];
+    spin_lock(&evict_gen->lock);
+    list_append_list(&evict_gen->pages, &tmp);
+    evict_gen->npages += (1 + f->rdahead);
+    spin_unlock(&evict_gen->lock);
+}
+
+/* serve zero pages for first-time faults without going to the backend */
+static inline void fault_serve_zero_pages(fault_t* f, int nchunks)
+{
+    int nretries, ret;
+    bool nowake, wrprotect;
+    pgflags_t flags;
+
+    /* Two options for zero page: UFFD_ZERO or UFFD_COPY a zero page.
+    * UFFD_ZERO currently maps a zero page where a write results in
+    * a minor fault that never reaches the handler. UFFD_ZERO as 
+    * a standalone operation is faster than UFFD_COPYing with zeros 
+    * but when followed by dirtying (which is expected in most 
+    * cases) UFFD_COPY is better as it avoids the minor fault. 
+    * So we always treat zero page fault as a write fault */
+    fault_upgrade_to_write(f, "zero page");
+
+    /* map zero pages */
+    nowake = !f->from_kernel;
+    wrprotect = f->is_read;
+    assert(nchunks == 1 + f->rdahead);
+    ret = uffd_copy(userfault_fd, f->page, (unsigned long) zero_page, 
+        nchunks * CHUNK_SIZE, wrprotect, nowake, true, &nretries);
+    assertz(ret);
+    RSTAT(UFFD_RETRIES) += nretries;
+    
+    /* set page flags */
+    flags = PFLAG_REGISTERED | PFLAG_PRESENT;
+    if (!wrprotect) flags |= PFLAG_DIRTY;
+    ret = set_page_flags_range(f->mr, f->page, nchunks * CHUNK_SIZE, flags);
+    assert(ret == nchunks);
+
+    /* alloc page nodes */
+    fault_alloc_page_nodes(f);
+    
+    /* done */
+    log_debug("%s - added %d zero pages", FSTR(f), nchunks);
+    RSTAT(FAULTS_ZP)++;
+}
+
+/* Called after reading the pages from the backend completed: uffd-copies the 
+ * page(s) into virtual memory and allocs page nodes */
+int fault_read_done(fault_t* f)
+{
+    int n_retries, r;
+    bool wrprotect, no_wake;
+    size_t size;
+    pgflags_t flags;
+
+    /* uffd copy the page(s) back */
+    assert(f->bkend_buf);
+    wrprotect = f->is_read;
+    no_wake = !f->from_kernel;
+    size = (1 + f->rdahead) * CHUNK_SIZE;
+    r = uffd_copy(userfault_fd, f->page, (unsigned long) f->bkend_buf, size, 
+        wrprotect, no_wake, true, &n_retries);
+    assertz(r);
+    RSTAT(UFFD_RETRIES) += n_retries;
+
+    /* free the backend buffer */
+    bkend_buf_free(f->bkend_buf);
+
+    /* set page flags */
+    flags = PFLAG_PRESENT;
+    if (!wrprotect) flags |= PFLAG_DIRTY;
+    set_page_flags_range(f->mr, f->page, size, flags);
+
+    /* add page nodes for the pages */
+    fault_alloc_page_nodes(f);
+
+    return 0;
+}
+
+/* Called after servicing fault is completely done: removes lock on the page 
+ * and frees temporary resources */
+void fault_done(fault_t* f) 
+{
+    size_t size;
+    int marked;
+
+    /* remove lock (in the ascending order) */
+    size = (1 + f->rdahead) * CHUNK_SIZE;
+    marked = clear_page_flags_range(f->mr, f->page, 
+        size, PFLAG_WORK_ONGOING);
+    assert(marked == (1 + f->rdahead));
+    RSTAT(FAULTS_DONE)++;
+    log_debug("%s - fault done", FSTR(f));
+
+    /* free */
+    put_mr(f->mr);
+    fault_free(f);
+}
+
+/* Gateway to common fault handling for shenango or handler cores after 
+ * receiving a page fault */
 enum fault_status handle_page_fault(int chan_id, fault_t* fault, 
     int* nevicts_needed, struct bkend_completion_cbs* cbs)
 {
@@ -212,39 +358,14 @@ enum fault_status handle_page_fault(int chan_id, fault_t* fault,
             if (!(pflags & PFLAG_REGISTERED)) {
 #ifdef NO_ZERO_PAGE
                 /* no zero page allowed for first serving; mark them 
-                 * registered and proceed to read from remote */
+                 * registered and proceed to read from remote; be careful with 
+                 * this setting as it returns non-zero initial pages */
                 ret = set_page_flags_range(mr, fault->page, 
                     nchunks * CHUNK_SIZE, PFLAG_REGISTERED);
                 assert(ret == nchunks);
 #else
                 log_debug("%s - serving %d zero pages", FSTR(fault), nchunks);
-
-                /* Two options for zero page: UFFD_ZERO or UFFD_COPY a zero page.
-                 * UFFD_ZERO currently maps a zero page where a write results in
-                 * a minor fault that never reaches the handler. UFFD_ZERO as 
-                 * a standalone operation is faster than UFFD_COPYing with zeros 
-                 * but when followed by dirtying (which is expected in most 
-                 * cases) UFFD_COPY is better as it avoids the minor fault. 
-                 * So we always treat zero page fault as a write fault */
-                no_wake = !fault->from_kernel;
-                ret = uffd_copy(userfault_fd, fault->page, (unsigned long) 
-                    zero_page, nchunks * CHUNK_SIZE, false, no_wake, 
-                    true, &n_retries);
-                assertz(ret);
-
-                fault_upgrade_to_write(fault, "zero page");
-                RSTAT(UFFD_RETRIES) += n_retries;
-                RSTAT(FAULTS_ZP)++;
-                log_debug("%s - added %d zero pages", FSTR(fault), nchunks);
-                
-                /* done */
-                pgflags_t bits = PFLAG_REGISTERED | PFLAG_PRESENT;
-                if (!fault->is_read) 
-                    bits = PFLAG_DIRTY;
-                ret = set_page_flags_range(mr, fault->page, 
-                    nchunks * CHUNK_SIZE, bits);
-                assert(ret == nchunks);
-                
+                fault_serve_zero_pages(fault, nchunks);
                 status = FAULT_DONE;
                 goto pages_added_out;
 #endif
@@ -293,98 +414,6 @@ pages_added_out:
     }
 
     log_debug("%s - %d page(s) added with return status %d, pressure %llu"
-        "evicts %d", FSTR(fault), nchunks, status, pressure, *nevicts_needed);
+        " evicts %d", FSTR(fault), nchunks, status, pressure, *nevicts_needed);
     return status;
-}
-
-/* get the eviction list farthest from the current evicting list (based on 
- * policy) to add the faulting page to */
-int __always_inline get_highest_evict_gen(void)
-{
-#ifdef SC_EVICTION
-    assert(nr_evict_gens == 2 && evict_gen_mask == 1);
-    return (ACCESS_ONCE(evict_gen_now) + 1) & 1;
-#endif
-#ifdef LRU_EVICTION
-    return (ACCESS_ONCE(evict_gen_now) + nr_evict_gens - 1) & evict_gen_mask;
-#endif
-    return 0;
-}
-
-/* after reading the pages for a fault completed */
-int fault_read_done(fault_t* f)
-{
-    int n_retries, r, i;
-    bool wrprotect, no_wake;
-    size_t size;
-    struct rmpage_node* pgnode;
-    struct list_head tmp;
-    struct page_list* evict_gen;
-    pgidx_t pgidx;
-    pgflags_t flags;
-
-    /* uffd copy the page back */
-    assert(f->bkend_buf);
-    wrprotect = f->is_read;
-    no_wake = !f->from_kernel;
-    size = (1 + f->rdahead) * CHUNK_SIZE;
-    r = uffd_copy(userfault_fd, f->page, (unsigned long) f->bkend_buf, size, 
-        wrprotect, no_wake, true, &n_retries);
-    assertz(r);
-    RSTAT(UFFD_RETRIES) += n_retries;
-
-    /* free backend buffer */
-    bkend_buf_free(f->bkend_buf);
-
-    /* newly fetched pages - alloc page nodes (for both the base page and 
-     * the read-ahead) */
-    list_head_init(&tmp);
-    for (i = 0; i <= f->rdahead; i++) { 
-        /* get a page node */
-        pgnode = rmpage_node_alloc();
-        assert(pgnode);
-
-        /* each page node gets an MR reference too which gets removed 
-         * when the page is evicted out */
-        __get_mr(f->mr);
-        pgnode->mr = f->mr;
-        pgnode->addr = f->page + i * CHUNK_SIZE;
-        list_add_tail(&tmp, &pgnode->link);
-
-        pgidx = rmpage_get_node_id(pgnode);
-        pgidx = set_page_index(pgnode->mr, pgnode->addr, pgidx);
-        assertz(pgidx); /* old index must be 0 */
-    }
-
-    /* add to the most recent page list */
-    evict_gen = &evict_gens[get_highest_evict_gen()];
-    spin_lock(&evict_gen->lock);
-    list_append_list(&evict_gen->pages, &tmp);
-    evict_gen->npages += (1 + f->rdahead);
-    spin_unlock(&evict_gen->lock);
-
-    /* set page flags */
-    flags = PFLAG_PRESENT;
-    if (!wrprotect) flags |= PFLAG_DIRTY;
-    set_page_flags_range(f->mr, f->page, size, flags);
-    return 0;
-}
-
-/* after servicing fault is completely done */
-void fault_done(fault_t* f) 
-{
-    size_t size;
-    int marked;
-
-    /* remove lock (in the ascending order) */
-    size = (1 + f->rdahead) * CHUNK_SIZE;
-    marked = clear_page_flags_range(f->mr, f->page, 
-        size, PFLAG_WORK_ONGOING);
-    assert(marked == (1 + f->rdahead));
-    RSTAT(FAULTS_DONE)++;
-    log_debug("%s - fault done", FSTR(f));
-
-    /* free */
-    put_mr(f->mr);
-    fault_free(f);
 }

@@ -277,7 +277,6 @@ static inline int find_candidate_pages(struct list_head* evict_list,
     oldest_page_epoch = UINT64_MAX;
     do {
         /* get current lru gen */
-        assert(gen_id != evict_gen_now);
         gen_id = evict_gen_now;
         assert(gen_id >= 0 && gen_id < nr_evict_gens);
 
@@ -365,7 +364,10 @@ found_enough:
         if (unlikely(out_of_gens)) {
             npages += drain_tmp_lists(evict_list, 
                 batch_size - npages, tmplist_used);
-            BUG_ON(npages == 0); /* couldn't find anything anywhere */
+
+            /* couldn't find anything anywhere; local memory must have been
+             * extremely low for this to happen */
+            BUG_ON(npages == 0);
         }
         
         /* if the reason is that we had to give up the hunt after a while as 
@@ -539,7 +541,7 @@ static unsigned int write_region_to_backend(int chan_id, struct region_t *mr,
     /* post the write-back */
     start_tsc = 0;
     ncompletions = 0;
-    nwrites_done = 0;
+    nwrites_done = -1;
     do {
         r = rmbackend->post_write(chan_id, mr, addr, size);
         if (r == EAGAIN) {
@@ -550,7 +552,7 @@ static unsigned int write_region_to_backend(int chan_id, struct region_t *mr,
             /* write queue is full, nothing to do but repeat and keep 
              * checking for completions to free request slots; raising error
              * if we handled some write completions but still cannot post */
-            assert (nwrites_done >= 1);
+            assert(nwrites_done != 0);
             ncompletions += rmbackend->check_for_completions(chan_id, cbs, 
                 RMEM_MAX_COMP_PER_OP, NULL, &nwrites_done);
         }
