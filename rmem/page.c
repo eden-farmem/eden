@@ -7,6 +7,7 @@
 
 #include "base/mem.h"
 #include "rmem/page.h"
+#include "rmem/pgnode.h"
 #include "rmem/common.h"
 
 /* common state */

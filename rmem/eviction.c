@@ -17,6 +17,7 @@
 #include "rmem/fault.h"
 #include "rmem/handler.h"
 #include "rmem/page.h"
+#include "rmem/pgnode.h"
 #include "rmem/region.h"
 #include "rmem/uffd.h"
 

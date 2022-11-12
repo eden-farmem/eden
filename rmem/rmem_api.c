@@ -15,6 +15,7 @@
 #include "rmem/common.h"
 #include "rmem/eviction.h"
 #include "rmem/page.h"
+#include "rmem/pgnode.h"
 #include "rmem/region.h"
 
 /* TODO: Not sure why kona was doing this; remove and see. */
@@ -196,11 +197,11 @@ int rmunmap(void *addr, size_t length)
 
         /* unlock the page */
         clrflags = PFLAG_WORK_ONGOING;
+        clr_pgidx = false;
  
         if (ret == 0) {
             /* unregister the page */
             clrflags |= PFLAG_REGISTERED;
-            clr_pgidx = false;
 
             /* if the page was present, drop it and release the page node */
             pginfo = get_page_info(mr, page);

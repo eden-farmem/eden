@@ -15,6 +15,7 @@
 #include "rmem/common.h"
 #include "rmem/fault.h"
 #include "rmem/page.h"
+#include "rmem/pgnode.h"
 #include "rmem/stats.h"
 #include "rmem/uffd.h"
 
