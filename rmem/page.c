@@ -93,25 +93,30 @@ void rmpage_node_tcache_init_thread(void)
 int rmpage_node_tcache_init(void)
 {
     /* check if we can support local memory */
-    max_rmpage_nodes = (1ULL << PAGE_INDEX_LEN);
-    if (local_memory > max_rmpage_nodes * CHUNK_SIZE) {
-        log_err("can't support %lu B local memory with current page "
-            "index size %lu", local_memory, PAGE_INDEX_LEN);
+    max_rmpage_nodes = (RMEM_MAX_LOCAL_GB * 1024 * 1024 * 1024ULL) / CHUNK_SIZE;
+    if (max_rmpage_nodes > (1ULL << PAGE_INDEX_LEN)) {
+        log_err("can't support %d GB local memory with current page "
+            "index size %lu", RMEM_MAX_LOCAL_GB, PAGE_INDEX_LEN);
         BUG();
     }
 
+    /* check we're with in limit */
+    BUG_ON(local_memory < RMEM_MAX_LOCAL_GB * 1024 * 1024 * 1024);
+
     /* create backing region with huge pages on current numa node */
+    log_info("allocating %ld page nodes with %lu huge pages", max_rmpage_nodes,
+        max_rmpage_nodes * sizeof(rmpage_node_t) / PGSIZE_2MB);
     rmpage_nodes = mem_map_anom(NULL, max_rmpage_nodes * sizeof(rmpage_node_t),
         PGSIZE_2MB, NUMA_NODE);
-    if(!rmpage_nodes) {
+    if(rmpage_nodes == MAP_FAILED) {
         log_err("out of huge pages for rmpage_nodes");
         return -ENOMEM;
     }
-    
+
     /* allocate free page tracker */
     free_rmpage_nodes = mem_map_anom(NULL, max_rmpage_nodes * 
         sizeof(rmpage_node_t*), PGSIZE_2MB, NUMA_NODE);
-    if(!free_rmpage_nodes) {
+    if(free_rmpage_nodes == MAP_FAILED) {
         log_err("out of huge pages for free_rmpage_nodes");
         return -ENOMEM;
     }

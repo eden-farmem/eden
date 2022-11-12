@@ -15,9 +15,13 @@
 #include "rmem/rdma.h"
 
 /* Smallest native type that can support metadata for each page */
-typedef unsigned int pginfo_t;
-typedef pginfo_t pgflags_t;
-typedef pginfo_t pgidx_t;
+typedef unsigned long   pginfo_t;
+typedef unsigned char   pgflags_t;
+typedef unsigned char   pgthread_t;
+typedef unsigned int    pgidx_t;
+BUILD_ASSERT(sizeof(pginfo_t) >= 
+    sizeof(pgflags_t) + sizeof(pgthread_t) + sizeof(pgidx_t));
+
 typedef _Atomic(pginfo_t) atomic_pginfo_t;
 BUILD_ASSERT(sizeof(atomic_pginfo_t) == sizeof(pginfo_t));
 

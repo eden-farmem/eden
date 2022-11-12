@@ -96,7 +96,7 @@ int fault_tcache_init(void)
     /* create backing region with huge pages on current NUMA node */
     backing_memory = mem_map_anom(NULL, RUNTIME_MAX_FAULTS * sizeof(fault_t),
         PGSIZE_2MB, NUMA_NODE);
-    if(!backing_memory) {
+    if(backing_memory == MAP_FAILED) {
         log_err("out of huge pages for fault_tcache pool");
         return -ENOMEM;
     }

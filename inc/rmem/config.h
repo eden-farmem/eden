@@ -24,6 +24,7 @@ typedef enum {
 #define RMEM_MAX_CHANNELS       32
 #define RMEM_MAX_CHUNKS_PER_OP  64
 #define RMEM_MAX_COMP_PER_OP    16
+#define RMEM_MAX_LOCAL_GB       64
 
 /********* Cluster *******************************************/
 #define VRG_SC2             // Intel Skylake - CX5
