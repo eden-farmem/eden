@@ -224,17 +224,6 @@ $(test_targets): $(test_obj) libbase.a libruntime.a librmem.a libnet.a base/base
 	$(LD) $(LDFLAGS) -o $@ $@.o libruntime.a librmem.a libnet.a libbase.a 	\
 		-lpthread $(RDMA_LIBS)
 
-## dependencies
-je_jemalloc: ${JE_ROOT_DIR} ${JE_BUILD_DIR}
-${JE_BUILD_DIR}:
-	cd ${JE_ROOT_DIR} && autoconf && mkdir -p ${JE_BUILD_DIR} && 			\
-	cd ${JE_BUILD_DIR} && ${JE_ROOT_DIR}/configure 							\
-	--with-jemalloc-prefix=rmlib_je_ --config-cache  > build.log && 		\
-	$(MAKE) -j$(nproc) > build.log
-je_clean:
-	-rm -rf ${JE_BUILD_DIR}
-	touch ${JE_ROOT_DIR}
-
 ## general build rules for all targets
 src = $(base_src) $(net_src) $(rmem_src) $(runtime_src) $(iokernel_src) $(test_src) $(tools_src)
 asm = $(runtime_asm)
