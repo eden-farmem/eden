@@ -71,7 +71,7 @@ static __thread struct local_completion wc[RMEM_MAX_COMP_PER_OP];
  * */
 static inline void page_lock_acquire(unsigned long remote_addr)
 {
-#if !defined(DEBUG) || !defined(SAFEMODE)
+#if !defined(DEBUG) && !defined(SAFEMODE)
     return;
 #endif
     int lock_id;
@@ -93,7 +93,7 @@ static inline void page_lock_acquire(unsigned long remote_addr)
 
 static inline void page_lock_release(unsigned long remote_addr)
 {
-#if !defined(DEBUG) || !defined(SAFEMODE)
+#if !defined(DEBUG) && !defined(SAFEMODE)
     return;
 #endif
     int lock_id;

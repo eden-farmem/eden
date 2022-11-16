@@ -30,5 +30,7 @@ extern __thread struct hthread *my_hthr;
 /* methods */
 hthread_t* new_rmem_handler_thread(int pincore_id);
 int stop_rmem_handler_thread(hthread_t* hthr);
+extern struct bkend_completion_cbs hthr_cbs;
+extern struct bkend_completion_cbs hthr_stealer_cbs;
 
 #endif  // __HANDLER_H__

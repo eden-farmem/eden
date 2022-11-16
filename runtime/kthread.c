@@ -12,6 +12,7 @@
 #include <base/list.h>
 #include <base/lock.h>
 #include <base/log.h>
+#include <rmem/page.h>
 #include <runtime/sync.h>
 #include <runtime/timer.h>
 
@@ -36,6 +37,8 @@ struct kthread *ks[NCPU];
 struct kthread *allks[NCPU];
 /* kernel thread-local data */
 __thread struct kthread *mykthread;
+/* my kthread unique id (also an index into allks) */
+__thread int my_kthr_id = -1;
 /* Map of cpu to kthread */
 struct cpu_record cpu_map[NCPU] __attribute__((aligned(CACHE_LINE_SIZE)));
 
@@ -80,8 +83,10 @@ int kthread_init_thread(void)
 		return -ENOMEM;
 
 	spin_lock_np(&klock);
-	allks[allksn++] = mykthread;
-	assert(allksn <= maxks);
+	allks[allksn] = mykthread;
+	my_kthr_id = allksn;
+	allksn++;
+	assert(allksn <= maxks && my_kthr_id < maxks);
 	spin_unlock_np(&klock);
 
 	return 0;

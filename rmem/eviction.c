@@ -83,17 +83,26 @@ void verify_eviction()
 {
     double over_allocated;
 
-    /* Check after 1 million page faults? */
+    /* Note that this does not work for the local backend as the backing memory
+     * for the backend also comes from process memory (and allocated on demand), 
+     * so the OS memory stat in this case does not reflect the 
+     * true resident-set size of the process running on Eden */
+    if (rmbackend_type == RMEM_BACKEND_LOCAL)
+        return;
+
+    /* check every 1 million page faults served? */
     if (RSTAT(FAULTS) - last_seen_faults > OS_MEM_PROBE_INTERVAL) {
         last_seen_faults = RSTAT(FAULTS);
 
-        // Read the current memory from OS periodically
+        /* read the current memory from OS periodically */
         uint64_t current_mem = get_process_mem();
         if (current_mem > 0) {
             over_allocated = (current_mem - local_memory) * 100 / local_memory;
             if (over_allocated > 1) {
                 /* just warn for now */
-                log_warn("OS memory probing found usage >1%% over limit");
+                log_warn("OS memory probing found usage %.0lf%% (>1%%) "
+                    "over limit. memory overflow: %lu MB", over_allocated, 
+                    (current_mem - local_memory) / 1024 / 1024);
             }
         }
     }
@@ -435,6 +444,7 @@ found_enough:
             assert(!!(flags & PFLAG_REGISTERED));
             assert(!(flags & PFLAG_EVICT_ONGOING));
             assert(is_in_memory_region_unsafe(page->mr, page->addr));
+            assertz(get_page_thread(page->mr, page->addr));
         }
     }
 
@@ -485,11 +495,13 @@ static inline int remove_pages(struct list_head* pglist, int npages,
     {
         if (vectored_madv) {
             /* prepare the io vector */
-            madv_iov[i].iov_base = (void*)page->addr;
+            log_debug("adding page %p to iovec", (void*) page->addr);
+            madv_iov[i].iov_base = (void*) page->addr;
             madv_iov[i].iov_len = CHUNK_SIZE;
         }
         else {
             /* or issue madvise once per page */
+            log_debug("madvise dont_need on page %p", (void*) page->addr);
             r = madvise((void*)page->addr, CHUNK_SIZE, MADV_DONTNEED);
             if (r != 0) {
                 log_err("madvise for chunk %d failed: %s", i, strerror(errno));
@@ -657,9 +669,10 @@ static bool flush_pages(int chan_id, struct list_head* pglist, int npages,
  * Eviction done for a page
  */
 static inline void evict_page_done(struct region_t* mr, unsigned long pgaddr, 
-    bool discarded)
+    bool discarded, bool stolen)
 {
     pgflags_t clrbits, oldflags;
+    pgthread_t owner_kthr = 0;
 
     /* assert locked */
     assert(!!(get_page_flags(mr, pgaddr) & PFLAG_WORK_ONGOING));
@@ -675,7 +688,8 @@ static inline void evict_page_done(struct region_t* mr, unsigned long pgaddr,
         /* for pages that were discarded and not written-back, we can just 
          * clear most bits, including the lock, and let them go */
         log_debug("evict done, unlocking page %lx", pgaddr);
-        clear_page_flags(mr, pgaddr, clrbits | PFLAG_WORK_ONGOING, &oldflags);
+        clear_page_flags_and_thread(mr, pgaddr, 
+            clrbits | PFLAG_WORK_ONGOING, &oldflags, &owner_kthr);
         assert(!!(oldflags & PFLAG_PRESENT));
         goto evict_done;
     }
@@ -699,21 +713,30 @@ static inline void evict_page_done(struct region_t* mr, unsigned long pgaddr,
         else {
             /* last one to get here, clear the lock as well */
             log_debug("evict done, unlocking page %lx", pgaddr);
-            clear_page_flags(mr, pgaddr, PFLAG_WORK_ONGOING, &oldflags);
+            clear_page_flags_and_thread(mr, pgaddr, PFLAG_WORK_ONGOING, 
+                &oldflags, &owner_kthr);
             goto evict_done;
         }
     }
 
 evict_done:
-    assert(!!(oldflags & PFLAG_WORK_ONGOING)); /*sanity check*/
+    /* check that the page was locked and that the saved kthread thread id
+     * (if this fault was originally from a kthread) is same or different 
+     * the from current kthread id depending on if the fault was stolen */
+    assert(!!(oldflags & PFLAG_WORK_ONGOING));
+    if (owner_kthr) {
+        assert(stolen || owner_kthr == current_kthread_id);
+        assert(!stolen || owner_kthr != current_kthread_id);
+    }
     RSTAT(EVICT_PAGES_DONE)++;
     put_mr(mr);
 }
 
 /**
- * Called after backend write has completed
+ * backend write has completed - release the page
  */
-int write_back_completed(struct region_t* mr, unsigned long addr, size_t size)
+static inline int write_back_completed(struct region_t* mr, unsigned long addr,
+    size_t size, bool stolen)
 {
     unsigned long page;
     size_t covered;
@@ -722,11 +745,30 @@ int write_back_completed(struct region_t* mr, unsigned long addr, size_t size)
     covered = 0;
     while(covered < size) {
         page = addr + covered;
-        evict_page_done(mr, page, false);
+        evict_page_done(mr, page, false, stolen);
         covered += CHUNK_SIZE;
     }
     return 0;
 }
+
+/**
+ * Called after backend write has completed
+ */
+int owner_write_back_completed(struct region_t* mr, unsigned long addr, 
+    size_t size)
+{
+    return write_back_completed(mr, addr, size, false);
+}
+
+/**
+ * Called after backend write has completed but on a stolen completion
+ */
+int stealer_write_back_completed(struct region_t* mr, unsigned long addr,
+    size_t size)
+{
+    return write_back_completed(mr, addr, size, true);
+}
+
 
 /**
  * Main function for eviction. Returns number of pages evicted.
@@ -737,6 +779,7 @@ int do_eviction(int chan_id, struct bkend_completion_cbs* cbs,
     size_t size;
     pgflags_t oldflags;
     pgidx_t pgidx;
+    pgthread_t oldthread;
     int npages, i, flushed;
     pgflags_t flags[batch_size];
     DEFINE_BITMAP(write_map, batch_size);
@@ -766,9 +809,10 @@ int do_eviction(int chan_id, struct bkend_completion_cbs* cbs,
     assert(npages <= EVICTION_MAX_BATCH_SIZE);
     i = 0;
     list_for_each(&evict_list, page, link) {
-        flags[i] = set_page_flags(page->mr, page->addr, 
-            PFLAG_EVICT_ONGOING, &oldflags);
+        flags[i] = set_page_flags_and_thread(page->mr, page->addr, 
+            PFLAG_EVICT_ONGOING, current_kthread_id, &oldflags, &oldthread);
         assert(!(oldflags & PFLAG_EVICT_ONGOING));
+        assertz(oldthread);
         log_debug("evicting page %lx from mr start %lx", 
             page->addr, page->mr->addr);
         i++;
@@ -806,7 +850,7 @@ int do_eviction(int chan_id, struct bkend_completion_cbs* cbs,
 
             /* eviction done */
             discarded = !bitmap_test(write_map, i);
-            evict_page_done(mr, addr, discarded);
+            evict_page_done(mr, addr, discarded, false);
             i++;
         }
         assert(i == flushed);

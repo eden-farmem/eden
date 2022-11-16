@@ -93,16 +93,17 @@ void rmpage_node_tcache_init_thread(void)
  */
 int rmpage_node_tcache_init(void)
 {
-    /* check if we can support local memory */
-    max_rmpage_nodes = (RMEM_MAX_LOCAL_GB * 1024 * 1024 * 1024ULL) / CHUNK_SIZE;
+    /* check if we can support local memory (with some (+5%) slack)  */
+    max_rmpage_nodes = RMEM_MAX_LOCAL_MEM / CHUNK_SIZE;
+    max_rmpage_nodes += (max_rmpage_nodes * 5) / 100;
     if (max_rmpage_nodes > (1ULL << PAGE_INDEX_LEN)) {
-        log_err("can't support %d GB local memory with current page "
-            "index size %lu", RMEM_MAX_LOCAL_GB, PAGE_INDEX_LEN);
+        log_err("can't support %lu B local memory with current page "
+            "index size %lu", RMEM_MAX_LOCAL_MEM, PAGE_INDEX_LEN);
         BUG();
     }
 
     /* check we're with in limit */
-    BUG_ON(local_memory < RMEM_MAX_LOCAL_GB * 1024 * 1024 * 1024);
+    BUG_ON(local_memory > RMEM_MAX_LOCAL_MEM);
 
     /* create backing region with huge pages on current numa node */
     log_info("allocating %ld page nodes with %lu huge pages", max_rmpage_nodes,

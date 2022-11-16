@@ -11,8 +11,9 @@
 /**
  * Eviction main
  */
-int write_back_completed(struct region_t* mr, unsigned long addr, size_t size);
 int do_eviction(int chan_id, struct bkend_completion_cbs* cbs, int max_batch_size);
+int owner_write_back_completed(struct region_t* mr, unsigned long addr, size_t size);
+int stealer_write_back_completed(struct region_t* mr, unsigned long addr, size_t size);
 
 /**
  * Page LRU lists support

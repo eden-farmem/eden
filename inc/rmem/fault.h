@@ -23,32 +23,38 @@
 
 typedef struct fault {
     /* flags */
-    uint8_t is_read;
-    uint8_t is_write;
-    uint8_t is_wrprotect;
-    uint8_t from_kernel;
-    uint8_t single_use;
+    uint8_t is_read:1;
+    uint8_t is_write:1;
+    uint8_t is_wrprotect:1;
+    uint8_t from_kernel:1;
+    uint8_t locked_pages:1;      /* if the fault locked any pages */
+    uint8_t stolen_from_cq:1;
+    uint8_t uffd_explicit_wake:1;
+    uint8_t unused:1;
+
     uint8_t rdahead_max;        /* suggested max read-ahead */
     uint8_t rdahead;            /* actual read-ahead locked for this fault */
-    int8_t posted_chan_id;
+    uint8_t posted_chan_id;
+    unsigned int unused2;
 
     /* associated resources */
     unsigned long page;
     struct region_t* mr;
     thread_t* thread;
     void* bkend_buf;
-    uint64_t pad[1];
+    unsigned long tstamp_tsc;
 
 	struct list_node link;
 } fault_t;
 BUILD_ASSERT(sizeof(fault_t) % CACHE_LINE_SIZE == 0);
-BUILD_ASSERT(FAULT_MAX_RDAHEAD_SIZE < UINT8_MAX);   /* due to rdahead */
+BUILD_ASSERT(FAULT_MAX_RDAHEAD_SIZE <= UINT8_MAX);   /* due to rdahead */
+BUILD_ASSERT(RMEM_MAX_CHANNELS <= UINT8_MAX);   /* due to posted_chan_id */
 
 /* fault object as readable string - for debug tracking */
 #define __FAULT_STR_LEN 100
 extern __thread char fstr[__FAULT_STR_LEN];
 static inline char* fault_to_str(fault_t* f) {
-    snprintf(fstr, __FAULT_STR_LEN, "F[%s:%s:%lx:%d]", 
+    snprintf(fstr, __FAULT_STR_LEN, "F[%p:%s:%s:%lx:%d]", f,
         f->from_kernel ? "kern" : "user",
         f->is_read ? "r" : (f->is_write ? "w" : "wp"),
         f->page, f->rdahead);

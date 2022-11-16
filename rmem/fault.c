@@ -50,7 +50,7 @@ void zero_page_free_thread()
  */
 
 /* are we already in the state that the fault hoped to acheive? */
-bool is_fault_serviced(fault_t* f)
+bool is_fault_serviced_nolock(fault_t* f)
 {    
     pgflags_t pflags;
     bool page_present, page_dirty, page_evicting;
@@ -60,10 +60,11 @@ bool is_fault_serviced(fault_t* f)
     page_dirty = !!(pflags & PFLAG_DIRTY);
     page_evicting = !!(pflags & PFLAG_EVICT_ONGOING);
 
-    /* PFLAG_PRESENT is reliable except for some time during eviction. There is 
-     * a small window during eviction (before madvise and clearing the 
-     * PRESENT bit when a kernel fault might get here with the PRESENT
-     * bit set while the page is absent */
+    /* Without the page lock, PFLAG_PRESENT is reliable except for some 
+     * window during eviction (after madvise() removed the page and before 
+     * clearing the PRESENT bit when a kernel fault could get here with the 
+     * PRESENT bit set while the page is absent; in this case, be on the 
+     * safe side and return not serviced */
     if(page_present && !(f->from_kernel && page_evicting)){
         if (f->is_read)
             return true;
@@ -223,16 +224,39 @@ int fault_read_done(fault_t* f)
 
 /* Called after servicing fault is completely done: removes lock on the page 
  * and frees temporary resources */
-void fault_done(fault_t* f) 
+void fault_done(fault_t* f)
 {
-    size_t size;
-    int marked;
+    int i, r;
+    pgthread_t owner_kthr;
+    pgflags_t oldflags;
 
-    /* remove lock (in the ascending order) */
-    size = (1 + f->rdahead) * CHUNK_SIZE;
-    marked = clear_page_flags_range(f->mr, f->page, 
-        size, PFLAG_WORK_ONGOING);
-    assert(marked == (1 + f->rdahead));
+    /* remove lock (in ascending order) */
+    if (f->locked_pages) {
+        for (i = 0; i <= f->rdahead; i++)
+        {
+            clear_page_flags_and_thread(f->mr, f->page + i * CHUNK_SIZE, 
+                PFLAG_WORK_ONGOING, &oldflags, &owner_kthr);
+            
+            /* check that the page was locked and that the saved kthread thread id
+            * (if this fault was originally from a kthread) is same or different 
+            * the from current kthread id depending on if the fault was stolen */
+            assert(!!(oldflags & PFLAG_WORK_ONGOING));
+            if (owner_kthr) {
+                assert(f->stolen_from_cq || owner_kthr == current_kthread_id);
+                assert(!f->stolen_from_cq || owner_kthr != current_kthread_id);
+            }
+        }
+    }
+
+    /* see if the fault needs to explicitly wake up faulting thread in the 
+     * kernel (because the page was already serviced by someone else) */
+    if (f->uffd_explicit_wake) {
+        assert(f->from_kernel || false);
+        assert(f->rdahead == 0);
+        r = uffd_wake(userfault_fd, f->page, CHUNK_SIZE);
+        assertz(r);
+    }
+
     RSTAT(FAULTS_DONE)++;
     log_debug("%s - fault done", FSTR(f));
 
@@ -247,7 +271,7 @@ enum fault_status handle_page_fault(int chan_id, fault_t* fault,
     int* nevicts_needed, struct bkend_completion_cbs* cbs)
 {
     struct region_t* mr;
-    bool page_present, was_locked, no_wake;
+    bool page_present, was_locked, no_wake, wrprotect;
     int i, ret, n_retries, nchunks, noverflow;
     pgflags_t pflags, rflags, oldflags;
     unsigned long addr;
@@ -260,13 +284,9 @@ enum fault_status handle_page_fault(int chan_id, fault_t* fault,
 
     /* see if this fault needs to be acted upon, because some other fault 
      * on the same page might have handled it by now */
-    if (is_fault_serviced(fault)) {
-        /* some other fault addressed the page, wake up if kernel fault */
-        if (fault->from_kernel) {
-            ret = uffd_wake(userfault_fd, fault->page, CHUNK_SIZE);
-            assertz(ret);
-        }
-        /* fault done */
+    if (is_fault_serviced_nolock(fault)) {
+        /* some other fault addressed the page, fault done */
+        fault->uffd_explicit_wake = fault->from_kernel;
         log_debug("%s - fault done, was redundant", FSTR(fault));
         return FAULT_DONE;
     }
@@ -283,8 +303,9 @@ enum fault_status handle_page_fault(int chan_id, fault_t* fault,
             return FAULT_IN_PROGRESS;
         }
         else {
-            /* we are handling it */
+            /* locked; we are handling it */
             nchunks = 1;
+            fault->locked_pages = true;
             log_debug("%s - no ongoing work, start handling", FSTR(fault));
 
             /* at this point, we can check for read-ahead. see if we can get 
@@ -326,10 +347,23 @@ enum fault_status handle_page_fault(int chan_id, fault_t* fault,
                 RSTAT(RDAHEAD_PAGES) += fault->rdahead;
             }
 
-            /* we can handle write-protect right away */
+            /* page present bit might have been updated just before we 
+             * locked - we should check it again after taking the lock 
+             * just in case! */
             page_present = !!(pflags & PFLAG_PRESENT);
-            if (page_present && (fault->is_wrprotect | fault->is_write)) {
+            if (page_present) {
+                wrprotect = (fault->is_wrprotect | fault->is_write);
                 no_wake = fault->from_kernel ? false : true;
+
+                /* it's a read fault and page was present; we're done. this was 
+                 * probably missed by is_fault_serviced_nolock() above */
+                if (unlikely(!wrprotect)) {
+                    fault->uffd_explicit_wake = fault->from_kernel;
+                    log_debug("%s - fault done, was redundant", FSTR(fault));
+                    return FAULT_DONE;
+                }
+                
+                /* write fault on existing page; just remove wrprotection */
                 ret = uffd_wp_remove(userfault_fd, fault->page, 
                     nchunks * CHUNK_SIZE, no_wake, true, &n_retries);
                 assertz(ret);
@@ -371,10 +405,21 @@ enum fault_status handle_page_fault(int chan_id, fault_t* fault,
                 goto pages_added_out;
 #endif
             }
+            
+            /* once the read is posted, we would have already lost control of 
+             * the fault when post_read returns as stealing is possible. 
+             * Set any last fault params or update other information that we 
+             * want other threads to see before we post - treat this 
+             * akin to __store_release(fault) */
+            if (current_kthread_id) {
+                /* if this is a shenango kthread, save tid in page metadata */
+                ret = set_page_thread_range(mr, fault->page, 
+                    nchunks * CHUNK_SIZE, current_kthread_id);
+                assert(ret == nchunks);
+            }
+            store_release(&fault->posted_chan_id, chan_id);
 
             /* send off page read */
-            /* NOTE: kona also makes an attempt to read from rdma write_q
-             * to preempt eviction but I won't do that here */
             start_tsc = 0;
             do {
                 ret = rmbackend->post_read(chan_id, fault);
@@ -392,7 +437,6 @@ enum fault_status handle_page_fault(int chan_id, fault_t* fault,
                 }
             } while(ret == EAGAIN);
             assertz(ret);
-            fault->posted_chan_id = chan_id;
 
             /* save wait time if any */
             if (start_tsc) {
@@ -409,6 +453,8 @@ pages_added_out:
     /* book some memory for the pages */
     assert(nchunks > 0);
     pressure = atomic64_add_and_fetch(&memory_used, nchunks * CHUNK_SIZE);
+    log_debug("%s - memory pressure %llu, limit %lu", FSTR(fault), 
+        pressure, local_memory);
     if (pressure > local_memory) {
         noverflow = (pressure - local_memory) / CHUNK_SIZE;
         *nevicts_needed = (noverflow < nchunks) ? noverflow : nchunks;

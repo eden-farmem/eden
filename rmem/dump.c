@@ -3,15 +3,18 @@
  * 
  * dumps remote memory state into a file and exits the program (becauses it 
  * makes irreversible changes to the state).
- * Only use it in deadlock/livelock situations where the program hangs, by
- * setting the "dump_rmem_state_and_exit" global variable through GDB. This 
- * can be done in the stats thread which is most likely to be running during 
- * a deadlock than the handler threads but only handler threads have the 
- * required thread local state (rmem_init_thread()) that is needed to walk 
- * the remote memory state for all threads, like the completion queues. 
+ * Only use it in deadlock/buggy situations where you need the program to 
+ * dump a snapshot of remote memory state and exit; this can be done by
+ * setting the "dump_rmem_state_and_exit" global variable (in the buggy code 
+ * path or through GDB). While dumping the state is best done in the stats
+ * thread which is least likely to be affected by bugs than the handler threads,
+ * only handler threads have the required thread local state 
+ * (rmem_init_thread()) that is needed to walk the remote memory structures 
+ * like the completion queues for all threads. 
  */
 
 #include "rmem/dump.h"
+#include "rmem/page.h"
 #include "../runtime/defs.h"
 
 /* state */
@@ -24,7 +27,9 @@ static DEFINE_SPINLOCK(dump_lock);
 int rmem_dump_read_comp(fault_t* f)
 {
     assert(dumpfp);
-    fprintf(dumpfp, "read completion for %s\n", FSTR(f));
+    fprintf(dumpfp, "read completion for %s - page flags: %x, kthread: %d\n", 
+        FSTR(f), get_page_flags(f->mr, f->page),
+        get_page_thread(f->mr, f->page));
     return 0;
 }
 
@@ -32,7 +37,9 @@ int rmem_dump_read_comp(fault_t* f)
 int rmem_dump_write_comp(struct region_t* mr, unsigned long addr, size_t size)
 {
     assert(dumpfp);
-    fprintf(dumpfp, "write completion for [%lx, %lu)\n", addr, size);
+    fprintf(dumpfp, "write completion for [%lx,%lu) - page flags: %x, "
+        "kthread: %d\n", addr, size, get_page_flags(mr, addr),
+        get_page_thread(mr, addr));
     return 0;
 }
 
@@ -59,14 +66,15 @@ void dump_rmem_state()
     for (i = 0; i < maxks; i++) {
         k = allks[i];
 
-        fprintf(dumpfp, "kthread %d - pending: %d, waitq: %d\n",
-            i, k->pf_pending, k->n_wait_q);
+        fprintf(dumpfp, "kthread %d - pending: %d\n",i, k->pf_pending);
 
         /* dump waiting faults */
         spin_lock(&k->pf_lock);
-        fprintf(dumpfp, "wait queue:\n");
+        fprintf(dumpfp, "wait queue - count : %d\n", k->n_wait_q);
         list_for_each(&k->fault_wait_q, f, link)
-            fprintf(dumpfp, "found fault %s\n", FSTR(f));
+            fprintf(dumpfp, "found fault %s - page flags: %x, kthread: %d\n", 
+                FSTR(f), get_page_flags(f->mr, f->page), 
+                get_page_thread(f->mr, f->page));
         spin_unlock(&k->pf_lock);
 
         /* dump completions (this discards faults from CQ) */
@@ -82,12 +90,14 @@ void dump_rmem_state()
         h = handlers[i];
         assert(h);
 
-        fprintf(dumpfp, "hthread %d - waitq: %d\n", i, h->n_wait_q);
+        fprintf(dumpfp, "hthread %d -\n", i);
 
         /* dump waiting faults. NOTE: no lock! */
-        fprintf(dumpfp, "wait queue:\n");
+        fprintf(dumpfp, "wait queue - count: %d\n", h->n_wait_q);
         list_for_each(&h->fault_wait_q, f, link)
-            fprintf(dumpfp, "found fault %s\n", FSTR(f));
+            fprintf(dumpfp, "found fault %s - page flags: %x, kthread: %d\n", 
+                FSTR(f), get_page_flags(f->mr, f->page), 
+                get_page_thread(f->mr, f->page));
 
         /* dump completions */
         fprintf(dumpfp, "completion queue:\n");
@@ -98,6 +108,9 @@ void dump_rmem_state()
     /* exit the program */
     fflush(dumpfp);
     fclose(dumpfp);
-    BUG();
     spin_unlock(&dump_lock);
+    
+    log_warn("dumped remote memory state to %s. exiting!", dumpfile);
+    fflush(stdout);
+    exit(1);
 }
