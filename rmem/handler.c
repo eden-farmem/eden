@@ -10,6 +10,7 @@
 #include <unistd.h>
 
 #include "base/cpu.h"
+#include "base/sampler.h"
 #include "rmem/backend.h"
 #include "rmem/common.h"
 #include "rmem/config.h"
@@ -429,6 +430,11 @@ eviction:
             dump_rmem_state();
             unreachable();
         }
+
+#ifdef EPOCH_SAMPLER
+        /* check for any sampler dump */
+        sampler_dump_provide_tsc(&epoch_sampler, 32, now_tsc);
+#endif
     }
 
     /* destroy state */

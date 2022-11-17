@@ -1,0 +1,126 @@
+/**
+ * sampler.c - low-overhead event sampling
+ */
+
+#include "base/sampler.h"
+
+/**
+ * Sampler next sample time with poisson sampling
+ * (For internal usage)
+ */
+static inline double __next_poisson_time(double rate, unsigned long randomness)
+{
+    return -logf(1.0f - ((double)(randomness % RAND_MAX)) 
+        / (double)(RAND_MAX)) 
+        / rate;
+}
+
+/**
+ * Record a given sample assuming that it is time and the lock is held
+ * Find the next sampling time and save it
+ */
+void __add_sample_update_tsc(sampler_t* s, void* sample,
+    unsigned long now_tsc)
+{
+    int newtail;
+    unsigned long next_sample_tsc;
+    assert(s && s->ops && s->ops->add_sample);
+    assert_spin_lock_held(&s->lock);
+
+    /* update next sample time first so that other threads trying to 
+     * do the same can give up and leave */
+    next_sample_tsc = 0;
+    switch (s->type) {
+        case SAMPLER_TYPE_UNIFORM:
+            next_sample_tsc = now_tsc + 
+                (cycles_per_us * 1000000 / s->samples_per_sec);
+            break;
+        case SAMPLER_TYPE_POISSON:
+            next_sample_tsc = now_tsc + __next_poisson_time(
+                s->samples_per_sec * 1.0 / (cycles_per_us * 1000000), 
+                rand_next(&s->randst));
+            break;
+        default:
+            BUG();
+    }
+    assert(next_sample_tsc);
+    store_release(&s->next_sample_tsc, next_sample_tsc);
+
+    /* record this sample */
+    log_info("trying to add sample at %lu: head - %d, tail - %d", 
+        now_tsc, s->sq_head, s->sq_tail);
+    newtail = (s->sq_tail + 1) % s->max_samples;
+    if (newtail == s->sq_head)
+        /* queue full */
+        return;
+
+    s->sq_tail = newtail;
+    s->ops->add_sample(s->samples + newtail * s->sample_size, sample);
+}
+
+/**
+ * Dump samples collected since last time to the file, assuming that it is time
+ * and the lock is held
+ * Find the next dump time and save it
+ */ 
+void __dump_samples_update_tsc(sampler_t* s, int max_str_len, 
+    unsigned long now_tsc)
+{
+    char sbuf[max_str_len];
+    int newhead;
+    assert(s && s->ops && s->ops->sample_to_str);
+    assert_spin_lock_held(&s->lock);
+
+    /* update next dump time first so that other threads trying to 
+     * do the same can give up and leave */
+    store_release(&s->next_dump_tsc, 
+        now_tsc + cycles_per_us * 1000000 / s->dumps_per_sec);
+    
+    /* dump */
+    log_info("dumping samples at %lu: head - %d, tail - %d", 
+        now_tsc, s->sq_head, s->sq_tail);
+    while (s->sq_head != s->sq_tail) {
+        newhead = (s->sq_head + 1) % s->max_samples;
+        s->ops->sample_to_str(s->samples + newhead * s->sample_size,
+            sbuf, max_str_len);
+        fprintf(s->outfile, "%s\n", sbuf);
+        s->sq_head = newhead;
+    }
+}
+
+/**
+ * Sampler init
+ */
+void sampler_init(sampler_t* s, const char* fname, enum sampler_type stype, 
+    sampler_ops_t* ops, int sample_size, int max_samples, int samples_per_sec, 
+    int dumps_per_sec)
+{
+    s->type = stype;
+    s->max_samples = max_samples;
+    s->sample_size = sample_size;
+    s->samples_per_sec = samples_per_sec;
+    s->dumps_per_sec = dumps_per_sec;
+    s->sq_head = s->sq_tail = 0;
+    s->next_sample_tsc = 0;
+    spin_lock_init(&s->lock);
+    s->ops = ops;
+    rand_seed(&s->randst, time(NULL));
+
+    /* samples storage */
+    s->samples = malloc(max_samples * sizeof(s->sample_size));
+
+    /* create outfile */
+    assert(fname);
+    s->outfile = fopen(fname, "w");
+    BUG_ON(!s->outfile);
+}
+
+/**
+ * Sampler destroy
+ */
+void sampler_destroy(sampler_t* s)
+{
+    assert(s->outfile && s->samples);
+    fclose(s->outfile);
+    free(s->samples);
+}
