@@ -25,7 +25,6 @@ struct page_list {
     spinlock_t lock;
 };
 extern struct page_list evict_gens[EVICTION_MAX_GENS];
-extern int nr_evict_gens;
 extern int evict_gen_mask;
 extern int evict_gen_now;
 extern unsigned long evict_epoch_now;

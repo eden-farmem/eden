@@ -102,11 +102,11 @@ bool fault_can_rdahead(pgflags_t rdahead_page, pgflags_t base_page)
 int __always_inline get_highest_evict_gen(void)
 {
 #ifdef SC_EVICTION
-    assert(nr_evict_gens == 2 && evict_gen_mask == 1);
+    assert(evict_ngens == 2 && evict_gen_mask == 1);
     return (ACCESS_ONCE(evict_gen_now) + 1) & 1;
 #endif
 #ifdef LRU_EVICTION
-    return (ACCESS_ONCE(evict_gen_now) + nr_evict_gens - 1) & evict_gen_mask;
+    return (ACCESS_ONCE(evict_gen_now) + evict_ngens - 1) & evict_gen_mask;
 #endif
     return 0;
 }
