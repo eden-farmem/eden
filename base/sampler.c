@@ -10,8 +10,8 @@
  */
 static inline double __next_poisson_time(double rate, unsigned long randomness)
 {
-    return -logf(1.0f - ((double)(randomness % RAND_MAX)) 
-        / (double)(RAND_MAX)) 
+    return -logf(1.0f - ((double)(randomness % UINT64_MAX)) 
+        / (double)(UINT64_MAX)) 
         / rate;
 }
 
@@ -33,12 +33,12 @@ void __add_sample_update_tsc(sampler_t* s, void* sample,
     switch (s->type) {
         case SAMPLER_TYPE_UNIFORM:
             next_sample_tsc = now_tsc + 
-                (cycles_per_us * 1000000 / s->samples_per_sec);
+                (cycles_per_us * 1000000ULL / s->samples_per_sec);
             break;
         case SAMPLER_TYPE_POISSON:
-            next_sample_tsc = now_tsc + __next_poisson_time(
-                s->samples_per_sec * 1.0 / (cycles_per_us * 1000000), 
-                rand_next(&s->randst));
+            next_sample_tsc = now_tsc + 
+                (__next_poisson_time(s->samples_per_sec, 
+                    rand_next(&s->randst)) * 1000000 * cycles_per_us);
             break;
         default:
             BUG();
@@ -47,13 +47,13 @@ void __add_sample_update_tsc(sampler_t* s, void* sample,
     store_release(&s->next_sample_tsc, next_sample_tsc);
 
     /* record this sample */
-    log_info("trying to add sample at %lu: head - %d, tail - %d", 
-        now_tsc, s->sq_head, s->sq_tail);
     newtail = (s->sq_tail + 1) % s->max_samples;
     if (newtail == s->sq_head)
         /* queue full */
         return;
 
+    log_debug("adding sample at %lu: head - %d, tail - %d, next: %lu", 
+        now_tsc, s->sq_head, s->sq_tail, next_sample_tsc);
     s->sq_tail = newtail;
     s->ops->add_sample(s->samples + newtail * s->sample_size, sample);
 }
@@ -67,25 +67,28 @@ void __dump_samples_update_tsc(sampler_t* s, int max_str_len,
     unsigned long now_tsc)
 {
     char sbuf[max_str_len];
-    int newhead;
+    int newhead, count;
     assert(s && s->ops && s->ops->sample_to_str);
     assert_spin_lock_held(&s->lock);
 
     /* update next dump time first so that other threads trying to 
      * do the same can give up and leave */
-    store_release(&s->next_dump_tsc, 
-        now_tsc + cycles_per_us * 1000000 / s->dumps_per_sec);
+    s->next_dump_tsc = now_tsc + (cycles_per_us * 1000000ULL / s->dumps_per_sec);
     
     /* dump */
-    log_info("dumping samples at %lu: head - %d, tail - %d", 
-        now_tsc, s->sq_head, s->sq_tail);
+    count = 0;
+    log_debug("dumping samples at %lu: head - %d, tail - %d, next: %lu", 
+        now_tsc, s->sq_head, s->sq_tail, s->next_dump_tsc);
     while (s->sq_head != s->sq_tail) {
         newhead = (s->sq_head + 1) % s->max_samples;
         s->ops->sample_to_str(s->samples + newhead * s->sample_size,
             sbuf, max_str_len);
         fprintf(s->outfile, "%s\n", sbuf);
         s->sq_head = newhead;
+        count++;
     }
+    if (count > 0)
+        log_info("dumped %d samples", count);
 }
 
 /**
@@ -107,12 +110,16 @@ void sampler_init(sampler_t* s, const char* fname, enum sampler_type stype,
     rand_seed(&s->randst, time(NULL));
 
     /* samples storage */
-    s->samples = malloc(max_samples * sizeof(s->sample_size));
+    s->samples = aligned_alloc(CACHE_LINE_SIZE, max_samples * s->sample_size);
 
     /* create outfile */
     assert(fname);
     s->outfile = fopen(fname, "w");
     BUG_ON(!s->outfile);
+
+    log_info("sampler initialized: %s, %d samples/sec, %d max samples, "
+        "%d sample size, %d dumps/sec", fname, samples_per_sec, max_samples,
+        sample_size, dumps_per_sec);
 }
 
 /**

@@ -155,24 +155,26 @@ static __always_inline int get_page_next_gen_lru(struct rmpage_node* page,
 
     /* check and sort pages */
     assert(evict_gen_mask);
-    assert(evict_epoch_now > evict_epoch_min);
+    assert(evict_epoch_now >= evict_epoch_min);
 
     /* get page's epoch; may get updated concurrently so just read it once */
     pgepoch = ACCESS_ONCE(page->epoch);
     assert(pgepoch == 0 || pgepoch <= evict_epoch_now);
     pgepoch_gap = evict_epoch_now - pgepoch;
 
-#ifdef EPOCH_SAMPLER
-    /* record the page epoch gap */
-    sampler_add(&epoch_sampler, &pgepoch_gap);
-#endif
-
     /* reset the page's access epoch. we're either gonna evict it or 
      * bump it to higher list, either of which require resetting it */
     page->epoch = 0;
 
+#ifdef EPOCH_SAMPLER
+    /* record the page epoch gap and 
+     * no need to bump lists when sampling */
+    if (pgepoch != 0)
+        sampler_add(&epoch_sampler, &pgepoch_gap);
+    return 0;
+#endif
+
     next_gen_id = 0;
-    assert(evict_epoch_now >= evict_epoch_min);
     if (pgepoch && evict_epoch_now > evict_epoch_min) {
         /* page epoch was set by a hint, indicating a more recent access 
          * after the page fault. figure out the next gen for this page 
@@ -183,8 +185,9 @@ static __always_inline int get_page_next_gen_lru(struct rmpage_node* page,
 
     /* save the oldest valid page epoch that was seen on any page */
     assert(oldest_page_epoch);
-    if (!pgepoch && pgepoch < *oldest_page_epoch)
-        *oldest_page_epoch = pgepoch;
+    if (next_gen_id == 0)
+        if (pgepoch && pgepoch < *oldest_page_epoch)
+            *oldest_page_epoch = pgepoch;
 
     log_debug("page %lx had epoch %lu, epochs: %lu, %lu. next gen: %d", 
         page->addr, pgepoch, evict_epoch_min, evict_epoch_now, next_gen_id);
@@ -338,8 +341,8 @@ static inline int find_candidate_pages(struct list_head* evict_list,
                 /* page selected to bumping to a higher list */
                 assert(pg_next_gen < evict_ngens);
                 assert(bitmap_test(tmplist_used, pg_next_gen)
-                    || (evict_gens[pg_next_gen].npages == 0
-                        && list_empty(&evict_gens[pg_next_gen].pages)));
+                    || (tmp_evict_gens[pg_next_gen].npages == 0
+                        && list_empty(&tmp_evict_gens[pg_next_gen].pages)));
 
                 list_add_tail(&tmp_evict_gens[pg_next_gen].pages, &page->link);
                 tmp_evict_gens[pg_next_gen].npages++;

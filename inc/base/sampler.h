@@ -88,7 +88,7 @@ static inline void sampler_add_tsc_provided(sampler_t* s, void* sample,
     __add_sample_update_tsc(s, sample, now_tsc);
 
     /* ensure next_sample_tsc updated */
-    assert(now_tsc > s->next_sample_tsc);
+    assert(now_tsc < s->next_sample_tsc);
     spin_unlock(&s->lock);
 }
 
@@ -121,6 +121,7 @@ static inline void sampler_dump_provide_tsc(sampler_t* s,
     __dump_samples_update_tsc(s, max_str_len, now_tsc);
     
     /* ensure next_dump_tsc updated */
+    log_debug("next_dump_tsc %lu, now_tsc %lu", s->next_dump_tsc, now_tsc);
     assert(now_tsc < s->next_dump_tsc);
     spin_unlock(&s->lock);
 }
