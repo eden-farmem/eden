@@ -331,6 +331,7 @@ BUILD_ASSERT(offsetof(struct kthread, pf_lock) % CACHE_LINE_SIZE == 0);
 BUILD_ASSERT(offsetof(struct kthread, stats) % CACHE_LINE_SIZE == 0);
 
 extern __thread struct kthread *mykthread;
+extern __thread int my_kthr_id;
 
 /**
  * myk - returns the per-kernel-thread data
@@ -505,6 +506,10 @@ extern void sched_start(void) __noreturn;
 extern int thread_spawn_main(thread_fn_t fn, void *arg);
 extern void thread_yield_kthread();
 extern void join_kthread(struct kthread *k);
+
+/* internal thread management routines */
+extern void thread_ready_preempt_off(thread_t *thread);
+extern void thread_ready_safe(struct kthread *k, thread_t *th);
 
 /* kthread fault handling helpers */
 extern bool rmem_hints_enabled;

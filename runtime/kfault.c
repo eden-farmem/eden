@@ -67,7 +67,7 @@ int kthr_fault_done(fault_t* f)
 {
     /* release thread */
     assert(f->thread);
-    thread_ready_np(f->thread);
+    thread_ready_preempt_off(f->thread);
 
     /* release fault */
     fault_done(f);
@@ -79,10 +79,12 @@ int kthr_fault_read_steal_done(fault_t* f)
 {
     struct kthread *stealer;
     
-    /* we expect the lock to be taken when stealing completions */
+    /* ensure everything in order */
     stealer = myk();
+    assert(f);
     assert(stealer->bkend_chan_id != f->posted_chan_id);  /* assert steal */
-    assert(f && f->bkend_buf);  /* expecting read buffer */
+    assert(f->bkend_buf);       /* expecting read buffer */
+    f->stolen_from_cq = 1;      /* mark as stolen */
     RSTAT(READY_STEALS)++;
 
     /* add to stolen completions queue */
@@ -146,7 +148,7 @@ int kthr_steal_completions(struct kthread* owner, int max_budget)
     /* remove them from owner kthead count, we will add to the stealer 
      * count in the callback */
     spin_lock(&owner->pf_lock);
-    assert(owner->pf_pending >= nfaults_stolen);
+    // assert(owner->pf_pending >= nfaults_stolen);
     owner->pf_pending -= nfaults_stolen;
     spin_unlock(&owner->pf_lock);
 
@@ -199,10 +201,11 @@ int kthr_steal_waiting_faults(struct kthread* stealer, struct kthread* owner)
     avail = div_up(owner->n_wait_q, 2);
     if (avail > 0) {
         f = list_pop(&owner->fault_wait_q, fault_t, link);
-        while (f != NULL && avail > 0) {
+        assert(f || !owner->n_wait_q);
+        while (f != NULL) {
             /* remove from owner's queue */
-            list_del_from(&owner->fault_wait_q, &f->link);
-            assert(owner->pf_pending > 0 && owner->n_wait_q > 0);
+            // assert(owner->pf_pending > 0);
+            assert(owner->n_wait_q > 0);
             owner->pf_pending--;
             owner->n_wait_q--;
 
@@ -212,12 +215,21 @@ int kthr_steal_waiting_faults(struct kthread* stealer, struct kthread* owner)
             stealer->n_wait_q++;
             RSTAT(WAIT_STEALS)++;
 
-            /* move to next */
-            avail--;
+            /* accounting */
             nstolen++;
+            f = NULL;
+            avail--;
+            if (!avail)
+                break;
+
+            /* get next */
             f = list_pop(&owner->fault_wait_q, fault_t, link);
+            assert(f || !owner->n_wait_q);
             assert(!avail || f);
         }
+
+        /* ensure no leakage */
+        assert(!f);
     }
     spin_unlock(&owner->pf_lock);
     return nstolen;
@@ -229,6 +241,7 @@ static inline struct fault* kthr_pop_next_waiting_fault(struct kthread* k)
     struct fault* f;
     spin_lock(&k->pf_lock);
     f = list_pop(&k->fault_wait_q, fault_t, link);
+    assert(f || !k->n_wait_q);
     if (f != NULL) {
         assert(k->n_wait_q > 0);
         k->n_wait_q--;
@@ -295,11 +308,11 @@ int kthr_handle_waiting_faults(struct kthread* k)
 /* kthread backend read/write completion ops for owner thread */
 struct bkend_completion_cbs kthr_owner_cbs = {
     .read_completion = kthr_fault_read_done,
-    .write_completion = write_back_completed
+    .write_completion = owner_write_back_completed
 };
 
 /* kthread backend read/write completion ops for stealer thread */
 struct bkend_completion_cbs kthr_stealer_cbs = {
     .read_completion = kthr_fault_read_steal_done,
-    .write_completion = write_back_completed
+    .write_completion = stealer_write_back_completed
 };

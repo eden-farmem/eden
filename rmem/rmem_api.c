@@ -15,6 +15,7 @@
 #include "rmem/common.h"
 #include "rmem/eviction.h"
 #include "rmem/page.h"
+#include "rmem/pgnode.h"
 #include "rmem/region.h"
 
 /* TODO: Not sure why kona was doing this; remove and see. */
@@ -145,11 +146,11 @@ int rmunmap(void *addr, size_t length)
     RUNTIME_ENTER();
     struct region_t *mr;
     int ret = 0, marked;
-    bool locked;
+    bool locked, clr_pgidx;
     unsigned long offset, page, max_addr, size;
     pgflags_t oldflags, flags, clrflags;
     pgidx_t pgidx;
-    pginfo_t pginfo;
+    pginfo_t pginfo, oldinfo;
     struct rmpage_node *pgnode;
     unsigned long pressure;
 
@@ -196,6 +197,7 @@ int rmunmap(void *addr, size_t length)
 
         /* unlock the page */
         clrflags = PFLAG_WORK_ONGOING;
+        clr_pgidx = false;
  
         if (ret == 0) {
             /* unregister the page */
@@ -210,13 +212,14 @@ int rmunmap(void *addr, size_t length)
                 pgnode = rmpage_get_node_by_id(pgidx);
                 assert(pgnode->addr == page);
                 rmpage_node_free(pgnode);
+                clr_pgidx = true;
                 marked++;
                 clrflags |= PFLAG_PRESENT;
             }
         }
 
         /* unlock the page */
-        clear_page_flags(mr, page, clrflags, &oldflags);
+        __clear_page_info(mr, page, clrflags, true, clr_pgidx, &oldinfo);
         log_debug("unlocked page for unmap %lx", page);
     }
 
@@ -245,10 +248,11 @@ int rmadvise(void *addr, size_t length, int advice)
     struct region_t *mr;
     unsigned long offset, page, max_addr, size;
     int ret = 0, marked;
-    pgidx_t oldflags, flags, clrflags, pgidx;
-    bool locked;
+    pgflags_t oldflags, flags, clrflags;
+    pgidx_t pgidx;
+    bool locked, clr_pgidx;
     struct rmpage_node *pgnode;
-    pginfo_t pginfo;
+    pginfo_t pginfo, oldinfo;
     unsigned long pressure;
 
     log_debug("rmadvise at %p size %ld advice %d", addr, length, advice);
@@ -298,6 +302,7 @@ int rmadvise(void *addr, size_t length, int advice)
 
         /* unlock the page */
         clrflags = PFLAG_WORK_ONGOING;
+        clr_pgidx = false;
 
         if (ret == 0) {
             /* if the page was present, drop it and release the page node */
@@ -309,13 +314,14 @@ int rmadvise(void *addr, size_t length, int advice)
                 pgnode = rmpage_get_node_by_id(pgidx);
                 assert(pgnode->addr == page);
                 rmpage_node_free(pgnode);
+                clr_pgidx = true;
                 marked++;
                 clrflags |= PFLAG_PRESENT;
             }
         }
 
         /* unlock the page */
-        clear_page_flags(mr, page, clrflags, &oldflags);
+        __clear_page_info(mr, page, clrflags, true, clr_pgidx, &oldinfo);
         log_debug("unlocked page for unmap %lx", page);
     }
 

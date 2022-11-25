@@ -10,9 +10,11 @@
 #include <unistd.h>
 
 #include "base/cpu.h"
+#include "base/sampler.h"
 #include "rmem/backend.h"
 #include "rmem/common.h"
 #include "rmem/config.h"
+#include "rmem/dump.h"
 #include "rmem/eviction.h"
 #include "rmem/fault.h"
 #include "rmem/handler.h"
@@ -20,10 +22,28 @@
 #include "rmem/region.h"
 #include "rmem/uffd.h"
 
+#ifndef RMEM_STANDALONE
+#include "../runtime/defs.h"
+#endif
+
 /* handler state */
 __thread struct hthread *my_hthr = NULL;
+__thread int current_stealing_kthr_id = -1;
+__thread unsigned long current_blocking_page = 0;
+__thread bool current_page_unblocked = false;
 
-/* handler fault after fetched pages are ready */
+/* check if a fault already exists in the wait queue */
+bool does_fault_exist_in_wait_q(struct fault *fault)
+{
+    struct fault *f;
+    list_for_each(&my_hthr->fault_wait_q, f, link) {
+        if (f->page == fault->page)
+            return true;
+    }
+    return false;
+}
+
+/* called after fetched pages are ready on handler read completions */
 int hthr_fault_read_done(fault_t* f)
 {
     int r;
@@ -35,8 +55,122 @@ int hthr_fault_read_done(fault_t* f)
     return 0;
 }
 
+
+#ifndef RMEM_STANDALONE
+
+/** 
+ * Targeted stealing from Shenango kthreads
+ */
+
+/* called on the completions stolen from the shenango kthreads */
+int hthr_fault_read_steal_done(fault_t* f)
+{
+    int r;
+    struct kthread* owner;
+
+    /* get owner kthread */
+    assert(current_stealing_kthr_id >= 0);
+    owner = allks[current_stealing_kthr_id];
+    assert(owner);
+    log_debug("%s - stolen by handler", FSTR(f));
+
+    /* check for bugs */
+    assert(f);
+    assert(my_hthr->bkend_chan_id != f->posted_chan_id);    /* assert steal */
+    assert(owner->bkend_chan_id == f->posted_chan_id);      /* assert owner */
+    assert(!f->from_kernel);        /* stole it from shenango threads */
+    assert(f->bkend_buf);           /* expecting read buffer */
+    assert(!f->stolen_from_cq);     /* no double-steal */
+
+    /* mark as stolen */
+    f->stolen_from_cq = 1;
+    RSTAT(READY_STEALS)++;
+
+    /* finish servicing the fault */
+    r = fault_read_done(f);
+    assertz(r);
+
+    /* set the thread ready */
+    assert(f->thread);
+    thread_ready_safe(owner, f->thread);
+
+    /* check if this is the target blocking page */
+    if (f->page == current_blocking_page)
+        current_page_unblocked = true;
+
+    /* release fault */
+    fault_done(f);
+    return 0;
+}
+
+/* try to unblock a kernel/handler fault that has been waiting for a while.
+ * currently, we look at the kthread that locked the page and perform 
+ * targeted stealing to progress its faults and release the page */
+bool handler_try_unblock_fault(fault_t* f)
+{
+    struct kthread* owner;
+    int nfaults_stolen, ntotal;
+    pginfo_t pginfo;
+    pgthread_t kthr_id;
+    pgflags_t pflags;
+    bool unblocked;
+
+    /* check if already unlocked */
+    pginfo = get_page_info(f->mr, f->page);
+    pflags = get_flags_from_pginfo(pginfo);
+    if (!(pflags & PFLAG_WORK_ONGOING))
+        /* unlocked */
+        return true;
+    
+    /* get the kthread that is working on the faulting page */
+    kthr_id = get_thread_from_pginfo(pginfo);
+    if (!kthr_id)
+        /* then it may have moved on by the time we got here */
+        return false;
+
+    owner = allks[kthr_id - 1];
+    assert(owner);
+    log_debug("%s - found kthread %d blocking the page", FSTR(f), kthr_id-1);
+
+    /* save the owner kthread id globally so it is visible to the completion
+     * callbacks. similarly, also save the blocking page so we can figure out 
+     * if we really unblocked the target page in the callbacks */
+    assert(current_stealing_kthr_id == -1);
+    assert(current_blocking_page == 0);
+    assert(!current_page_unblocked);
+    current_stealing_kthr_id = kthr_id - 1;
+    current_blocking_page = f->page;
+    store_release(&current_page_unblocked, false);
+
+    /* check completions with handler stealing callbacks; we don't need to 
+     * lock the owner thread as completion-stealing is thread-safe */
+    ntotal = rmbackend->check_for_completions(owner->bkend_chan_id, 
+        &hthr_stealer_cbs, RMEM_MAX_COMP_PER_OP, &nfaults_stolen, NULL);
+    log_debug("handler stole %d completions on chan %d, %d of them reads",
+            ntotal, owner->bkend_chan_id, nfaults_stolen);
+
+    /* remove the stolen faults from owner kthreads count */
+    if (nfaults_stolen) {
+        spin_lock(&owner->pf_lock);
+        owner->pf_pending -= nfaults_stolen;
+        spin_unlock(&owner->pf_lock);
+    }
+
+    /* stealing done; reset the globally visible state */
+    unblocked = load_acquire(&current_page_unblocked);
+    assert(current_stealing_kthr_id == (kthr_id - 1));
+    current_stealing_kthr_id = -1;
+    current_blocking_page = 0;
+    current_page_unblocked = false;
+
+    return unblocked;
+}
+
+#endif
+
 /* poll for faults/other notifications coming from UFFD */
-static inline fault_t* read_uffd_fault() {
+static inline fault_t* read_uffd_fault()
+{
     ssize_t read_size;
     struct uffd_msg message;
     struct fault* fault;
@@ -79,9 +213,8 @@ static inline fault_t* read_uffd_fault() {
                 log_debug("uffd pagefault event %d: addr=%llx, flags=0x%llx",
                     message.event, addr, flags);
                 fault->page = addr & ~CHUNK_MASK;
-                fault->is_write = !!(flags & UFFD_PAGEFAULT_FLAG_WRITE);
                 fault->is_wrprotect = !!(flags & UFFD_PAGEFAULT_FLAG_WP);
-                assert(!(fault->is_write && fault->is_wrprotect));
+                fault->is_write = !!(flags & UFFD_PAGEFAULT_FLAG_WRITE);
                 fault->is_read = !(fault->is_write || fault->is_wrprotect);
                 fault->from_kernel = true;
                 fault->rdahead_max = 0;   /*no readaheads for kernel faults*/
@@ -153,7 +286,7 @@ static inline fault_t* read_uffd_fault() {
  */
 static void* rmem_handler(void *arg) 
 {
-    bool need_eviction;
+    bool need_eviction, unblocked;
     unsigned long long pressure;
     fault_t *fault, *next;
     int nevicts, nevicts_needed, batch, r;
@@ -161,16 +294,12 @@ static void* rmem_handler(void *arg)
     struct region_t* mr;
     assert(arg != NULL);        /* expecting a hthread_t */
     my_hthr = (hthread_t*) arg; /* save our hthread_t */
-
-    static struct bkend_completion_cbs hthr_cbs = {
-        .read_completion = hthr_fault_read_done,
-        .write_completion = write_back_completed
-    };
+    unsigned long now_tsc;
 
     /* init */
     r = thread_init_perthread();    /* for tcache support */
 	assertz(r);
-    rmem_common_init_thread(&my_hthr->bkend_chan_id, my_hthr->rstats);
+    rmem_common_init_thread(&my_hthr->bkend_chan_id, my_hthr->rstats, 0);
     list_head_init(&my_hthr->fault_wait_q);
     my_hthr->n_wait_q = 0;
 
@@ -178,8 +307,9 @@ static void* rmem_handler(void *arg)
     while(!my_hthr->stop) {
         need_eviction = false;
         nevicts = nevicts_needed = 0;
+        now_tsc = rdtsc();
 
-        /* pick faults from the backlog first */
+        /* pick faults from the backlog (wait queue) first */
         fault = list_top(&my_hthr->fault_wait_q, fault_t, link);
         while (fault != NULL) {
             next = list_next(&my_hthr->fault_wait_q, fault, link);
@@ -203,15 +333,34 @@ static void* rmem_handler(void *arg)
                     break;
                 case FAULT_IN_PROGRESS:
                     log_debug("%s - not released from wait", FSTR(fault));
+                    RSTAT(WAIT_RETRIES)++;
+
+#ifndef RMEM_STANDALONE
+                    /* if the fault has been waiting too long, try unblocking */
+                    if (unlikely(fault->tstamp_tsc && 
+                        (now_tsc - fault->tstamp_tsc) > 
+                            HANDLER_WAIT_BEFORE_STEAL_US * cycles_per_us))
+                    {
+                        log_debug("%s - waited too long", FSTR(fault));
+                        fault->tstamp_tsc = now_tsc;
+                        unblocked = handler_try_unblock_fault(fault);
+                        /* if unblocked, try this fault again */
+                        if (unblocked)
+                            continue;
+                    }
+#endif
                     break;
             }
+
+            /* go to next fault */
             fault = next;
         }
 
-        /* check for uffd faults */
+        /* check for incoming uffd faults */
         fault = read_uffd_fault();
         if (fault) {
             /* accounting */
+            RSTAT(FAULTS)++;
             if (fault->is_read)         RSTAT(FAULTS_R)++;
             if (fault->is_write)        RSTAT(FAULTS_W)++;
             if (fault->is_wrprotect)    RSTAT(FAULTS_WP)++;
@@ -230,7 +379,16 @@ static void* rmem_handler(void *arg)
                     fault_done(fault);
                     break;
                 case FAULT_IN_PROGRESS:
-                    /* add to wait */
+                    /* handler thread should not see duplicate faults as we 
+                     * don't expect kernel to send the same fault twice; 
+                     * although duplicate faults seems to occur when debugging 
+                     * with GDB after a previously faulting thread is let go 
+                     * from a breakpoint, so comment it out when debugging */
+                    // assert(!does_fault_exist_in_wait_q(fault));
+
+                    /* add to wait, with a timestamp */
+                    assertz(fault->tstamp_tsc);
+                    fault->tstamp_tsc = rdtsc();
                     list_add_tail(&my_hthr->fault_wait_q, &fault->link);
                     my_hthr->n_wait_q++;
                     log_debug("%s - added to wait", FSTR(fault));
@@ -267,8 +425,15 @@ eviction:
         rmbackend->check_for_completions(my_hthr->bkend_chan_id, &hthr_cbs, 
             RMEM_MAX_COMP_PER_OP, NULL, NULL);
 
-#ifdef SECOND_CHANCE_EVICTION
-        /* TODO: clear all hot bits once in a while */
+        /* check for remote memory dump */
+        if (unlikely(dump_rmem_state_and_exit)) {
+            dump_rmem_state();
+            unreachable();
+        }
+
+#ifdef EPOCH_SAMPLER
+        /* check for any sampler dump */
+        sampler_dump_provide_tsc(&epoch_sampler, 32, now_tsc);
 #endif
     }
 
@@ -316,3 +481,15 @@ int stop_rmem_handler_thread(hthread_t* hthr)
     free(hthr);
     return 0;
 }
+
+/* handler thread backend read/write completion ops for own cq */
+struct bkend_completion_cbs hthr_cbs = {
+    .read_completion = hthr_fault_read_done,
+    .write_completion = owner_write_back_completed
+};
+
+/* handler thread backend read/write completion ops when stealing */
+struct bkend_completion_cbs hthr_stealer_cbs = {
+    .read_completion = hthr_fault_read_steal_done,
+    .write_completion = stealer_write_back_completed
+};

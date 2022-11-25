@@ -7,6 +7,7 @@
 #include "base/assert.h"
 #include "rmem/backend.h"
 #include "rmem/page.h"
+#include "rmem/pgnode.h"
 #include "rmem/common.h"
 #include "rmem/region.h"
 
@@ -96,7 +97,7 @@ static __always_inline bool __is_fault_pending_eden(void* address, bool write)
 
     /* regardless of fault or not, this check is a signal that page was going 
      * to be accessed. see if eviction wants to use that information */
-#ifdef SC_EVICTION2
+#ifdef SC_EVICTION
     /* set the accessed bit if not already set */
     if (page_present && !(pflags & PFLAG_ACCESSED))
         set_page_flags(mr, (unsigned long) address, PFLAG_ACCESSED, NULL);
@@ -104,23 +105,27 @@ static __always_inline bool __is_fault_pending_eden(void* address, bool write)
 #ifdef LRU_EVICTION
     /* update time on the page to help with better eviction */
     if (page_present && !(pflags & PFLAG_EVICT_ONGOING)) {
-        /* PFLAG_EVICT_ONGOING is not enough to ensure that page node will 
+        /* PFLAG_EVICT_ONGOING is not be enough to ensure that page node will 
          * exist when we access it below as we don't lock it. However, it takes
          * a long time from eviction start (when PFLAG_EVICT_ONGOING is set) to
          * actually removing the page node, so this should be super rare. It 
          * won't affect program correctness however because even if page node 
-         * is released, it will only get assigned to another page and we would 
-         * just be updating epoch on a wrong page in the rarest case - which is 
-         * not that bad as it only effects when the page is evicted out. */
+         * is released, it won't get deallocated (since we never free 
+         * rmpage_node tcache entries) and will either stay in the cache or 
+         * get assigned to another page in which case we would just be updating
+         * epoch on a wrong page in a rare case - this is not that bad as 
+         * page epoch it is only a hint for smarter eviction. */
         pgidx_t pgidx;
         struct rmpage_node* page;
         pgidx = get_index_from_pginfo_unsafe(pginfo);
         page = rmpage_get_node_by_id(pgidx);
 
         /* this may not always be true due to the comment above */
-        log_debug("fault hint on %p. updating epoch on page idx %d addr %lx",
-            address, pgidx, page->addr);
-        assert((page->addr & ~CHUNK_MASK) == ((unsigned long) address & ~CHUNK_MASK));
+        // assert(page->addr & CHUNK_MASK == 0);
+        // assert((page->addr == ((unsigned long) address & ~CHUNK_MASK));
+
+        log_debug("fault hint on %p. updating epoch on page idx %d to %lu",
+            address, pgidx, evict_epoch_now);
         page->epoch = evict_epoch_now;
     }
 #endif

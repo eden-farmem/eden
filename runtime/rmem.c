@@ -62,9 +62,16 @@ int rmem_init_thread()
         log_debug("rmem not enabled, skipping per-thread init");
         return 0;
     }
+    
+    /* limit on number of kthreads due to pgthread_t size */
+    BUG_ON(my_kthr_id < 0);
+    if ((my_kthr_id + 1) > PAGE_THREAD_MAX) {
+        log_err("cannot support more than %llu kthreads", PAGE_THREAD_MAX);
+        return 1;
+    }
 
     struct kthread *k = myk();
-    rmem_common_init_thread(&k->bkend_chan_id, k->rstats);
+    rmem_common_init_thread(&k->bkend_chan_id, k->rstats, my_kthr_id + 1);
     return 0;
 }
 

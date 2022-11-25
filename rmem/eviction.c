@@ -11,12 +11,15 @@
 
 #include "base/cpu.h"
 #include "base/log.h"
+#include "base/sampler.h"
+
 #include "rmem/backend.h"
 #include "rmem/common.h"
 #include "rmem/config.h"
 #include "rmem/fault.h"
 #include "rmem/handler.h"
 #include "rmem/page.h"
+#include "rmem/pgnode.h"
 #include "rmem/region.h"
 #include "rmem/uffd.h"
 
@@ -32,10 +35,12 @@ int madv_pidfd = -1;
 
 /* lru state */
 struct page_list evict_gens[EVICTION_MAX_GENS];
-int nr_evict_gens = 1;
+int evict_ngens = 1;
 int evict_gen_mask = 0;
 unsigned long epoch_start_tsc;
 int epoch_tsc_shift;
+struct sampler epoch_sampler;
+struct sampler_ops epoch_sampler_ops;
 
 /**
  * All these are write-protected by the lock of the current LRU generation 
@@ -82,17 +87,26 @@ void verify_eviction()
 {
     double over_allocated;
 
-    /* Check after 1 million page faults? */
+    /* Note that this does not work for the local backend as the backing memory
+     * for the backend also comes from process memory (and allocated on demand), 
+     * so the OS memory stat in this case does not reflect the 
+     * true resident-set size of the process running on Eden */
+    if (rmbackend_type == RMEM_BACKEND_LOCAL)
+        return;
+
+    /* check every 1 million page faults served? */
     if (RSTAT(FAULTS) - last_seen_faults > OS_MEM_PROBE_INTERVAL) {
         last_seen_faults = RSTAT(FAULTS);
 
-        // Read the current memory from OS periodically
+        /* read the current memory from OS periodically */
         uint64_t current_mem = get_process_mem();
         if (current_mem > 0) {
             over_allocated = (current_mem - local_memory) * 100 / local_memory;
             if (over_allocated > 1) {
                 /* just warn for now */
-                log_warn("OS memory probing found usage >1%% over limit");
+                log_warn("OS memory probing found usage %.0lf%% (>1%%) "
+                    "over limit. memory overflow: %lu MB", over_allocated, 
+                    (current_mem - local_memory) / 1024 / 1024);
             }
         }
     }
@@ -116,15 +130,15 @@ static __always_inline void update_evict_epoch_now(void)
  * Update evict_epoch_min to the oldest of the evicted pages in this round
  */
 static __always_inline void update_evict_epoch_min(
-    unsigned long *new_evict_epoch_min)
+    unsigned long *oldest_page_epoch_seen)
 {
 #ifdef LRU_EVICTION
-    assert(new_evict_epoch_min);
-    if (*new_evict_epoch_min != UINT64_MAX) {
-        assert(*new_evict_epoch_min >= evict_epoch_min && 
-            *new_evict_epoch_min <= evict_epoch_now);
-        evict_epoch_min = *new_evict_epoch_min;
-        *new_evict_epoch_min = UINT64_MAX;
+    assert(oldest_page_epoch_seen);
+    assert(*oldest_page_epoch_seen > 0);
+    if (*oldest_page_epoch_seen != UINT64_MAX) {
+        assert(*oldest_page_epoch_seen <= evict_epoch_now);
+        evict_epoch_min = *oldest_page_epoch_seen;
+        *oldest_page_epoch_seen = UINT64_MAX;
         log_debug("evict_epoch_min updated to %lu", evict_epoch_min);
     }
 #endif
@@ -137,39 +151,46 @@ static __always_inline int get_page_next_gen_lru(struct rmpage_node* page,
     int next_gen_id;
     unsigned long pgepoch;
     unsigned long slope;
+    unsigned long pgepoch_gap;
 
     /* check and sort pages */
     assert(evict_gen_mask);
-    assert(evict_epoch_now > evict_epoch_min);
+    assert(evict_epoch_now >= evict_epoch_min);
 
     /* get page's epoch; may get updated concurrently so just read it once */
     pgepoch = ACCESS_ONCE(page->epoch);
     assert(pgepoch == 0 || pgepoch <= evict_epoch_now);
+    pgepoch_gap = evict_epoch_now - pgepoch;
 
     /* reset the page's access epoch. we're either gonna evict it or 
      * bump it to higher list, either of which require resetting it */
     page->epoch = 0;
 
+#ifdef EPOCH_SAMPLER
+    /* record the page epoch gap and 
+     * no need to bump lists when sampling */
+    if (pgepoch != 0)
+        sampler_add(&epoch_sampler, &pgepoch_gap);
+    return 0;
+#endif
+
     next_gen_id = 0;
-    assert(evict_epoch_now >= evict_epoch_min);
     if (pgepoch && evict_epoch_now > evict_epoch_min) {
         /* page epoch was set by a hint, indicating a more recent access 
          * after the page fault. figure out the next gen for this page 
          * depending on how recent the access was */
-        slope = (evict_epoch_now - pgepoch) * nr_evict_gens 
-            / (evict_epoch_now - evict_epoch_min);
+        slope = pgepoch_gap * evict_ngens / (evict_epoch_now - evict_epoch_min);
         next_gen_id = slope & evict_gen_mask;
     }
 
-    if (next_gen_id == 0) {
-        /* save the minimum valid epoch that was set on an evicting page */
-        assert(oldest_page_epoch);
-        if (!pgepoch && pgepoch < *oldest_page_epoch)
+    /* save the oldest valid page epoch that was seen on any page */
+    assert(oldest_page_epoch);
+    if (next_gen_id == 0)
+        if (pgepoch && pgepoch < *oldest_page_epoch)
             *oldest_page_epoch = pgepoch;
-    }
 
-    log_debug("page %lx had epoch %lu, next generation id %d", 
-        page->addr, pgepoch, next_gen_id);
+    log_debug("page %lx had epoch %lu, epochs: %lu, %lu. next gen: %d", 
+        page->addr, pgepoch, evict_epoch_min, evict_epoch_now, next_gen_id);
     return next_gen_id;
 }
 
@@ -221,13 +242,13 @@ int drain_tmp_lists(struct list_head* evict_list, int max_drain,
     int npages, gen_id;
     struct rmpage_node* page;
 
-    assert(nr_evict_gens > 0);
+    assert(evict_ngens > 0);
     assert(list_empty(&tmp_evict_gens[0].pages)); /* we don't use tmplist 0 */
 
     /* start from the bottom */
     log_debug("draining tmp lists");
     npages = 0;
-    for (gen_id = 1; gen_id < nr_evict_gens; gen_id++) {
+    for (gen_id = 1; gen_id < evict_ngens; gen_id++) {
         if (tmp_evict_gens[gen_id].npages == 0)
             continue;
 
@@ -268,18 +289,18 @@ static inline int find_candidate_pages(struct list_head* evict_list,
     struct list_head locked;
     unsigned long oldest_page_epoch;
     bool out_of_gens = false;
-    DEFINE_BITMAP(tmplist_used, nr_evict_gens);
+    DEFINE_BITMAP(tmplist_used, evict_ngens);
 
     /* quickly pop the first few pages off current lru list */
     gen_id = start_gen = -1;
     npages = npopped = 0;
-    bitmap_init(tmplist_used, nr_evict_gens, 0);
+    bitmap_init(tmplist_used, evict_ngens, 0);
     oldest_page_epoch = UINT64_MAX;
     do {
+
         /* get current lru gen */
-        assert(gen_id != evict_gen_now);
         gen_id = evict_gen_now;
-        assert(gen_id >= 0 && gen_id < nr_evict_gens);
+        assert(gen_id >= 0 && gen_id < evict_ngens);
 
         /* circled back to the started list */
         if (start_gen == gen_id) {
@@ -318,10 +339,10 @@ static inline int find_candidate_pages(struct list_head* evict_list,
             }
             else {
                 /* page selected to bumping to a higher list */
-                assert(pg_next_gen < nr_evict_gens);
+                assert(pg_next_gen < evict_ngens);
                 assert(bitmap_test(tmplist_used, pg_next_gen)
-                    || (evict_gens[pg_next_gen].npages == 0
-                        && list_empty(&evict_gens[pg_next_gen].pages)));
+                    || (tmp_evict_gens[pg_next_gen].npages == 0
+                        && list_empty(&tmp_evict_gens[pg_next_gen].pages)));
 
                 list_add_tail(&tmp_evict_gens[pg_next_gen].pages, &page->link);
                 tmp_evict_gens[pg_next_gen].npages++;
@@ -345,7 +366,7 @@ static inline int find_candidate_pages(struct list_head* evict_list,
 
         /* not enough candidates in this list, move to next list */
         assert(list_empty(&evict_gen->pages) && !evict_gen->npages);
-        evict_gen_now = (gen_id + 1) % nr_evict_gens;
+        evict_gen_now = (gen_id + 1) % evict_ngens;
         update_evict_epoch_min(&oldest_page_epoch);
         spin_unlock(&evict_gen->lock);
         continue;
@@ -357,6 +378,9 @@ found_enough:
 
     } while(1);
 
+    /* record pages popped to find candidates in each turn */
+    RSTAT(EVICT_POPPED) += npopped;
+
     /* if we didn't get enough for a batch, introspect */
     if (npages < batch_size)
     {
@@ -365,7 +389,10 @@ found_enough:
         if (unlikely(out_of_gens)) {
             npages += drain_tmp_lists(evict_list, 
                 batch_size - npages, tmplist_used);
-            BUG_ON(npages == 0); /* couldn't find anything anywhere */
+
+            /* couldn't find anything anywhere; local memory must have been
+             * extremely low for this to happen */
+            BUG_ON(npages == 0);
         }
         
         /* if the reason is that we had to give up the hunt after a while as 
@@ -389,7 +416,7 @@ found_enough:
      * be updated by other evictors in this process but adding pages in the 
      * wrong lists doesn't affect correctness, just performance. we will get 
      * to these pages sooner or later. */
-    bitmap_for_each_set(tmplist_used, nr_evict_gens, gen_id) {
+    bitmap_for_each_set(tmplist_used, evict_ngens, gen_id) {
         assert(tmp_evict_gens[gen_id].npages > 0);
         assert(gen_id != 0);
         evict_gen = &evict_gens[(evict_gen_now + gen_id) & evict_gen_mask];
@@ -402,7 +429,7 @@ found_enough:
 
 #if defined(DEBUG) || defined(SAFEMODE)
     /* check that we didn't leak any pages */
-    bitmap_for_each_cleared(tmplist_used, nr_evict_gens, gen_id)
+    bitmap_for_each_cleared(tmplist_used, evict_ngens, gen_id)
         assert(list_empty(&tmp_evict_gens[gen_id].pages) && 
             tmp_evict_gens[gen_id].npages == 0);
 #endif
@@ -432,6 +459,7 @@ found_enough:
             assert(!!(flags & PFLAG_REGISTERED));
             assert(!(flags & PFLAG_EVICT_ONGOING));
             assert(is_in_memory_region_unsafe(page->mr, page->addr));
+            assertz(get_page_thread(page->mr, page->addr));
         }
     }
 
@@ -439,7 +467,7 @@ found_enough:
      * lru list is fine as these pages are currently being worked on and 
      * they deserve to be on the latest list anyway */
     if (!list_empty(&locked)) {
-        gen_id = (evict_gen_now + nr_evict_gens - 1) & evict_gen_mask;
+        gen_id = (evict_gen_now + evict_ngens - 1) & evict_gen_mask;
         evict_gen = &evict_gens[gen_id];
         spin_lock(&evict_gen->lock);
         list_append_list(&evict_gen->pages, &locked);
@@ -482,11 +510,13 @@ static inline int remove_pages(struct list_head* pglist, int npages,
     {
         if (vectored_madv) {
             /* prepare the io vector */
-            madv_iov[i].iov_base = (void*)page->addr;
+            log_debug("adding page %p to iovec", (void*) page->addr);
+            madv_iov[i].iov_base = (void*) page->addr;
             madv_iov[i].iov_len = CHUNK_SIZE;
         }
         else {
             /* or issue madvise once per page */
+            log_debug("madvise dont_need on page %p", (void*) page->addr);
             r = madvise((void*)page->addr, CHUNK_SIZE, MADV_DONTNEED);
             if (r != 0) {
                 log_err("madvise for chunk %d failed: %s", i, strerror(errno));
@@ -539,7 +569,7 @@ static unsigned int write_region_to_backend(int chan_id, struct region_t *mr,
     /* post the write-back */
     start_tsc = 0;
     ncompletions = 0;
-    nwrites_done = 0;
+    nwrites_done = -1;
     do {
         r = rmbackend->post_write(chan_id, mr, addr, size);
         if (r == EAGAIN) {
@@ -550,7 +580,7 @@ static unsigned int write_region_to_backend(int chan_id, struct region_t *mr,
             /* write queue is full, nothing to do but repeat and keep 
              * checking for completions to free request slots; raising error
              * if we handled some write completions but still cannot post */
-            assert (nwrites_done >= 1);
+            assert(nwrites_done != 0);
             ncompletions += rmbackend->check_for_completions(chan_id, cbs, 
                 RMEM_MAX_COMP_PER_OP, NULL, &nwrites_done);
         }
@@ -654,9 +684,10 @@ static bool flush_pages(int chan_id, struct list_head* pglist, int npages,
  * Eviction done for a page
  */
 static inline void evict_page_done(struct region_t* mr, unsigned long pgaddr, 
-    bool discarded)
+    bool discarded, bool stolen)
 {
     pgflags_t clrbits, oldflags;
+    pgthread_t owner_kthr = 0;
 
     /* assert locked */
     assert(!!(get_page_flags(mr, pgaddr) & PFLAG_WORK_ONGOING));
@@ -672,7 +703,8 @@ static inline void evict_page_done(struct region_t* mr, unsigned long pgaddr,
         /* for pages that were discarded and not written-back, we can just 
          * clear most bits, including the lock, and let them go */
         log_debug("evict done, unlocking page %lx", pgaddr);
-        clear_page_flags(mr, pgaddr, clrbits | PFLAG_WORK_ONGOING, &oldflags);
+        clear_page_flags_and_thread(mr, pgaddr, 
+            clrbits | PFLAG_WORK_ONGOING, &oldflags, &owner_kthr);
         assert(!!(oldflags & PFLAG_PRESENT));
         goto evict_done;
     }
@@ -696,21 +728,30 @@ static inline void evict_page_done(struct region_t* mr, unsigned long pgaddr,
         else {
             /* last one to get here, clear the lock as well */
             log_debug("evict done, unlocking page %lx", pgaddr);
-            clear_page_flags(mr, pgaddr, PFLAG_WORK_ONGOING, &oldflags);
+            clear_page_flags_and_thread(mr, pgaddr, PFLAG_WORK_ONGOING, 
+                &oldflags, &owner_kthr);
             goto evict_done;
         }
     }
 
 evict_done:
-    assert(!!(oldflags & PFLAG_WORK_ONGOING)); /*sanity check*/
+    /* check that the page was locked and that the saved kthread thread id
+     * (if this fault was originally from a kthread) is same or different 
+     * the from current kthread id depending on if the fault was stolen */
+    assert(!!(oldflags & PFLAG_WORK_ONGOING));
+    if (owner_kthr) {
+        assert(stolen || owner_kthr == current_kthread_id);
+        assert(!stolen || owner_kthr != current_kthread_id);
+    }
     RSTAT(EVICT_PAGES_DONE)++;
     put_mr(mr);
 }
 
 /**
- * Called after backend write has completed
+ * backend write has completed - release the page
  */
-int write_back_completed(struct region_t* mr, unsigned long addr, size_t size)
+static inline int write_back_completed(struct region_t* mr, unsigned long addr,
+    size_t size, bool stolen)
 {
     unsigned long page;
     size_t covered;
@@ -719,10 +760,28 @@ int write_back_completed(struct region_t* mr, unsigned long addr, size_t size)
     covered = 0;
     while(covered < size) {
         page = addr + covered;
-        evict_page_done(mr, page, false);
+        evict_page_done(mr, page, false, stolen);
         covered += CHUNK_SIZE;
     }
     return 0;
+}
+
+/**
+ * Called after backend write has completed
+ */
+int owner_write_back_completed(struct region_t* mr, unsigned long addr, 
+    size_t size)
+{
+    return write_back_completed(mr, addr, size, false);
+}
+
+/**
+ * Called after backend write has completed but on a stolen completion
+ */
+int stealer_write_back_completed(struct region_t* mr, unsigned long addr,
+    size_t size)
+{
+    return write_back_completed(mr, addr, size, true);
 }
 
 /**
@@ -734,6 +793,7 @@ int do_eviction(int chan_id, struct bkend_completion_cbs* cbs,
     size_t size;
     pgflags_t oldflags;
     pgidx_t pgidx;
+    pgthread_t oldthread;
     int npages, i, flushed;
     pgflags_t flags[batch_size];
     DEFINE_BITMAP(write_map, batch_size);
@@ -744,16 +804,19 @@ int do_eviction(int chan_id, struct bkend_completion_cbs* cbs,
     struct region_t* mr;
     unsigned long addr;
 
+    /* record eviction calls */
+    RSTAT(EVICTS)++;
+
     /* get eviction candidates */
     npages = 0;
     list_head_init(&evict_list);
     assert(batch_size > 0 && batch_size <= EVICTION_MAX_BATCH_SIZE);
     do {
+        /* TODO: error out if we are stuck here */
         npages = find_candidate_pages(&evict_list, batch_size);
         if (npages)
             break;
         RSTAT(EVICT_NONE)++;
-        /* TODO: error out if we are stuck here */
     } while(!npages);
 
     /* found page(s) */
@@ -763,17 +826,15 @@ int do_eviction(int chan_id, struct bkend_completion_cbs* cbs,
     assert(npages <= EVICTION_MAX_BATCH_SIZE);
     i = 0;
     list_for_each(&evict_list, page, link) {
-        flags[i] = set_page_flags(page->mr, page->addr, 
-            PFLAG_EVICT_ONGOING, &oldflags);
+        flags[i] = set_page_flags_and_thread(page->mr, page->addr, 
+            PFLAG_EVICT_ONGOING, current_kthread_id, &oldflags, &oldthread);
         assert(!(oldflags & PFLAG_EVICT_ONGOING));
+        assertz(oldthread);
         log_debug("evicting page %lx from mr start %lx", 
             page->addr, page->mr->addr);
         i++;
     }
     assert(i == npages);
-
-    RSTAT(EVICTS)++;
-    RSTAT(EVICT_PAGES) += npages;
 
     /* once we get a lock, we're gonna evict them no matter what. decrease the 
      * memory used now so others don't overwork for the same memory that we 
@@ -786,7 +847,7 @@ int do_eviction(int chan_id, struct bkend_completion_cbs* cbs,
     flushed = flush_pages(chan_id, &evict_list, npages, flags, write_map, cbs);
     assert(npages == flushed);
 
-    /* memory accounting */
+    /* release page nodes and clear flags */
     if (flushed > 0)
     {
         /* work for each removed page */
@@ -803,7 +864,7 @@ int do_eviction(int chan_id, struct bkend_completion_cbs* cbs,
 
             /* eviction done */
             discarded = !bitmap_test(write_map, i);
-            evict_page_done(mr, addr, discarded);
+            evict_page_done(mr, addr, discarded, false);
             i++;
         }
         assert(i == flushed);
@@ -835,29 +896,33 @@ int eviction_init(void)
     policy = NULL;
 #if defined(SC_EVICTION)
     /* two levels enough for second-chance eviction */
-    nr_evict_gens = 2;
+    if (evict_ngens != 2)
+        log_warn("second-chance eviction policy only supports two gens;"
+            " ignoring %d", evict_ngens);
+    evict_ngens = 2;
     policy = "second-chance";
 #elif defined(LRU_EVICTION)
-    /* no more useful than default without at least two gens */
     policy = "lru";
-    nr_evict_gens = EVICTION_MAX_GENS;
-    BUG_ON(nr_evict_gens <= 1);
 #else
     policy = "default";
-    BUG_ON(nr_evict_gens > 1);
+    if (evict_ngens != 1)
+        log_warn("default eviction policy only supports one gen;"
+            " ignoring %d", evict_ngens);
+    evict_ngens = 1;
 #endif
     assert(policy);
 
     /* init page lists for all generations and the gen mask */
-    BUG_ON(nr_evict_gens & (nr_evict_gens - 1));  /* power of 2 */
-    evict_gen_mask = nr_evict_gens - 1;
-    for(i = 0; i < nr_evict_gens; i++) {
+    BUG_ON(evict_ngens <= 0 || evict_ngens > EVICTION_MAX_GENS);
+    BUG_ON(evict_ngens & (evict_ngens - 1));  /* power of 2 */
+    evict_gen_mask = evict_ngens - 1;
+    for(i = 0; i < evict_ngens; i++) {
         list_head_init(&evict_gens[i].pages);
         evict_gens[i].npages = 0;
         spin_lock_init(&evict_gens[i].lock);
     }
     log_info("inited %s eviction with %d gens. gen mask: %x", 
-        policy, nr_evict_gens, evict_gen_mask);
+        policy, evict_ngens, evict_gen_mask);
 
     /* init epoch */
     epoch_start_tsc = rdtsc();
@@ -877,6 +942,12 @@ int eviction_init(void)
     madv_pidfd = syscall(SYS_pidfd_open, getpid(), 0);
     assert(madv_pidfd >= 0);
 #endif
+
+#ifdef EPOCH_SAMPLER
+    /* init epoch sampler */
+    sampler_init(&epoch_sampler, "epoch_distance_samples", SAMPLER_TYPE_POISSON,
+        &epoch_sampler_ops, sizeof(unsigned long), 1000, 1000, 1);
+#endif
     
     return 0;
 }
@@ -888,7 +959,7 @@ int eviction_init_thread(void)
 {
     int i;
 
-    for(i = 0; i < nr_evict_gens; i++) {
+    for(i = 0; i < evict_ngens; i++) {
         list_head_init(&tmp_evict_gens[i].pages);
         tmp_evict_gens[i].npages = 0;
         spin_lock_init(&tmp_evict_gens[i].lock);
@@ -896,3 +967,38 @@ int eviction_init_thread(void)
 
     return 0;
 }
+
+/**
+ * eviction_exit - frees eviction global state
+ */
+void eviction_exit(void)
+{
+#ifdef EPOCH_SAMPLER
+    /* free epoch sampler */
+    sampler_destroy(&epoch_sampler);
+#endif
+}
+
+/**
+ * Epoch sampling functions
+ */
+
+void epoch_add_sample(void* buffer, void* sample)
+{
+    assert(buffer && sample);
+    *(unsigned long*)buffer = *(unsigned long*)sample;
+}
+
+void epoch_sample_to_str(void* sample, char* sbuf, int max_len)
+{
+    int n;
+    assert(sbuf && sample);
+    n = snprintf(sbuf, max_len, "%lu", *(unsigned long*)sample);
+    BUG_ON(n >= max_len);   /* truncated */
+}
+
+/* epoch sampler ops */
+struct sampler_ops epoch_sampler_ops = {
+    .add_sample = epoch_add_sample,
+    .sample_to_str = epoch_sample_to_str,
+};

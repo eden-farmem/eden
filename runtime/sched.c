@@ -210,7 +210,6 @@ static inline bool steal_remote_memory_work(struct kthread *l, struct kthread *r
 
 	assert_spin_lock_held(&l->lock);
 	assert_spin_lock_held(&r->lock);
-	assert(!spin_lock_held(&l->pf_lock));
 
 	spin_lock(&l->pf_lock);
 	nstolen += kthr_steal_completions(r, RMEM_MAX_COMP_PER_OP);
@@ -320,8 +319,8 @@ static bool steal_work(struct kthread *l, struct kthread *r)
 			spin_unlock(&r->lock);
 			
 			/* we have some stolen faults, however it is not ready to run as 
-			 * the faults need further handling before releasing threads, and
-			 * let's handle stolen completions immediately so we don't run out 
+			 * the faults need further handling before releasing threads; we 
+			 * handle these stolen completions immediately so we don't run out 
 			 * of bkend_bufs; we also release locks on both l and r for 
 			 * stealing while handling the faults */
 			if (do_remote_memory_work(l)) {
@@ -329,8 +328,8 @@ static bool steal_work(struct kthread *l, struct kthread *r)
 				return true;
 			}
 
-			/* stole work but none of it was ready just yet, let's return now and 
-			* come back here later */
+			/* stole work but none of it was ready just yet, let's return now 
+			 * and come back here later */
 			return false;
 		}
 	}
@@ -648,7 +647,7 @@ void thread_yield(void)
 	assert(myth->state == THREAD_STATE_RUNNING);
 	myth->state = THREAD_STATE_SLEEPING;
 	store_release(&myth->stack_busy, true);
-	thread_ready_np(myth);
+	thread_ready_preempt_off(myth);
 
 	enter_schedule(myth);
 }
@@ -665,6 +664,7 @@ static __always_inline void enter_schedule_with_fault(thread_t *th, fault_t* f)
 	k = myk();
 
 	/* accounting */
+	RSTAT(FAULTS)++;
     if (f->is_read)         RSTAT(FAULTS_R)++;
     if (f->is_write)        RSTAT(FAULTS_W)++;
     if (f->is_wrprotect)    RSTAT(FAULTS_WP)++;
@@ -760,7 +760,7 @@ void thread_park_on_fault(void* address, bool write, int rdahead)
     fault->is_write = write;
     fault->from_kernel = false;
     fault->rdahead_max = rdahead;
-	BUG_ON(1 + rdahead > RMEM_MAX_CHUNKS_PER_OP);	/* read ahead limit */
+	BUG_ON(rdahead > FAULT_MAX_RDAHEAD_SIZE);	/* read ahead limit */
     fault->rdahead = 0;
     fault->thread = myth;
     log_debug("fault posted at %lx write %d", fault->page, write);
@@ -769,19 +769,17 @@ void thread_park_on_fault(void* address, bool write, int rdahead)
 	enter_schedule_with_fault(myth, fault);
 
     /* fault serviced when we get back here */
-    assert(!__is_fault_pending(address, write));
     assert(NOT_IN_RUNTIME());
 }
 
 /**
- * __thread_ready_unsafe - marks a thread as a runnable
+ * thread_ready_preempt_off - marks a thread as a runnable
  * @th: the thread to mark runnable
  *
- * This function can only be called internally when releasing 
- * the threads from within the runtime, @th is 
- * sleeping and preempt is disabled.
+ * This function can only be called when @th is sleeping and 
+ * preempt is disabled (so generally from within the runtime).
  */
-void thread_ready_np(thread_t *th)
+void thread_ready_preempt_off(thread_t *th)
 {
 	struct kthread *k;
 	uint32_t rq_tail;
@@ -806,6 +804,30 @@ void thread_ready_np(thread_t *th)
 	k->q_ptrs->rq_head++;
 }
 
+
+/**
+ * thread_ready_safe - marks a thread as a runnable on a specific kthread. 
+ * Unlike other functions, this function can be called from any other kthreads.
+ * @th: the thread to mark runnable
+ *
+ * This function can only be called when @th is sleeping.
+ */
+void thread_ready_safe(struct kthread *k, thread_t *th)
+{
+	assert(th->state == THREAD_STATE_SLEEPING);
+	th->state = THREAD_STATE_RUNNABLE;
+
+	/* since this function needs to be thread-safe, we add the thread
+	 * to the overflow queue to avoid introducing locks on the main 
+	 * ready queue. this has implications on performance (since the 
+	 * overflow queue needs to be drained before the thread gets scheduled)
+	 * but the assumption is that the usage is rare */
+	spin_lock(&k->lock);
+	list_add_tail(&k->rq_overflow, &th->link);
+	k->rq_overflow_len++;
+	spin_unlock(&k->lock);
+}
+
 /**
  * thread_ready - marks a thread as a runnable
  * @th: the thread to mark runnable
@@ -815,7 +837,7 @@ void thread_ready_np(thread_t *th)
 void thread_ready(thread_t *th)
 {
 	getk();
-	thread_ready_np(th);
+	thread_ready_preempt_off(th);
 	putk();
 }
 

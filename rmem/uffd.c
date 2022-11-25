@@ -16,6 +16,7 @@
 
 #include "rmem/uffd.h"
 #include "rmem/config.h"
+#include "rmem/dump.h"
 #include "base/log.h"
 #include "base/assert.h"
 
@@ -119,8 +120,8 @@ int uffd_copy(int fd, unsigned long dst, unsigned long src, size_t size,
     int r;
     int mode = 0;
 
-    if (n_retries)
-        *n_retries = 0;
+    assert(n_retries);
+    *n_retries = 0;
 
     if (wrprotect)  
         mode |= UFFDIO_COPY_MODE_WP;
@@ -176,6 +177,9 @@ int uffd_wp(int fd, unsigned long addr, size_t size, bool wrprotect,
 {
     int r;
     int mode = 0;
+
+    assert(n_retries);
+    *n_retries = 0;
 
     if (wrprotect)  
         mode |= UFFDIO_WRITEPROTECT_MODE_WP;
@@ -238,6 +242,9 @@ int uffd_wp_vec(int fd, struct iovec* iov, int iov_len, bool wrprotect,
 #else
     int r;
     int mode = 0;
+
+    assert(n_retries);
+    *n_retries = 0;
 
     if (wrprotect)  
         mode |= UFFDIO_WRITEPROTECT_MODE_WP;
@@ -306,6 +313,9 @@ int uffd_zero(int fd, unsigned long addr, size_t size, bool no_wake,
 {
     int r;
     int mode = 0;
+
+    assert(n_retries);
+    *n_retries = 0;
 
     if (no_wake)    
         mode |= UFFDIO_ZEROPAGE_MODE_DONTWAKE;

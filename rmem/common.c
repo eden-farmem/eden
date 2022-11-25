@@ -13,6 +13,7 @@
 #include "rmem/config.h"
 #include "rmem/fault.h"
 #include "rmem/handler.h"
+#include "rmem/pgnode.h"
 #include "rmem/region.h"
 #include "rmem/uffd.h"
 #include "runtime/pgfault.h"
@@ -24,13 +25,16 @@ uint64_t local_memory = LOCAL_MEMORY_SIZE;
 double eviction_threshold = EVICTION_THRESHOLD;
 int evict_batch_size = 1;
 
-/* global state for remote memory */
+/* common global state for remote memory */
 struct rmem_backend_ops* rmbackend = NULL;
 int userfault_fd = -1;
 hthread_t** handlers = NULL;
 int nhandlers = 1;
 atomic64_t memory_used = ATOMIC_INIT(0);
+
+/* common thread-local state for remote memory */
 __thread uint64_t* rstats_ptr = NULL;
+__thread pgthread_t current_kthread_id = 0;
 
 /**
  * rmem_common_init - initializes remote memory
@@ -39,7 +43,7 @@ int rmem_common_init()
 {
     int i, ret;
     log_info("rmem_init with: ");
-    log_info("local memory - %.2lf GB", local_memory * 1.0 / (1 << 30));
+    log_info("local memory - %lu B", local_memory);
     log_info("evict thr %.2lf, batch %d", eviction_threshold, evict_batch_size);
     BUG_ON(!rmem_enabled);
 
@@ -98,12 +102,16 @@ int rmem_common_init()
  * either shenango or handler threads. Also creates a new backend channel and 
  * passes it back to the caller if asked for.
  */
-int rmem_common_init_thread(int* new_chan_id, uint64_t* stats_ptr)
+int rmem_common_init_thread(int* new_chan_id, uint64_t* stats_ptr, 
+    pgthread_t kthr_id)
 {
     /* save rstats ptr as a first thing */
     assert(stats_ptr);
     BUG_ON(rstats_ptr); /* can't set twice */
     rstats_ptr = stats_ptr;
+
+    /* save kthread id. 0 means current thread is not a shenango kthread */
+    current_kthread_id = kthr_id;
 
     /* init per-thread data */
     fault_tcache_init_thread();
@@ -130,6 +138,7 @@ int rmem_common_destroy_thread()
 
 /**
  * rmem_common_destroy - remote memory clean-up
+ * (in reverse order of rmem_common_init)
  */
 int rmem_common_destroy()
 {
@@ -142,11 +151,14 @@ int rmem_common_destroy()
     }
     free(handlers);
 
-    /* destroy fault tcache pool */
-    fault_tcache_destroy();
+    /* eviction free */
+    eviction_exit();
 
     /* free rmmem page node pool */
     rmpage_node_tcache_destroy();
+
+    /* destroy fault tcache pool */
+    fault_tcache_destroy();
 
     /* ensure all regions freed */
     struct region_t *mr = NULL;

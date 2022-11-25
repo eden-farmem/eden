@@ -234,7 +234,7 @@ static int parse_rmem_evict_thr_flag(const char *name, const char *val)
 	ret = str_to_long(val, &tmp);
 	if (ret || !(tmp >= 0 && tmp <= 100)) {
 		log_err("Expecting 0 to 100 for %s", name);
-		return ret;
+		return -EINVAL;
 	}
 	eviction_threshold = tmp * 1.0 / 100;
 	return 0;
@@ -244,6 +244,22 @@ static int parse_rmem_evict_batch_size_flag(const char *name, const char *val)
 {
 	int ret = str_to_long(val, (long int *)&evict_batch_size);
 	return ret;
+}
+
+static int parse_rmem_evict_ngens_flag(const char *name, const char *val)
+{
+	int ret = str_to_long(val, (long int *)&evict_ngens);
+	if (ret)
+		return ret;
+
+	if (evict_ngens <= 0 || evict_ngens > EVICTION_MAX_GENS 
+		|| (evict_ngens & (evict_ngens - 1)))
+	{
+		log_err("evict_ngens must be in [1,%d] and a power of 2; " 
+			"provided: %d", EVICTION_MAX_GENS, evict_ngens);
+		return -EINVAL;
+	}
+	return 0;
 }
 
 static int parse_static_arp_entry(const char *name, const char *val)
@@ -317,6 +333,7 @@ static const struct cfg_handler cfg_handlers[] = {
 	{ "rmem_local_memory", parse_rmem_local_memory_flag, false },
 	{ "rmem_evict_threshold", parse_rmem_evict_thr_flag, false },
 	{ "rmem_evict_batch_size", parse_rmem_evict_batch_size_flag, false },
+	{ "rmem_evict_ngens", parse_rmem_evict_ngens_flag, false },
 };
 
 /**

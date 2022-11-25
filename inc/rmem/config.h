@@ -24,6 +24,7 @@ typedef enum {
 #define RMEM_MAX_CHANNELS       32
 #define RMEM_MAX_CHUNKS_PER_OP  64
 #define RMEM_MAX_COMP_PER_OP    16
+#define RMEM_MAX_LOCAL_MEM      (64 * 1024L * 1024 * 1024)
 
 /********* Cluster *******************************************/
 #define VRG_SC2             // Intel Skylake - CX5
@@ -121,10 +122,11 @@ BUILD_ASSERT(EVICTION_MAX_BATCH_SIZE <= RMEM_MAX_CHUNKS_PER_OP);
 #endif
 
 /* Fault handling */
-#define RUNTIME_MAX_FAULTS          2048
-#define FAULT_TCACHE_MAG_SIZE       64
-#define OS_MEM_PROBE_INTERVAL       1e6
-#define FAULT_MAX_RDAHEAD_SIZE      1
+#define RUNTIME_MAX_FAULTS              2048
+#define FAULT_TCACHE_MAG_SIZE           64
+#define OS_MEM_PROBE_INTERVAL           1e6
+#define FAULT_MAX_RDAHEAD_SIZE          63
+#define HANDLER_WAIT_BEFORE_STEAL_US    100
 BUILD_ASSERT((1 + FAULT_MAX_RDAHEAD_SIZE) <= RMEM_MAX_CHUNKS_PER_OP);
 
 /* Region settings  */

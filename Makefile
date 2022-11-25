@@ -151,9 +151,13 @@ memserver_src = tools/rmserver/memserver.c tools/rmserver/rdma.c
 memserver_obj = $(memserver_src:.c=.o)
 
 # rmlib - rmclient library
+RMLIB = rmlib.so
 rmlib_src = $(wildcard tools/rmlib/*.c)
 rmlib_obj = $(rmlib_src:.c=.o)
-CFLAGS += -fPIC		# (rmlib is a shared library)
+ifeq ($(MAKECMDGOALS),$(RMLIB))
+CFLAGS += -fPIC # (rmlib is a shared library)
+CFLAGS += -DRMEM_STANDALONE
+endif
 
 tools_src = $(wildcard tools/*/*.c)
 tools_obj = $(tools_src:.c=.o)
@@ -194,29 +198,31 @@ libruntime.a: $(runtime_obj)
 
 iokerneld: $(iokernel_obj) libbase.a libnet.a base/base.ld
 	$(LD) $(LDFLAGS) -o $@ $(iokernel_obj) libbase.a libnet.a $(DPDK_LIBS)	\
-		-lpthread -lnuma -ldl
+		-lpthread -lm -lnuma -ldl
 
 iokerneld-noht: $(iokernel_noht_obj) libbase.a libnet.a base/base.ld
 	$(LD) $(LDFLAGS) -o $@ $(iokernel_noht_obj) libbase.a libnet.a 			\
-		$(DPDK_LIBS) -lpthread -lnuma -ldl
+		$(DPDK_LIBS) -lpthread -lm -lnuma -ldl
 
 ## tools
-tools: rcntrl memserver rmlib.so
+tools: rcntrl memserver
 
 rcntrl: $(rcntrl_obj) libbase.a 
-	$(LD) $(LDFLAGS) -o $@ $(rcntrl_obj) libbase.a -lpthread $(RDMA_LIBS)
+	$(LD) $(LDFLAGS) -o $@ $(rcntrl_obj) libbase.a -lpthread -lm $(RDMA_LIBS)
 
 memserver: $(memserver_obj) libbase.a 
-	$(LD) $(LDFLAGS) -o $@ $(memserver_obj) libbase.a -lpthread $(RDMA_LIBS)
+	$(LD) $(LDFLAGS) -o $@ $(memserver_obj) libbase.a -lpthread -lm $(RDMA_LIBS)
 
-rmlib.so: $(rmlib_obj) librmem.a libbase.a
-	$(LD) $(CFLAGS) $(LDFLAGS) -shared $(rmlib_obj) -o $@	\
-		librmem.a libbase.a -lpthread $(RDMA_LIBS) $(JEMALLOC_LIBS)
+# rmlib.so has to be built separately as it uses different flags
+# use "make rmlib.so"
+$(RMLIB): $(rmlib_obj) librmem.a libbase.a je_jemalloc
+	$(LD) $(CFLAGS) $(LDFLAGS) -shared $(rmlib_obj) -o $(RMLIB)		\
+		librmem.a libbase.a -lpthread -lm $(RDMA_LIBS) $(JEMALLOC_LIBS)
 
 ## tests
 $(test_targets): $(test_obj) libbase.a libruntime.a librmem.a libnet.a base/base.ld
 	$(LD) $(LDFLAGS) -o $@ $@.o libruntime.a librmem.a libnet.a libbase.a 	\
-		-lpthread $(RDMA_LIBS)
+		-lpthread -lm $(RDMA_LIBS)
 
 ## general build rules for all targets
 src = $(base_src) $(net_src) $(rmem_src) $(runtime_src) $(iokernel_src) $(test_src) $(tools_src)
@@ -249,5 +255,5 @@ sparse: $(src)
 
 .PHONY: clean
 clean:
-	rm -f $(obj) $(dep) libbase.a libnet.a librmem.a libruntime.a rmlib.so 	\
-	iokerneld iokerneld-noht rcntrl memserver $(test_targets)
+	rm -f $(obj) $(dep) libbase.a libnet.a librmem.a libruntime.a \
+	iokerneld iokerneld-noht rcntrl memserver $(RMLIB) $(test_targets)

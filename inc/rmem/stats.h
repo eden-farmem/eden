@@ -26,7 +26,7 @@ enum {
 
     /* eviction stats */
     RSTAT_EVICTS,
-    RSTAT_EVICT_PAGES,
+    RSTAT_EVICT_POPPED,
     RSTAT_EVICT_NONE,           /* found no eviction candidates */
     RSTAT_EVICT_SUBOPTIMAL,     /* couldn't fill the entire batch size */
     RSTAT_EVICT_WBACK,
