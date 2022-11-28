@@ -11,6 +11,8 @@
 
 #include "base/cpu.h"
 #include "base/log.h"
+#include "base/sampler.h"
+
 #include "rmem/backend.h"
 #include "rmem/common.h"
 #include "rmem/config.h"
@@ -37,6 +39,8 @@ int evict_ngens = 1;
 int evict_gen_mask = 0;
 unsigned long epoch_start_tsc;
 int epoch_tsc_shift;
+struct sampler epoch_sampler;
+struct sampler_ops epoch_sampler_ops;
 
 /**
  * All these are write-protected by the lock of the current LRU generation 
@@ -147,34 +151,43 @@ static __always_inline int get_page_next_gen_lru(struct rmpage_node* page,
     int next_gen_id;
     unsigned long pgepoch;
     unsigned long slope;
+    unsigned long pgepoch_gap;
 
     /* check and sort pages */
     assert(evict_gen_mask);
-    assert(evict_epoch_now > evict_epoch_min);
+    assert(evict_epoch_now >= evict_epoch_min);
 
     /* get page's epoch; may get updated concurrently so just read it once */
     pgepoch = ACCESS_ONCE(page->epoch);
     assert(pgepoch == 0 || pgepoch <= evict_epoch_now);
+    pgepoch_gap = evict_epoch_now - pgepoch;
 
     /* reset the page's access epoch. we're either gonna evict it or 
      * bump it to higher list, either of which require resetting it */
     page->epoch = 0;
 
+#ifdef EPOCH_SAMPLER
+    /* record the page epoch gap and 
+     * no need to bump lists when sampling */
+    if (pgepoch != 0)
+        sampler_add(&epoch_sampler, &pgepoch_gap);
+    return 0;
+#endif
+
     next_gen_id = 0;
-    assert(evict_epoch_now >= evict_epoch_min);
     if (pgepoch && evict_epoch_now > evict_epoch_min) {
         /* page epoch was set by a hint, indicating a more recent access 
          * after the page fault. figure out the next gen for this page 
          * depending on how recent the access was */
-        slope = (evict_epoch_now - pgepoch) * evict_ngens 
-            / (evict_epoch_now - evict_epoch_min);
+        slope = pgepoch_gap * evict_ngens / (evict_epoch_now - evict_epoch_min);
         next_gen_id = slope & evict_gen_mask;
     }
 
     /* save the oldest valid page epoch that was seen on any page */
     assert(oldest_page_epoch);
-    if (!pgepoch && pgepoch < *oldest_page_epoch)
-        *oldest_page_epoch = pgepoch;
+    if (next_gen_id == 0)
+        if (pgepoch && pgepoch < *oldest_page_epoch)
+            *oldest_page_epoch = pgepoch;
 
     log_debug("page %lx had epoch %lu, epochs: %lu, %lu. next gen: %d", 
         page->addr, pgepoch, evict_epoch_min, evict_epoch_now, next_gen_id);
@@ -328,8 +341,8 @@ static inline int find_candidate_pages(struct list_head* evict_list,
                 /* page selected to bumping to a higher list */
                 assert(pg_next_gen < evict_ngens);
                 assert(bitmap_test(tmplist_used, pg_next_gen)
-                    || (evict_gens[pg_next_gen].npages == 0
-                        && list_empty(&evict_gens[pg_next_gen].pages)));
+                    || (tmp_evict_gens[pg_next_gen].npages == 0
+                        && list_empty(&tmp_evict_gens[pg_next_gen].pages)));
 
                 list_add_tail(&tmp_evict_gens[pg_next_gen].pages, &page->link);
                 tmp_evict_gens[pg_next_gen].npages++;
@@ -771,7 +784,6 @@ int stealer_write_back_completed(struct region_t* mr, unsigned long addr,
     return write_back_completed(mr, addr, size, true);
 }
 
-
 /**
  * Main function for eviction. Returns number of pages evicted.
  */
@@ -930,6 +942,12 @@ int eviction_init(void)
     madv_pidfd = syscall(SYS_pidfd_open, getpid(), 0);
     assert(madv_pidfd >= 0);
 #endif
+
+#ifdef EPOCH_SAMPLER
+    /* init epoch sampler */
+    sampler_init(&epoch_sampler, "epoch_distance_samples", SAMPLER_TYPE_POISSON,
+        &epoch_sampler_ops, sizeof(unsigned long), 1000, 1000, 1);
+#endif
     
     return 0;
 }
@@ -949,3 +967,38 @@ int eviction_init_thread(void)
 
     return 0;
 }
+
+/**
+ * eviction_exit - frees eviction global state
+ */
+void eviction_exit(void)
+{
+#ifdef EPOCH_SAMPLER
+    /* free epoch sampler */
+    sampler_destroy(&epoch_sampler);
+#endif
+}
+
+/**
+ * Epoch sampling functions
+ */
+
+void epoch_add_sample(void* buffer, void* sample)
+{
+    assert(buffer && sample);
+    *(unsigned long*)buffer = *(unsigned long*)sample;
+}
+
+void epoch_sample_to_str(void* sample, char* sbuf, int max_len)
+{
+    int n;
+    assert(sbuf && sample);
+    n = snprintf(sbuf, max_len, "%lu", *(unsigned long*)sample);
+    BUG_ON(n >= max_len);   /* truncated */
+}
+
+/* epoch sampler ops */
+struct sampler_ops epoch_sampler_ops = {
+    .add_sample = epoch_add_sample,
+    .sample_to_str = epoch_sample_to_str,
+};

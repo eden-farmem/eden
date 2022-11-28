@@ -409,6 +409,16 @@ int uffd_wp_remove(int fd, unsigned long fault_addr, size_t size, bool no_wake,
     bool retry, int *n_retries) {
     return rmem_undefined_error();
 }
+int uffd_wp_add_vec(int fd, struct iovec* iov, int iov_len, bool no_wake, 
+    bool retry, int *n_retries, size_t* wp_bytes)
+{
+    return rmem_undefined_error();
+}
+int uffd_wp_remove_vec(int fd, struct iovec* iov, int iov_len, bool no_wake, 
+    bool retry, int *n_retries, size_t* wp_bytes)
+{
+    return rmem_undefined_error();
+}
 int uffd_zero(int fd, unsigned long addr, size_t size, bool no_wake, 
     bool retry, int *n_retries) {
     return rmem_undefined_error();

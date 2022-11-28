@@ -138,6 +138,7 @@ int rmem_common_destroy_thread()
 
 /**
  * rmem_common_destroy - remote memory clean-up
+ * (in reverse order of rmem_common_init)
  */
 int rmem_common_destroy()
 {
@@ -150,11 +151,14 @@ int rmem_common_destroy()
     }
     free(handlers);
 
-    /* destroy fault tcache pool */
-    fault_tcache_destroy();
+    /* eviction free */
+    eviction_exit();
 
     /* free rmmem page node pool */
     rmpage_node_tcache_destroy();
+
+    /* destroy fault tcache pool */
+    fault_tcache_destroy();
 
     /* ensure all regions freed */
     struct region_t *mr = NULL;

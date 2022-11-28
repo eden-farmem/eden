@@ -5,6 +5,7 @@
 #ifndef __EVICTION_H__
 #define __EVICTION_H__
 
+#include "base/sampler.h"
 #include "rmem/backend.h"
 #include "rmem/region.h"
 
@@ -28,8 +29,10 @@ extern struct page_list evict_gens[EVICTION_MAX_GENS];
 extern int evict_gen_mask;
 extern int evict_gen_now;
 extern unsigned long evict_epoch_now;
+extern struct sampler epoch_sampler;
 
 int eviction_init(void);
 int eviction_init_thread(void);
+void eviction_exit(void);
 
 #endif  // __EVICTION_H__

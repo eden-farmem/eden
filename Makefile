@@ -198,31 +198,31 @@ libruntime.a: $(runtime_obj)
 
 iokerneld: $(iokernel_obj) libbase.a libnet.a base/base.ld
 	$(LD) $(LDFLAGS) -o $@ $(iokernel_obj) libbase.a libnet.a $(DPDK_LIBS)	\
-		-lpthread -lnuma -ldl
+		-lpthread -lm -lnuma -ldl
 
 iokerneld-noht: $(iokernel_noht_obj) libbase.a libnet.a base/base.ld
 	$(LD) $(LDFLAGS) -o $@ $(iokernel_noht_obj) libbase.a libnet.a 			\
-		$(DPDK_LIBS) -lpthread -lnuma -ldl
+		$(DPDK_LIBS) -lpthread -lm -lnuma -ldl
 
 ## tools
 tools: rcntrl memserver
 
 rcntrl: $(rcntrl_obj) libbase.a 
-	$(LD) $(LDFLAGS) -o $@ $(rcntrl_obj) libbase.a -lpthread $(RDMA_LIBS)
+	$(LD) $(LDFLAGS) -o $@ $(rcntrl_obj) libbase.a -lpthread -lm $(RDMA_LIBS)
 
 memserver: $(memserver_obj) libbase.a 
-	$(LD) $(LDFLAGS) -o $@ $(memserver_obj) libbase.a -lpthread $(RDMA_LIBS)
+	$(LD) $(LDFLAGS) -o $@ $(memserver_obj) libbase.a -lpthread -lm $(RDMA_LIBS)
 
 # rmlib.so has to be built separately as it uses different flags
 # use "make rmlib.so"
 $(RMLIB): $(rmlib_obj) librmem.a libbase.a je_jemalloc
 	$(LD) $(CFLAGS) $(LDFLAGS) -shared $(rmlib_obj) -o $(RMLIB)		\
-		librmem.a libbase.a -lpthread $(RDMA_LIBS) $(JEMALLOC_LIBS)
+		librmem.a libbase.a -lpthread -lm $(RDMA_LIBS) $(JEMALLOC_LIBS)
 
 ## tests
 $(test_targets): $(test_obj) libbase.a libruntime.a librmem.a libnet.a base/base.ld
 	$(LD) $(LDFLAGS) -o $@ $@.o libruntime.a librmem.a libnet.a libbase.a 	\
-		-lpthread $(RDMA_LIBS)
+		-lpthread -lm $(RDMA_LIBS)
 
 ## general build rules for all targets
 src = $(base_src) $(net_src) $(rmem_src) $(runtime_src) $(iokernel_src) $(test_src) $(tools_src)
