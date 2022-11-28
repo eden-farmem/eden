@@ -35,13 +35,13 @@ typedef enum {
 
 /********* Config for RDMA backend ***************************/
 /* for RCNTRL */
-#define RDMA_RACK_CNTRL_IP      "192.168.0.40"
+#define RDMA_RACK_CNTRL_IP      "192.168.100.81"
 #define RDMA_RACK_CNTRL_PORT    9202
 #define RCNTRL_ENV_IP           "RDMA_RACK_CNTRL_IP"
 #define RCNTRL_ENV_PORT         "RDMA_RACK_CNTRL_PORT"
 
 /* other */
-#define RDMA_SERVER_IP          "192.168.0.40"
+#define RDMA_SERVER_IP          "192.168.100.81"
 #define RDMA_SERVER_PORT        9200
 #define DEBUG_MSG_MAXLEN        10000
 #define MAX_SERVERS             128
