@@ -12,6 +12,7 @@
 #include "base/cpu.h"
 #include "base/log.h"
 #include "base/sampler.h"
+#include "base/qestimator.h"
 
 #include "rmem/backend.h"
 #include "rmem/common.h"
@@ -41,6 +42,7 @@ unsigned long epoch_start_tsc;
 int epoch_tsc_shift;
 struct sampler epoch_sampler;
 struct sampler_ops epoch_sampler_ops;
+struct mov_p2estimator epoch_p2estimator;
 
 /**
  * All these are write-protected by the lock of the current LRU generation 
@@ -49,7 +51,6 @@ struct sampler_ops epoch_sampler_ops;
  * constants.
  */
 unsigned long evict_epoch_now __aligned(CACHE_LINE_SIZE) = 0;
-unsigned long evict_epoch_min = 0;
 int evict_gen_now = 0;
 
 /* get process memory from OS */
@@ -126,36 +127,16 @@ static __always_inline void update_evict_epoch_now(void)
 #endif
 }
 
-/*
- * Update evict_epoch_min to the oldest of the evicted pages in this round
- */
-static __always_inline void update_evict_epoch_min(
-    unsigned long *oldest_page_epoch_seen)
-{
-#ifdef LRU_EVICTION
-    assert(oldest_page_epoch_seen);
-    assert(*oldest_page_epoch_seen > 0);
-    if (*oldest_page_epoch_seen != UINT64_MAX) {
-        assert(*oldest_page_epoch_seen <= evict_epoch_now);
-        evict_epoch_min = *oldest_page_epoch_seen;
-        *oldest_page_epoch_seen = UINT64_MAX;
-        log_debug("evict_epoch_min updated to %lu", evict_epoch_min);
-    }
-#endif
-}
-
 /* Destiny of a page with LRU eviction */
-static __always_inline int get_page_next_gen_lru(struct rmpage_node* page, 
-    unsigned long* oldest_page_epoch)
+static __always_inline int get_page_next_gen_lru(struct rmpage_node* page)
 {
     int next_gen_id;
-    unsigned long pgepoch;
-    unsigned long slope;
-    unsigned long pgepoch_gap;
+    unsigned long pgepoch, pgepoch_gap;
+    unsigned long pgepoch_quantile;
+    int slope;
 
     /* check and sort pages */
     assert(evict_gen_mask);
-    assert(evict_epoch_now >= evict_epoch_min);
 
     /* get page's epoch; may get updated concurrently so just read it once */
     pgepoch = ACCESS_ONCE(page->epoch);
@@ -166,31 +147,36 @@ static __always_inline int get_page_next_gen_lru(struct rmpage_node* page,
      * bump it to higher list, either of which require resetting it */
     page->epoch = 0;
 
-#ifdef EPOCH_SAMPLER
-    /* record the page epoch gap and 
-     * no need to bump lists when sampling */
-    if (pgepoch != 0)
-        sampler_add(&epoch_sampler, &pgepoch_gap);
-    return 0;
-#endif
-
     next_gen_id = 0;
-    if (pgepoch && evict_epoch_now > evict_epoch_min) {
+    if (pgepoch)
+    {
         /* page epoch was set by a hint, indicating a more recent access 
          * after the page fault. figure out the next gen for this page 
          * depending on how recent the access was */
-        slope = pgepoch_gap * evict_ngens / (evict_epoch_now - evict_epoch_min);
-        next_gen_id = slope & evict_gen_mask;
+
+        /* add the gap to epoch to the quantile estimator */
+        mov_p2estimator_add(&epoch_p2estimator, pgepoch_gap);
+
+        pgepoch_quantile = mov_p2estimator_get_quantile(&epoch_p2estimator);
+        assert(pgepoch_quantile >= 0);
+        if (pgepoch_gap < pgepoch_quantile) {
+            slope = pgepoch_gap * (evict_ngens - 1) / pgepoch_quantile;
+            assert(slope >= 0 && slope <= evict_ngens - 1);
+            next_gen_id = (evict_ngens - slope);
+        }
     }
 
-    /* save the oldest valid page epoch that was seen on any page */
-    assert(oldest_page_epoch);
-    if (next_gen_id == 0)
-        if (pgepoch && pgepoch < *oldest_page_epoch)
-            *oldest_page_epoch = pgepoch;
+#ifdef EPOCH_SAMPLER
+    /* record the page epoch gap and 
+     * no need to bump lists when sampling */
+    if (pgepoch)
+        sampler_add(&epoch_sampler, &pgepoch_quantile);
+        // sampler_add(&epoch_sampler, &pgepoch_gap);
+    return 0;
+#endif
 
-    log_debug("page %lx had epoch %lu, epochs: %lu, %lu. next gen: %d", 
-        page->addr, pgepoch, evict_epoch_min, evict_epoch_now, next_gen_id);
+    log_debug("page %lx had epoch %lu, epoch now: %lu, next gen: %d", 
+        page->addr, pgepoch, evict_epoch_now, next_gen_id);
     return next_gen_id;
 }
 
@@ -222,11 +208,10 @@ static int __always_inline get_page_next_gen_sc(struct rmpage_node* page)
  * return the the number of the new generation. Or returns 0 if the page can 
  * be evicted
  **/
-static int __always_inline get_page_next_gen(struct rmpage_node* page,
-    unsigned long* oldest_page_epoch)
+static int __always_inline get_page_next_gen(struct rmpage_node* page)
 {
 #ifdef LRU_EVICTION
-    return get_page_next_gen_lru(page, oldest_page_epoch);
+    return get_page_next_gen_lru(page);
 #endif
 #ifdef SC_EVICTION
     return get_page_next_gen_sc(page);
@@ -287,7 +272,6 @@ static inline int find_candidate_pages(struct list_head* evict_list,
     struct rmpage_node *page, *next;
     struct page_list *evict_gen;
     struct list_head locked;
-    unsigned long oldest_page_epoch;
     bool out_of_gens = false;
     DEFINE_BITMAP(tmplist_used, evict_ngens);
 
@@ -295,7 +279,6 @@ static inline int find_candidate_pages(struct list_head* evict_list,
     gen_id = start_gen = -1;
     npages = npopped = 0;
     bitmap_init(tmplist_used, evict_ngens, 0);
-    oldest_page_epoch = UINT64_MAX;
     do {
 
         /* get current lru gen */
@@ -330,7 +313,7 @@ static inline int find_candidate_pages(struct list_head* evict_list,
             npopped++;
 
             /* check page's destiny */
-            pg_next_gen = get_page_next_gen(page, &oldest_page_epoch);
+            pg_next_gen = get_page_next_gen(page);
 
             if (pg_next_gen == 0) {
                 /* page good for eviction */
@@ -367,12 +350,10 @@ static inline int find_candidate_pages(struct list_head* evict_list,
         /* not enough candidates in this list, move to next list */
         assert(list_empty(&evict_gen->pages) && !evict_gen->npages);
         evict_gen_now = (gen_id + 1) % evict_ngens;
-        update_evict_epoch_min(&oldest_page_epoch);
         spin_unlock(&evict_gen->lock);
         continue;
 
 found_enough:
-        update_evict_epoch_min(&oldest_page_epoch);
         spin_unlock(&evict_gen->lock);
         break;
 
@@ -948,7 +929,12 @@ int eviction_init(void)
     sampler_init(&epoch_sampler, "epoch_distance_samples", SAMPLER_TYPE_POISSON,
         &epoch_sampler_ops, sizeof(unsigned long), 1000, 1000, 1);
 #endif
-    
+
+#ifdef LRU_EVICTION
+    /* init LRU epoch distance estimator */
+    mov_p2estimator_init(&epoch_p2estimator, 0.8, 1000);
+#endif
+
     return 0;
 }
 
