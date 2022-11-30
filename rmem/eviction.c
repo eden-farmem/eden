@@ -130,10 +130,9 @@ static __always_inline void update_evict_epoch_now(void)
 /* Destiny of a page with LRU eviction */
 static __always_inline int get_page_next_gen_lru(struct rmpage_node* page)
 {
-    int next_gen_id;
+    int next_gen_id, slope;
     unsigned long pgepoch, pgepoch_gap;
     unsigned long pgepoch_quantile;
-    int slope;
 
     /* check and sort pages */
     assert(evict_gen_mask);
@@ -162,7 +161,7 @@ static __always_inline int get_page_next_gen_lru(struct rmpage_node* page)
         if (pgepoch_gap < pgepoch_quantile) {
             slope = pgepoch_gap * (evict_ngens - 1) / pgepoch_quantile;
             assert(slope >= 0 && slope <= evict_ngens - 1);
-            next_gen_id = (evict_ngens - slope);
+            next_gen_id = (evict_ngens - (1 + slope));
         }
     }
 
@@ -170,7 +169,8 @@ static __always_inline int get_page_next_gen_lru(struct rmpage_node* page)
     /* record the page epoch gap and 
      * no need to bump lists when sampling */
     if (pgepoch)
-        sampler_add(&epoch_sampler, &pgepoch_quantile);
+        sampler_add(&epoch_sampler, &next_gen_id);
+        // sampler_add(&epoch_sampler, &pgepoch_quantile);
         // sampler_add(&epoch_sampler, &pgepoch_gap);
     return 0;
 #endif
@@ -528,13 +528,13 @@ static inline bool needs_write_back(pgflags_t flags)
 {
     /* page must be present at this point */
     assert(!!(flags & PFLAG_PRESENT));
+    /* if the page was unmapped, no need to write-back */
+    if (!(flags & PFLAG_REGISTERED))
+        return false;
 #ifdef WP_ON_READ
     /* DIRTY bit is only valid when WP is enabled */
     return !!(flags & PFLAG_DIRTY);
 #endif
-    /* if the page was unmapped, no need to write-back */
-    if (!(flags & PFLAG_REGISTERED))
-        return false;
     return true;
 }
 
@@ -972,14 +972,14 @@ void eviction_exit(void)
 void epoch_add_sample(void* buffer, void* sample)
 {
     assert(buffer && sample);
-    *(unsigned long*)buffer = *(unsigned long*)sample;
+    *(long*)buffer = *(long*)sample;
 }
 
 void epoch_sample_to_str(void* sample, char* sbuf, int max_len)
 {
     int n;
     assert(sbuf && sample);
-    n = snprintf(sbuf, max_len, "%lu", *(unsigned long*)sample);
+    n = snprintf(sbuf, max_len, "%ld", *(long*)sample);
     BUG_ON(n >= max_len);   /* truncated */
 }
 
