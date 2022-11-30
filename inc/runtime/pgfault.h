@@ -131,6 +131,7 @@ static __always_inline bool __is_fault_pending_eden(void* address, bool write)
 #endif
 
     // log_debug("fault hinted on %p. faulting? %d", address, !nofault);
+    RSTAT(ANNOT_HITS)++;
     return !nofault;
 }
 

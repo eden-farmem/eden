@@ -49,6 +49,9 @@ enum {
     RSTAT_MUNMAP_SIZE,
     RSTAT_MADV_SIZE,
 
+    /* rmem hints */
+    RSTAT_ANNOT_HITS,
+
     RSTAT_NR,   /* total number of counters */
 };
 

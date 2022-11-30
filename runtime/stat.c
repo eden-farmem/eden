@@ -93,6 +93,9 @@ static const char *rstat_names[] = {
     "rmalloc_size",
     "rmunmap_size",
     "rmadv_size",
+
+	/* rmem hints */
+	"annot_hits",
 };
 
 /* must correspond exactly to RSTAT_* enum definitions in rmem/stats.h */
