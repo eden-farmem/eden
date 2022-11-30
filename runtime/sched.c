@@ -682,7 +682,9 @@ static __always_inline void enter_schedule_with_fault(thread_t *th, fault_t* f)
     f->mr = mr;
 
 	/* start handling fault */
+#ifdef BLOCKING_HINTS
 again:
+#endif
     fstatus = handle_page_fault(k->bkend_chan_id, f, &nevicts_needed, 
         &kthr_owner_cbs);
     switch (fstatus) {
