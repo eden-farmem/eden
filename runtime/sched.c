@@ -206,6 +206,12 @@ static inline bool do_remote_memory_work(struct kthread *k)
 /* steal remote memory completions and waiting fault from other threads */
 static inline bool steal_remote_memory_work(struct kthread *l, struct kthread *r)
 {
+#ifdef BLOCKING_HINTS
+	/* disable stealing when Eden is blocking all the work 
+	 * on the core on a fault */
+	return false;
+#endif
+
 	int nstolen = 0;
 
 	assert_spin_lock_held(&l->lock);
@@ -676,6 +682,7 @@ static __always_inline void enter_schedule_with_fault(thread_t *th, fault_t* f)
     f->mr = mr;
 
 	/* start handling fault */
+again:
     fstatus = handle_page_fault(k->bkend_chan_id, f, &nevicts_needed, 
         &kthr_owner_cbs);
     switch (fstatus) {
@@ -685,7 +692,12 @@ static __always_inline void enter_schedule_with_fault(thread_t *th, fault_t* f)
 			goto schedule;
             break;
         case FAULT_IN_PROGRESS:
-            /* add to wait and yield to run another thread */
+#ifdef BLOCKING_HINTS
+			/* if we are blocking all work until the fault is resolved, 
+			 * keep trying until it is posted or resolved */
+			goto again;
+#endif
+            /* otherwise, add to wait and yield to run another thread */
             spin_lock(&k->pf_lock);
             list_add_tail(&k->fault_wait_q, &f->link);
             k->n_wait_q++;
@@ -713,6 +725,21 @@ eviction:
             evict_batch_size);
 
 schedule:
+#ifdef BLOCKING_HINTS
+	/* if we are blocking all work until the fault is resolved, 
+	 * keep checking for completions until it is resolved and return here */
+	assert(fstatus == FAULT_DONE || fstatus == FAULT_READ_POSTED);
+	if (fstatus == FAULT_READ_POSTED)
+		while(!kthr_check_for_completions(k, RMEM_MAX_COMP_PER_OP));
+	assert(th->state == THREAD_STATE_RUNNABLE);
+	th->state = THREAD_STATE_RUNNING;
+	th->stack_busy = false;
+	assert(__self == NULL);
+	__self = th;
+	preempt_enable();
+	RUNTIME_EXIT();
+	return;
+#endif
 	enter_schedule(th);
 }
 

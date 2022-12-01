@@ -67,7 +67,16 @@ int kthr_fault_done(fault_t* f)
 {
     /* release thread */
     assert(f->thread);
+#ifdef BLOCKING_HINTS
+    /* if we're blocking the core during the fault, we will be handling 
+     * completions from the faulting thread, so just set it to ready but 
+     * do not add it to the ready queue */
+	assert(f->thread->state == THREAD_STATE_SLEEPING);
+	f->thread->state = THREAD_STATE_RUNNABLE;
+#else
+    /* wake up thread and add it back to the ready queue */
     thread_ready_preempt_off(f->thread);
+#endif
 
     /* release fault */
     fault_done(f);
@@ -78,6 +87,11 @@ int kthr_fault_done(fault_t* f)
 int kthr_fault_read_steal_done(fault_t* f)
 {
     struct kthread *stealer;
+
+#ifdef BLOCKING_HINTS
+    /* can't be here for blocking rmem */
+    BUG();
+#endif
     
     /* ensure everything in order */
     stealer = myk();
