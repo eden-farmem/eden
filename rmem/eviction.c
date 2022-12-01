@@ -130,7 +130,7 @@ static __always_inline void update_evict_epoch_now(void)
 /* Destiny of a page with LRU eviction */
 static __always_inline int get_page_next_gen_lru(struct rmpage_node* page)
 {
-    int next_gen_id, slope;
+    long int next_gen_id, slope;
     unsigned long pgepoch, pgepoch_gap;
     unsigned long pgepoch_quantile;
 
@@ -175,7 +175,7 @@ static __always_inline int get_page_next_gen_lru(struct rmpage_node* page)
     return 0;
 #endif
 
-    log_debug("page %lx had epoch %lu, epoch now: %lu, next gen: %d", 
+    log_debug("page %lx had epoch %lu, epoch now: %lu, next gen: %ld", 
         page->addr, pgepoch, evict_epoch_now, next_gen_id);
     return next_gen_id;
 }
