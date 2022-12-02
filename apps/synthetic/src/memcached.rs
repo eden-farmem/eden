@@ -151,7 +151,9 @@ impl MemcachedProtocol {
     pub fn gen_request(i: usize, p: &Packet, buf: &mut Vec<u8>, tport: Transport) {
         // Use first 32 bits of randomness to determine if this is a SET or GET req
         let low32 = p.randomness & 0xffffffff;
-        let key = (p.randomness >> 32) % NVALUES;
+        // let key = (p.randomness >> 32) % NVALUES;
+        let key = p.zipfidx as u64;
+        // println!("key: {}", key);
 
         if low32 % 1000 < PCT_SET {
             MemcachedProtocol::set_request(key, i as u32, buf, tport);

@@ -7,8 +7,9 @@ fn main() {
     // Tell cargo to tell rustc to link the library.
     println!("cargo:rustc-link-lib=static=base");
     println!("cargo:rustc-link-lib=static=net");
+    println!("cargo:rustc-link-lib=static=rmem");
     println!("cargo:rustc-link-lib=static=runtime");
-    println!("cargo:rustc-flags=-L ../..");
+    println!("cargo:rustc-flags=-L ../.. -lrdmacm -libverbs");
 
     // The bindgen::Builder is the main entry point
     // to bindgen, and lets you build up options for
