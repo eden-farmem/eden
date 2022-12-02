@@ -25,6 +25,7 @@ use std::str::FromStr;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::fs;
 
 use clap::{App, Arg};
 use rand::distributions::{Exp, IndependentSample};
@@ -41,10 +42,12 @@ use payload::{Payload, SyntheticProtocol};
 pub struct Packet {
     work_iterations: u64,
     randomness: u64,
+    randomness_f64: f64,
     target_start: Duration,
     actual_start: Option<Duration>,
     completion_time_ns: AtomicU64,
     completion_time: Option<Duration>,
+    zipfidx: usize,
 }
 
 mod fakework;
@@ -52,6 +55,9 @@ use fakework::FakeWorker;
 
 mod memcached;
 use memcached::MemcachedProtocol;
+
+mod zipf;
+use zipf::ZipfDistribution;
 
 mod dns;
 use dns::DnsProtocol;
@@ -151,7 +157,10 @@ fn duration_to_ns(duration: Duration) -> u64 {
 /* Emit a log line with current time to indicate a checkpoint */
 fn checkpoint(label: &str) {
     let unix_time_now = SystemTime::now().duration_since(UNIX_EPOCH);
-    println!("Checkpoint {}:{}", label, unix_time_now.unwrap().as_secs());
+    let unix_time_secs = unix_time_now.unwrap().as_secs();
+    println!("Checkpoint {}:{}", label, unix_time_secs);
+    fs::write(label.to_owned() + "_time", unix_time_secs.to_string())
+        .expect("Could not save checkpoint");
 }
 
 fn run_linux_udp_server(backend: Backend, addr: SocketAddrV4, nthreads: usize, worker: FakeWorker) {
@@ -261,6 +270,7 @@ fn run_memcached_preload(
                 backend.spawn_thread(move || {
                     backend.sleep(Duration::from_secs(60));
                     if Arc::strong_count(&socket) > 1 {
+                        println!("Preload took long, terminating");
                         socket.shutdown();
                     }
                 });
@@ -486,10 +496,10 @@ fn run_client(
     nthreads: usize,
     protocol: Protocol,
     tport: Transport,
-    barrier_group: &mut Option<lockstep::Group>,
     schedules: &Vec<RequestSchedule>,
     index: usize,
-    ignore_result: Option<bool>
+    ignore_result: Option<bool>,
+    zipfs: f64
 ) -> bool {
     let mut rng = rand::thread_rng();
 
@@ -503,6 +513,7 @@ fn run_client(
                     last += sched.arrival.sample(&mut rng);
                     thread_packets.push(Packet {
                         randomness: rng.gen::<u64>(),
+                        randomness_f64: rng.gen::<f64>(),
                         target_start: Duration::from_nanos(last),
                         work_iterations: sched.service.sample(&mut rng),
                         ..Default::default()
@@ -524,12 +535,8 @@ fn run_client(
             (thread_packets, vec![None; packets_per_thread], socket)
         })
         .collect();
-    
-    eprintln!("reached barrier");
-    if let Some(ref mut g) = *barrier_group {
-        g.barrier();
-    }
-    checkpoint(format!("Sample{}Start", index).as_str());
+
+    checkpoint(format!("sample{}_start", index).as_str());
 
     let start_unix = SystemTime::now();
     let start = Instant::now();
@@ -572,10 +579,13 @@ fn run_client(
                     socket.shutdown();
                 }
             });
+            let zipf = ZipfDistribution::new(
+                memcached::NVALUES as usize, zipfs).unwrap();
 
             let mut payload = Vec::with_capacity(4096);
             for (i, packet) in packets.iter_mut().enumerate() {
                 payload.clear();
+                packet.zipfidx = zipf.next(packet.randomness_f64);
                 protocol.gen_request(i, packet, &mut payload, tport);
 
                 let mut t = start.elapsed();
@@ -614,7 +624,7 @@ fn run_client(
         })
         .collect();
 
-    checkpoint(format!("Sample{}End", index).as_str());
+    checkpoint(format!("sample{}_end", index).as_str());
 
     let mut packets: Vec<_> = send_packets
         .into_iter()
@@ -667,6 +677,7 @@ fn run_local(
                     last += sched.arrival.sample(&mut rng);
                     thread_packets.push(Packet {
                         randomness: rng.gen::<u64>(),
+                        randomness_f64: rng.gen::<f64>(),
                         target_start: Duration::from_nanos(last),
                         work_iterations: sched.service.sample(&mut rng),
                         ..Default::default()
@@ -852,20 +863,6 @@ fn main() {
                 .help("Mean number of work iterations per request"),
         )
         .arg(
-            Arg::with_name("barrier-peers")
-                .long("barrier-peers")
-                .requires("barrier-leader")
-                .takes_value(true)
-                .help("Number of peers in barrier group"),
-        )
-        .arg(
-            Arg::with_name("barrier-leader")
-                .long("barrier-leader")
-                .requires("barrier-peers")
-                .takes_value(true)
-                .help("Leader of barrier group"),
-        )
-        .arg(
             Arg::with_name("samples")
                 .long("samples")
                 .takes_value(true)
@@ -899,6 +896,13 @@ fn main() {
                 .takes_value(true)
                 .default_value("")
                 .help("loadshift spec"),
+        )        
+        .arg(
+            Arg::with_name("zipfs")
+                .long("zipfs")
+                .takes_value(true)
+                .default_value("0.1")
+                .help("Zipfs param"),
         )
         .get_matches();
 
@@ -930,17 +934,11 @@ fn main() {
         "spawner-server" | "runtime-client" | "work-bench" | "local-client" => Backend::Runtime,
         _ => unreachable!(),
     };
-    let mut barrier_group = matches.value_of("barrier-leader").map(|leader| {
-        lockstep::Group::from_hostname(
-            leader,
-            23232,
-            value_t_or_exit!(matches, "barrier-peers", usize),
-        )
-        .unwrap()
-    });
 
     let loadshift_spec = value_t_or_exit!(matches, "loadshift", String);
     let fakeworker = FakeWorker::create(matches.value_of("fakework").unwrap()).unwrap();
+    let zipfs = value_t_or_exit!(matches, "zipfs", f64);
+    println!("Zipfs Param {}", zipfs);
 
     match mode {
         "work-bench" => {
@@ -971,7 +969,7 @@ fn main() {
             backend.init_and_run(config, move || {
                 println!("Distribution, Target, Actual, Dropped, Never Sent, Median, 90th, 99th, 99.9th, 99.99th, Start");
                 if dowarmup {
-                    checkpoint("WarmupStart");
+                    checkpoint("warmup_start");
                     for packets_per_second in (1..3).map(|i| i * 100000) {
                         let sched = gen_classic_packet_schedule(
                             Duration::from_secs(1),
@@ -988,7 +986,7 @@ fn main() {
                             &sched,
                         );
                     }
-                    checkpoint("WarmupEnd");
+                    checkpoint("warmup_end");
                 }
                 let step_size = (packets_per_second - start_packets_per_second) / samples;
                 for j in 1..=samples {
@@ -1013,14 +1011,13 @@ fn main() {
         "linux-client" | "runtime-client" => {
             backend.init_and_run(config, move || {
                 println!("Distribution, Target, Actual, Dropped, Never Sent, Median, 90th, 99th, 99.9th, 99.99th, Start");
-                match (proto, &barrier_group) {
-                    (_, Some(lockstep::Group::Client(ref _c))) => (),
-                    (Protocol::Memcached, _) => {
-                        checkpoint("PreloadStart");
+                match proto {
+                    Protocol::Memcached => {
+                        checkpoint("preload_start");
                         if !run_memcached_preload(backend, Transport::Tcp, addr, nthreads) {
                             panic!("Could not preload memcached");
                         }
-                        checkpoint("PreloadEnd");
+                        checkpoint("preload_end");
                         backend.sleep(Duration::from_secs(30));
                     },
                     _ => (),
@@ -1034,10 +1031,10 @@ fn main() {
                         nthreads,
                         proto,
                         tport,
-                        &mut barrier_group,
                         &sched,
                         0,
-                        None
+                        None,
+                        zipfs
                     );
                     return;
                 }
@@ -1061,10 +1058,10 @@ fn main() {
                             nthreads,
                             proto,
                             tport,
-                            &mut barrier_group,
                             &sched,
                             0,
-                            Some(true)
+                            Some(true),
+                            0.1         // Randomized warmup
                         );
                         backend.sleep(Duration::from_secs(5));
                     }
@@ -1089,14 +1086,11 @@ fn main() {
                         nthreads,
                         proto,
                         tport,
-                        &mut barrier_group,
                         &sched,
                         j,
-                        None
+                        None,
+                        zipfs
                     );
-                }
-                if let Some(ref mut g) = barrier_group {
-                    g.barrier();
                 }
             });
         }
