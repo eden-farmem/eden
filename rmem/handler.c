@@ -286,7 +286,7 @@ static inline fault_t* read_uffd_fault()
  */
 static void* rmem_handler(void *arg) 
 {
-    bool need_eviction, unblocked;
+    bool need_eviction, unblocked, work_done;
     unsigned long long pressure;
     fault_t *fault, *next;
     int nevicts, nevicts_needed, batch, r;
@@ -294,7 +294,7 @@ static void* rmem_handler(void *arg)
     struct region_t* mr;
     assert(arg != NULL);        /* expecting a hthread_t */
     my_hthr = (hthread_t*) arg; /* save our hthread_t */
-    unsigned long now_tsc;
+    unsigned long now_tsc, last_tsc;
 
     /* init */
     r = thread_init_perthread();    /* for tcache support */
@@ -304,10 +304,22 @@ static void* rmem_handler(void *arg)
     my_hthr->n_wait_q = 0;
 
     /* do work */
-    while(!my_hthr->stop) {
-        need_eviction = false;
-        nevicts = nevicts_needed = 0;
+    last_tsc = 0;
+    while(!my_hthr->stop)
+    {
+        /* account time spent in last iteration */
         now_tsc = rdtsc();
+        if (last_tsc) {
+            RSTAT(TOTAL_CYCLES) += now_tsc - last_tsc;
+            if (work_done)
+                RSTAT(WORK_CYCLES) += now_tsc - last_tsc;
+        }
+        last_tsc = now_tsc;
+
+        /* reset every iteration */
+        need_eviction = false;
+        work_done = false;
+        nevicts = nevicts_needed = 0;
 
         /* pick faults from the backlog (wait queue) first */
         fault = list_top(&my_hthr->fault_wait_q, fault_t, link);
@@ -322,12 +334,14 @@ static void* rmem_handler(void *arg)
                     assert(my_hthr->n_wait_q > 0);
                     my_hthr->n_wait_q--;
                     fault_done(fault);
+                    work_done = true;
                     break;
                 case FAULT_READ_POSTED:
                     log_debug("%s - done, released from wait", FSTR(fault));
                     list_del_from(&my_hthr->fault_wait_q, &fault->link);
                     assert(my_hthr->n_wait_q > 0);
                     my_hthr->n_wait_q--;
+                    work_done = true;
                     if (nevicts_needed > 0)
                         goto eviction;
                     break;
@@ -364,6 +378,7 @@ static void* rmem_handler(void *arg)
             if (fault->is_read)         RSTAT(FAULTS_R)++;
             if (fault->is_write)        RSTAT(FAULTS_W)++;
             if (fault->is_wrprotect)    RSTAT(FAULTS_WP)++;
+            work_done = true;
 
             /* find region */
             mr = get_region_by_addr_safe(fault->page);
@@ -419,11 +434,14 @@ eviction:
                     batch = EVICTION_MAX_BATCH_SIZE;
                 nevicts += do_eviction(my_hthr->bkend_chan_id, &hthr_cbs, batch);
             } while(nevicts < nevicts_needed);
+            work_done = true;
         }
 
         /* handle read/write completions from the backend */
-        rmbackend->check_for_completions(my_hthr->bkend_chan_id, &hthr_cbs, 
+        r = rmbackend->check_for_completions(my_hthr->bkend_chan_id, &hthr_cbs, 
             RMEM_MAX_COMP_PER_OP, NULL, NULL);
+        if (r > 0)
+            work_done = true;
 
         /* check for remote memory dump */
         if (unlikely(dump_rmem_state_and_exit)) {

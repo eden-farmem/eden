@@ -67,7 +67,6 @@ static const char *rstat_names[] = {
     "uffd_retries",
     "rdahead_ops",
     "rdahead_pages",
-	"backend_wait_cycles",
 
     /* eviction stats */
     "evict_ops",
@@ -84,15 +83,20 @@ static const char *rstat_names[] = {
     "net_reads",
     "net_writes",
 
-    /* rmem work stealing */
+    /* work stealing */
     "steals_ready",
     "steals_wait",
     "wait_retries",
 
-    /* rmem memory accounting */
+    /* memory accounting */
     "rmalloc_size",
     "rmunmap_size",
     "rmadv_size",
+
+    /* time accounting */
+    "total_cycles",		/* only valid for handler cores */
+    "work_cycles",		/* only valid for handler cores */
+	"backend_wait_cycles",
 
 	/* rmem hints */
 	"annot_hits",

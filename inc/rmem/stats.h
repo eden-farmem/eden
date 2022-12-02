@@ -22,7 +22,6 @@ enum {
     RSTAT_UFFD_RETRIES,
     RSTAT_RDAHEADS,
     RSTAT_RDAHEAD_PAGES,
-    RSTAT_BACKEND_WAIT_CYCLES,  /* time wasted because backend is busy  */
 
     /* eviction stats */
     RSTAT_EVICTS,
@@ -39,15 +38,20 @@ enum {
     RSTAT_NET_READ,
     RSTAT_NET_WRITE,
 
-    /* rmem work stealing */
+    /* work stealing */
     RSTAT_READY_STEALS,
     RSTAT_WAIT_STEALS,
     RSTAT_WAIT_RETRIES,         /* time wasted checking on concurrent faults */
 
-    /* rmem memory accounting */
+    /* memory accounting */
     RSTAT_MALLOC_SIZE,
     RSTAT_MUNMAP_SIZE,
     RSTAT_MADV_SIZE,
+
+    /* time accounting */
+    RSTAT_TOTAL_CYCLES,
+    RSTAT_WORK_CYCLES,
+    RSTAT_BACKEND_WAIT_CYCLES,  /* time wasted because backend is busy  */
 
     /* rmem hints */
     RSTAT_ANNOT_HITS,
