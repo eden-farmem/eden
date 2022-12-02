@@ -262,7 +262,7 @@ static void* stat_worker_local(void *arg)
 	FILE* rfp = fopen(rstatsfile, "w");
 
 	while (true) {
-		sleep(STAT_INTERVAL_SECS);
+		__time_delay_us(STAT_INTERVAL_SECS * 1000000);
 
 		/* print scheduler stats */
 		now = time(NULL);
