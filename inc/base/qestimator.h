@@ -121,8 +121,8 @@ static inline void p2estimator_add(struct p2estimator *e, double value)
     for (i = 1; i <= 3; i++)
     {
         d = e->ns[i] - e->n[i];
-        if (d >= 1 && (e->n[i + 1] - e->n[i]) > 1 
-            || d <= -1 && (e->n[i - 1] - e->n[i]) < -1)
+        if ((d >= 1 && (e->n[i + 1] - e->n[i]) > 1)
+            || (d <= -1 && (e->n[i - 1] - e->n[i]) < -1))
         {
             dint = d >= 0 ? 1 : -1;
             qs = p2estimator_parabolic(e, i, dint);
