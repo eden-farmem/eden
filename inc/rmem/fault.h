@@ -34,8 +34,9 @@ typedef struct fault {
 
     uint8_t rdahead_max;        /* suggested max read-ahead */
     uint8_t rdahead;            /* actual read-ahead locked for this fault */
+    uint8_t evict_prio;         /* suggested eviction priority for the page */
     uint8_t posted_chan_id;
-    unsigned int unused2;
+    uint8_t unused2[3];
 
     /* associated resources */
     unsigned long page;
@@ -49,15 +50,17 @@ typedef struct fault {
 BUILD_ASSERT(sizeof(fault_t) % CACHE_LINE_SIZE == 0);
 BUILD_ASSERT(FAULT_MAX_RDAHEAD_SIZE <= UINT8_MAX);   /* due to rdahead */
 BUILD_ASSERT(RMEM_MAX_CHANNELS <= UINT8_MAX);   /* due to posted_chan_id */
+BUILD_ASSERT(EVICTION_MAX_PRIO <= UINT8_MAX);    /* due to evict_prio */
 
 /* fault object as readable string - for debug tracking */
 #define __FAULT_STR_LEN 100
 extern __thread char fstr[__FAULT_STR_LEN];
 static inline char* fault_to_str(fault_t* f) {
-    snprintf(fstr, __FAULT_STR_LEN, "F[%p:%s:%s:%lx:%d]", f,
+    snprintf(fstr, __FAULT_STR_LEN, "F[%p:%s:%s:%s:%lx:%dr:%dp]", f,
         f->from_kernel ? "kern" : "user",
         f->is_read ? "r" : (f->is_write ? "w" : "wp"),
-        f->page, f->rdahead);
+        f->stolen_from_cq ? "s" : "ns",
+        f->page, f->rdahead, f->evict_prio);
     return fstr;
 }
 #define FSTR(f) fault_to_str(f)

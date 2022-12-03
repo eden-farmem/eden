@@ -20,22 +20,25 @@
 #error "REMOTE_MEMORY" must be defined for hints
 #endif
 
-#define hint_fault(addr,write,rd)                           \
+/* Internal API */
+#define hint_fault(addr,write,rd,prio)                      \
     do {                                                    \
         if (__is_fault_pending(addr, write))                \
-            thread_park_on_fault(addr, write, rd);          \
+            thread_park_on_fault(addr, write, rd, prio);    \
     } while (0);
-#define hint_read_fault_rdahead(addr,rd)    hint_fault(addr, false, rd)
-#define hint_write_fault_rdahead(addr,rd)   hint_fault(addr, true,  rd)
-#define hint_read_fault(addr)               hint_fault(addr, false, 0)
-#define hint_write_fault(addr)              hint_fault(addr, true,  0)
 #else
-#define hint_fault(addr,write,rd)           do {} while(0)
-#define hint_read_fault_rdahead(addr,rd)    do {} while(0)
-#define hint_write_fault_rdahead(addr,rd)   do {} while(0)
-#define hint_read_fault(addr)               do {} while(0)
-#define hint_write_fault(addr)              do {} while(0)
+#define hint_fault(addr,write,rd)           do {} while(0)  /* no-op */
 #endif
+
+/* API */
+#define hint_read_fault(addr)               hint_fault(addr, false, 0,  0)
+#define hint_write_fault(addr)              hint_fault(addr, true,  0,  0)
+#define hint_read_fault_rdahead(addr,rd)    hint_fault(addr, false, rd, 0)
+#define hint_write_fault_rdahead(addr,rd)   hint_fault(addr, true,  rd, 0)
+#define hint_read_fault_prio(addr,pr)       hint_fault(addr, false, 0,  pr)
+#define hint_write_fault_prio(addr,rd)      hint_fault(addr, true,  0,  pr)
+#define hint_read_fault_all(addr,rd,pr)     hint_fault(addr, false, rd, pr)
+#define hint_write_fault_all(addr,rd,pr)    hint_fault(addr, true,  rd, pr)
 
 /* back-compat API */
 #define possible_read_fault_on 	            hint_read_fault

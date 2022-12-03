@@ -41,6 +41,15 @@ static int connect2server(int index);
 
 /*************** RDMA connection setup help *********************************/
 
+/* save a number to file */
+void __save_number_to_file(char* fname, unsigned long val)
+{
+    FILE* fp = fopen(fname, "w");
+    fprintf(fp, "%lu", val);
+    fflush(fp);
+    fclose(fp);
+}
+
 /** 
  * Listen on RCNTRL recv cq for slab add/remove and other events (sync) 
  */
@@ -375,6 +384,7 @@ int on_event(struct rdma_cm_event *event) {
     else {
         log_err("on_event: %d status: %d\n", event->event, event->status);
         log_err("Unknown event: is RDMA server running?");
+        __save_number_to_file("eden_rdma_server_error", getpid());
         BUG();
     }
     return r;

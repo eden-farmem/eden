@@ -21,7 +21,7 @@ int stealer_write_back_completed(struct region_t* mr, unsigned long addr, size_t
  */
 
 struct page_list {
-    struct list_head pages;
+    struct list_head pages[EVICTION_MAX_PRIO];
     size_t npages;
     spinlock_t lock;
 };

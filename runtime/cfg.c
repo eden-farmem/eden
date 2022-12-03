@@ -222,8 +222,17 @@ static int parse_rmem_backend_flag(const char *name, const char *val)
 
 static int parse_rmem_local_memory_flag(const char *name, const char *val)
 {
-	int ret = str_to_long(val, (long int *)&local_memory);
-	return ret;
+	int ret;
+	long tmp;
+
+	ret = str_to_long(val, &tmp);
+	if (ret || tmp <= 0) {
+		log_err("Expecting a positive number for %s", name);
+		return ret;
+	}
+
+	local_memory = tmp;
+	return 0;
 }
 
 static int parse_rmem_evict_thr_flag(const char *name, const char *val)
@@ -242,23 +251,49 @@ static int parse_rmem_evict_thr_flag(const char *name, const char *val)
 
 static int parse_rmem_evict_batch_size_flag(const char *name, const char *val)
 {
-	int ret = str_to_long(val, (long int *)&evict_batch_size);
-	return ret;
+	long tmp;
+	int ret;
+
+	ret = str_to_long(val, &tmp);
+	if (ret || !(tmp > 0 && tmp <= EVICTION_MAX_BATCH_SIZE)) {
+		log_err("Expecting [1, %d) for %s", EVICTION_MAX_BATCH_SIZE, name);
+		return -EINVAL;
+	}
+
+	evict_batch_size = tmp;
+	return 0;
 }
 
 static int parse_rmem_evict_ngens_flag(const char *name, const char *val)
 {
-	int ret = str_to_long(val, (long int *)&evict_ngens);
-	if (ret)
-		return ret;
-
-	if (evict_ngens <= 0 || evict_ngens > EVICTION_MAX_GENS 
-		|| (evict_ngens & (evict_ngens - 1)))
+	int ret;
+	long tmp;
+	
+	ret = str_to_long(val, &tmp);
+	if (ret || !(tmp > 0 && tmp <= EVICTION_MAX_GENS && (tmp & (tmp - 1)) == 0))
 	{
-		log_err("evict_ngens must be in [1,%d] and a power of 2; " 
-			"provided: %d", EVICTION_MAX_GENS, evict_ngens);
+		log_err("%s must be in [1,%d] and a power of 2; " 
+			"provided: %ld", name, EVICTION_MAX_GENS, tmp);
 		return -EINVAL;
 	}
+
+	evict_ngens = tmp;
+	return 0;
+}
+
+static int parse_rmem_evict_nprio_flag(const char *name, const char *val)
+{
+	int ret;
+	long tmp;
+	
+	ret = str_to_long(val, &tmp);
+	if (ret || !(tmp > 0 && tmp <= EVICTION_MAX_PRIO)) {
+		log_err("%s must be in [1,%d]; provided: %ld", 
+			name, EVICTION_MAX_GENS, tmp);
+		return -EINVAL;
+	}
+
+	evict_nprio = tmp;
 	return 0;
 }
 
@@ -334,6 +369,7 @@ static const struct cfg_handler cfg_handlers[] = {
 	{ "rmem_evict_threshold", parse_rmem_evict_thr_flag, false },
 	{ "rmem_evict_batch_size", parse_rmem_evict_batch_size_flag, false },
 	{ "rmem_evict_ngens", parse_rmem_evict_ngens_flag, false },
+	{ "rmem_evict_nprio", parse_rmem_evict_nprio_flag, false },
 };
 
 /**

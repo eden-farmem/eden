@@ -17,6 +17,7 @@ extern uint64_t local_memory;
 extern double eviction_threshold;
 extern int evict_batch_size;
 extern int evict_ngens;
+extern int evict_nprio;
 
 /* global state */
 extern int nhandlers;

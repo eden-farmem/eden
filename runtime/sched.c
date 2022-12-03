@@ -751,8 +751,9 @@ schedule:
  * @address: fault address
  * @write: whether the fault was due to a write operation
  * @rdahead: how many pages to read-ahead with the faulting page
+ * @evprio: suggested eviction priority for the faulting page
  */
-void thread_park_on_fault(void* address, bool write, int rdahead)
+void thread_park_on_fault(void* address, bool write, int rdahead, int evprio)
 {
     struct fault* fault;
 	thread_t *myth;
@@ -760,6 +761,9 @@ void thread_park_on_fault(void* address, bool write, int rdahead)
     /* check pre-conditions */
     BUG_ON(!rmem_enabled);
     BUG_ON(!rmem_hints_enabled);
+	assert(rdahead <= FAULT_MAX_RDAHEAD_SIZE);		/* read ahead limit */
+	assert(evprio >= 0 && evprio < evict_nprio); 	/* evict priority limit */
+
 
 	/* entering runtime; note that we'd still running in the current thread's 
 	 * stack frame until we get to jmp_runtime but we signal entering runtime 
@@ -789,8 +793,8 @@ void thread_park_on_fault(void* address, bool write, int rdahead)
     fault->is_write = write;
     fault->from_kernel = false;
     fault->rdahead_max = rdahead;
-	BUG_ON(rdahead > FAULT_MAX_RDAHEAD_SIZE);	/* read ahead limit */
     fault->rdahead = 0;
+	fault->evict_prio = evprio;
     fault->thread = myth;
     log_debug("fault posted at %lx write %d", fault->page, write);
 

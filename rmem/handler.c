@@ -219,6 +219,7 @@ static inline fault_t* read_uffd_fault()
                 fault->from_kernel = true;
                 fault->rdahead_max = 0;   /*no readaheads for kernel faults*/
                 fault->rdahead  = 0;
+                fault->evict_prio = 0;
                 /* NOTE: can also save thread id: message.arg.pagefault.feat.ptid */
                 return fault;
             case UFFD_EVENT_FORK:

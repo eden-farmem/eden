@@ -20,6 +20,7 @@ struct rmpage_node {
     struct region_t *mr;
     unsigned long addr;
     struct list_node link;
+    uint8_t evict_prio;
 
     /* time epoch when page was last accessed. this is set by hints and consumed 
      * by the eviction routines to make smarter eviction choices. we treat it 
@@ -30,6 +31,7 @@ struct rmpage_node {
     unsigned long epoch;
 };
 typedef struct rmpage_node rmpage_node_t;
+BUILD_ASSERT(EVICTION_MAX_PRIO <= UINT8_MAX);   /* due to evict_prio */
 
 /* Page node pool (tcache) support */
 DECLARE_PERTHREAD(struct tcache_perthread, rmpage_node_pt);

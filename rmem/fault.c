@@ -145,7 +145,8 @@ static inline void fault_alloc_page_nodes(fault_t* f)
     /* add to the most recent page list */
     evict_gen = &evict_gens[get_highest_evict_gen()];
     spin_lock(&evict_gen->lock);
-    list_append_list(&evict_gen->pages, &tmp);
+    assert(f->evict_prio >= 0 && f->evict_prio < evict_nprio);
+    list_append_list(&evict_gen->pages[f->evict_prio], &tmp);
     evict_gen->npages += (1 + f->rdahead);
     spin_unlock(&evict_gen->lock);
 }
