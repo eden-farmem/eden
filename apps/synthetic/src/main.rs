@@ -643,7 +643,7 @@ fn run_client(
     } else {
         let mut start = Duration::from_nanos(100_000_000);
         packets.sort_by_key(|p| p.target_start);
-        schedules.iter().all(|sched| {
+        let mut process_schedule = |sched: &RequestSchedule| {
             let last_index = packets
                 .iter()
                 .position(|p| p.target_start >= start + sched.runtime)
@@ -654,7 +654,12 @@ fn run_client(
             packets = rest;
             start += sched.runtime;
             res
-        });
+        };
+        eprintln!("found {} schedules; processing just the last schedule", schedules.len());
+        match schedules.last() {
+            Some(sched)   => { process_schedule(sched); },
+            None          => { eprintln!("ERROR! no schedules to process!"); },
+        }
     };
     true
 }
