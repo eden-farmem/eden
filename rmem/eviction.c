@@ -279,12 +279,11 @@ int drain_tmp_lists(struct list_head* evict_list, int max_drain,
 static inline int find_candidate_pages(struct list_head* evict_list,
     int batch_size)
 {
-    int npages, npopped, prio, ntmp;
+    int npages, npopped, prio;
     int start_gen, gen_id, pg_next_gen;;
     pgflags_t flags, oldflags;
     struct rmpage_node *page, *next;
     struct page_list *evict_gen;
-    struct list_head locked;
     bool out_of_gens = false;
     DEFINE_BITMAP(tmplist_used, evict_ngens);
 
@@ -332,6 +331,8 @@ static inline int find_candidate_pages(struct list_head* evict_list,
                     break;
 
                 /* removed a page */
+                log_debug("popped page %lx from gen %d prio %d", 
+                    page->addr, gen_id, prio);
                 assert(evict_gen->npages > 0);
                 evict_gen->npages--;
                 npopped++;

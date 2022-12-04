@@ -27,7 +27,7 @@
             thread_park_on_fault(addr, write, rd, prio);    \
     } while (0);
 #else
-#define hint_fault(addr,write,rd)           do {} while(0)  /* no-op */
+#define hint_fault(addr,write,rd,prio)      do {} while(0)
 #endif
 
 /* API */
@@ -96,7 +96,6 @@ static __always_inline bool __is_fault_pending_eden(void* address, bool write)
     page_present = !!(pflags & PFLAG_PRESENT);
     page_dirty = !!(pflags & PFLAG_DIRTY);
     nofault = page_dirty || (!write && page_present);
-    log_debug("fault hinted on %p. faulting? %d", address, !nofault);
 
     /* regardless of fault or not, this check is a signal that page was going 
      * to be accessed. see if eviction wants to use that information */
