@@ -12,6 +12,7 @@ set -e
 usage="\n
 -d, --debug \t\t build debug\n
 -o, --onetime \t\t first time (sets up rust and cargo env)\n
+-f, --force \t\t force rebuild everything\n
 -g, --gdb \t\t build with symbols\n
 -h, --help \t\t this usage information message\n"
 
@@ -36,6 +37,10 @@ case $i in
     GDB=1
     GDBFLAG="GDB=1"
     GDBFLAG2="--enable-gdb"
+    ;;
+
+    -f|--force)
+    FORCE=1
     ;;
 
     -h | --help)
@@ -74,7 +79,9 @@ fi
     
 pushd ${SCRIPT_DIR}
 source $HOME/.cargo/env
-cargo clean
+if [[ $FORCE ]]; then
+    cargo clean
+fi
 CARGO_NET_GIT_FETCH_WITH_CLI=true cargo update
 cargo build --release
 popd
