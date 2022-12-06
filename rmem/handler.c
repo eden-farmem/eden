@@ -32,6 +32,10 @@ __thread int current_stealing_kthr_id = -1;
 __thread unsigned long current_blocking_page = 0;
 __thread bool current_page_unblocked = false;
 
+/* handler global state */
+struct sampler fault_sampler;
+struct sampler_ops fault_sampler_ops;
+
 /* check if a fault already exists in the wait queue */
 bool does_fault_exist_in_wait_q(struct fault *fault)
 {
@@ -176,6 +180,7 @@ static inline fault_t* read_uffd_fault()
     struct fault* fault;
     unsigned long long addr, flags, size;
     struct region_t* mr;
+    struct fault_sample fs;
 
     struct pollfd evt = { .fd = userfault_fd, .events = POLLIN };
     if (poll(&evt, 1, 0) > 0) {
@@ -220,7 +225,14 @@ static inline fault_t* read_uffd_fault()
                 fault->rdahead_max = 0;   /*no readaheads for kernel faults*/
                 fault->rdahead  = 0;
                 fault->evict_prio = 0;
-                /* NOTE: can also save thread id: message.arg.pagefault.feat.ptid */
+#ifdef FAULT_SAMPLER
+                /* record the fault information if sampling */
+                fs.tstamp = time(NULL);
+                fs.ip = message.ip;
+                fs.addr = addr;
+                fs.kind = flags;
+                sampler_add(&fault_sampler, &fs);
+#endif
                 return fault;
             case UFFD_EVENT_FORK:
                 /* fork not supported */
@@ -450,9 +462,12 @@ eviction:
             unreachable();
         }
 
+        /* check for any sampler dumps */
 #ifdef EPOCH_SAMPLER
-        /* check for any sampler dump */
         sampler_dump_provide_tsc(&epoch_sampler, 32, now_tsc);
+#endif
+#ifdef FAULT_SAMPLER
+        sampler_dump_provide_tsc(&fault_sampler, 64, now_tsc);
 #endif
     }
 
@@ -511,4 +526,32 @@ struct bkend_completion_cbs hthr_cbs = {
 struct bkend_completion_cbs hthr_stealer_cbs = {
     .read_completion = hthr_fault_read_steal_done,
     .write_completion = stealer_write_back_completed
+};
+
+/**
+ * Kernel fault sampling functions
+ */
+void fault_add_sample(void* buffer, void* sample)
+{
+    /* note: shallow copy */
+    assert(buffer && sample);
+    memcpy(buffer, sample, sizeof(struct fault_sample));
+}
+
+void fault_sample_to_str(void* sample, char* sbuf, int max_len)
+{
+    int n;
+    struct fault_sample* fs;
+
+    assert(sbuf && sample);
+    fs = (struct fault_sample*) sample;
+    n = snprintf(sbuf, max_len, "%lu,%lx,%d,%lx", fs->tstamp, fs->ip,
+        fs->kind, fs->addr);
+    BUG_ON(n >= max_len);   /* truncated */
+}
+
+/* epoch sampler ops */
+struct sampler_ops fault_sampler_ops = {
+    .add_sample = fault_add_sample,
+    .sample_to_str = fault_sample_to_str,
 };

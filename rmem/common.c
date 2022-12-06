@@ -87,6 +87,13 @@ int rmem_common_init()
     /* init lru lists and other eviction state */
     eviction_init();
 
+#ifdef FAULT_SAMPLER
+    /* init fault sampler */
+    BUG_ON(nhandlers > 1);  /* not thread-safe yet */
+    sampler_init(&fault_sampler, "fault_samples", SAMPLER_TYPE_POISSON,
+        &fault_sampler_ops, sizeof(struct fault_sample), 1000, 1000, 1);
+#endif
+
     /* kick off rmem handlers - need at least one for kernel faults */
     BUG_ON(nhandlers <= 0);
     BUG_ON(nhandlers > (RMEM_HANDLER_CORE_HIGH - RMEM_HANDLER_CORE_LOW + 1));
@@ -159,6 +166,11 @@ int rmem_common_destroy()
 
     /* destroy fault tcache pool */
     fault_tcache_destroy();
+
+#ifdef FAULT_SAMPLER
+    /* free fault sampler */
+    sampler_destroy(&fault_sampler);
+#endif
 
     /* ensure all regions freed */
     struct region_t *mr = NULL;

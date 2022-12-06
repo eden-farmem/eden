@@ -27,6 +27,16 @@ typedef struct hthread {
 } hthread_t __aligned(CACHE_LINE_SIZE);
 extern __thread struct hthread *my_hthr;
 
+/* fault sample def */
+struct fault_sample {
+    unsigned long tstamp;
+    unsigned long ip;
+    unsigned long addr;
+    int kind;
+};
+extern struct sampler fault_sampler;
+extern struct sampler_ops fault_sampler_ops;
+
 /* methods */
 hthread_t* new_rmem_handler_thread(int pincore_id);
 int stop_rmem_handler_thread(hthread_t* hthr);
