@@ -798,6 +798,7 @@ void thread_park_on_fault(void* address, bool write, int rdahead)
 	enter_schedule_with_fault(myth, fault);
 
     /* fault serviced when we get back here */
+	assert(!__is_fault_pending(address, write, false));
     assert(NOT_IN_RUNTIME());
 }
 
