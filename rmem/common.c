@@ -92,7 +92,7 @@ int rmem_common_init()
     BUG_ON(nhandlers > (RMEM_HANDLER_CORE_HIGH - RMEM_HANDLER_CORE_LOW + 1));
     handlers = malloc(nhandlers*sizeof(hthread_t*));
     for (i = 0; i < nhandlers; i++)
-        handlers[i] = new_rmem_handler_thread(RMEM_HANDLER_CORE_LOW + i);
+        handlers[i] = new_rmem_handler_thread(RMEM_HANDLER_CORE_HIGH - i);
 
     return 0;
 }
