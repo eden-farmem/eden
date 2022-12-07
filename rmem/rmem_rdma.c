@@ -653,9 +653,9 @@ int rdma_post_read(int chan_id, fault_t* f)
         return EAGAIN;
 
     /* infer remote addr */
-    offset = f->page - f->mr->addr;
+    offset = FBASE(f) - f->mr->addr;
     remote_addr = f->mr->remote_addr + offset;
-    size = CHUNK_SIZE * (1 + f->rdahead);
+    size = FSIZE(f);
     assert(offset + size <= f->mr->size);
 
     /* alloc data buf */
@@ -669,7 +669,7 @@ int rdma_post_read(int chan_id, fault_t* f)
     conn->read_reqs[req_id].busy = 1;
     conn->read_reqs[req_id].index = req_id;
     conn->read_reqs[req_id].local_addr = (unsigned long) local_addr;
-    conn->read_reqs[req_id].orig_local_addr = f->page;
+    conn->read_reqs[req_id].orig_local_addr = FBASE(f);
     conn->read_reqs[req_id].remote_addr = remote_addr;
     conn->read_reqs[req_id].lkey = global_ctx->bkend_buf_pool_mr->lkey;
     conn->read_reqs[req_id].rkey = conn->server->rdmakey;
@@ -796,7 +796,7 @@ int rdma_check_cq(int chan_id, struct bkend_completion_cbs* cbs, int max_cqe,
             req = (struct request*)(uintptr_t) wc[i].wr_id;
             assert(req && req->fault && req->fault->bkend_buf);
             assert(req->busy);
-            assert(req->size == (1 + req->fault->rdahead) * CHUNK_SIZE);
+            assert(req->size == FSIZE(req->fault));
             log_debug("%s - RDMA READ completed successfully", FSTR(req->fault));
            
             /* call completion hook */

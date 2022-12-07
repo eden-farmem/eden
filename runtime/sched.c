@@ -788,7 +788,7 @@ void thread_park_on_fault(void* address, bool write, int rdahead, int evprio)
     /* check pre-conditions */
     BUG_ON(!rmem_enabled);
     BUG_ON(!rmem_hints_enabled);
-	assert(rdahead <= FAULT_MAX_RDAHEAD_SIZE);		/* read ahead limit */
+	assert(abs(rdahead) <= FAULT_MAX_RDAHEAD_SIZE);		/* read ahead limit */
 	assert(evprio >= 0 && evprio < evict_nprio); 	/* evict priority limit */
 
 
@@ -819,7 +819,8 @@ void thread_park_on_fault(void* address, bool write, int rdahead, int evprio)
     fault->is_read = !write;
     fault->is_write = write;
     fault->from_kernel = false;
-    fault->rdahead_max = rdahead;
+	fault->invert_rdahead = (rdahead < 0);
+    fault->rdahead_max = abs(rdahead);
     fault->rdahead = 0;
 	fault->evict_prio = evprio;
     fault->thread = myth;

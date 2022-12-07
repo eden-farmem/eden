@@ -96,8 +96,9 @@ int hthr_fault_read_steal_done(fault_t* f)
     assert(f->thread);
     thread_ready_safe(owner, f->thread);
 
-    /* check if this is the target blocking page */
-    if (f->page == current_blocking_page)
+    /* check if this fault was locking the target blocking page */
+    if (current_blocking_page >= FBASE(f) &&
+            current_blocking_page < FBASE(f) + FSIZE(f))
         current_page_unblocked = true;
 
     /* release fault */

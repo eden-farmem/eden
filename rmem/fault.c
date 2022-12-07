@@ -119,7 +119,7 @@ int __always_inline get_highest_evict_gen(void)
  * nodes to the eviction lists */
 static inline void fault_alloc_page_nodes(fault_t* f)
 {
-    int i;
+    unsigned long addr;
     struct rmpage_node* pgnode;
     struct list_head tmp;
     struct page_list* evict_gen;
@@ -128,7 +128,7 @@ static inline void fault_alloc_page_nodes(fault_t* f)
     /* newly fetched pages - alloc page nodes (for both the base page and 
      * the read-ahead) */
     list_head_init(&tmp);
-    for (i = 0; i <= f->rdahead; i++) { 
+    for (addr = FBASE(f); addr < FBASE(f) + FSIZE(f); addr += CHUNK_SIZE) { 
         /* get a page node */
         pgnode = rmpage_node_alloc();
         assert(pgnode);
@@ -137,7 +137,7 @@ static inline void fault_alloc_page_nodes(fault_t* f)
          * when the page is evicted out */
         __get_mr(f->mr);
         pgnode->mr = f->mr;
-        pgnode->addr = f->page + i * CHUNK_SIZE;
+        pgnode->addr = addr;
         list_add_tail(&tmp, &pgnode->link);
 
         pgidx = rmpage_get_node_id(pgnode);
@@ -150,7 +150,7 @@ static inline void fault_alloc_page_nodes(fault_t* f)
     spin_lock(&evict_gen->lock);
     assert(f->evict_prio >= 0 && f->evict_prio < evict_nprio);
     list_append_list(&evict_gen->pages[f->evict_prio], &tmp);
-    evict_gen->npages += (1 + f->rdahead);
+    evict_gen->npages += FCHUNKS(f);
     spin_unlock(&evict_gen->lock);
 }
 
@@ -173,16 +173,16 @@ static inline void fault_serve_zero_pages(fault_t* f, int nchunks)
     /* map zero pages */
     nowake = !f->from_kernel;
     wrprotect = f->is_read;
-    assert(nchunks == 1 + f->rdahead);
-    ret = uffd_copy(userfault_fd, f->page, (unsigned long) zero_page, 
-        nchunks * CHUNK_SIZE, wrprotect, nowake, true, &nretries);
+    assert(nchunks == FCHUNKS(f));
+    ret = uffd_copy(userfault_fd, FBASE(f), (unsigned long) zero_page, 
+        FSIZE(f), wrprotect, nowake, true, &nretries);
     assertz(ret);
     RSTAT(UFFD_RETRIES) += nretries;
     
     /* set page flags */
     flags = PFLAG_REGISTERED | PFLAG_PRESENT | PFLAG_PRESENT_ZERO_PAGED;
     if (!wrprotect) flags |= PFLAG_DIRTY;
-    ret = set_page_flags_range(f->mr, f->page, nchunks * CHUNK_SIZE, flags);
+    ret = set_page_flags_range(f->mr, FBASE(f), FSIZE(f), flags);
     assert(ret == nchunks);
 
     /* alloc page nodes */
@@ -199,16 +199,14 @@ int fault_read_done(fault_t* f)
 {
     int n_retries, r;
     bool wrprotect, no_wake;
-    size_t size;
     pgflags_t flags;
 
     /* uffd copy the page(s) back */
     assert(f->bkend_buf);
     wrprotect = f->is_read;
     no_wake = !f->from_kernel;
-    size = (1 + f->rdahead) * CHUNK_SIZE;
-    r = uffd_copy(userfault_fd, f->page, (unsigned long) f->bkend_buf, size, 
-        wrprotect, no_wake, true, &n_retries);
+    r = uffd_copy(userfault_fd, FBASE(f), (unsigned long) f->bkend_buf, 
+        FSIZE(f), wrprotect, no_wake, true, &n_retries);
     assertz(r);
     RSTAT(UFFD_RETRIES) += n_retries;
 
@@ -218,7 +216,7 @@ int fault_read_done(fault_t* f)
     /* set page flags */
     flags = PFLAG_PRESENT;
     if (!wrprotect) flags |= PFLAG_DIRTY;
-    set_page_flags_range(f->mr, f->page, size, flags);
+    set_page_flags_range(f->mr, FBASE(f), FSIZE(f), flags);
 
     /* add page nodes for the pages */
     fault_alloc_page_nodes(f);
@@ -230,16 +228,17 @@ int fault_read_done(fault_t* f)
  * and frees temporary resources */
 void fault_done(fault_t* f)
 {
-    int i, r;
+    int r;
     pgthread_t owner_kthr;
     pgflags_t oldflags;
+    unsigned long addr;
 
-    /* remove lock (in ascending order) */
+    /* remove locks on the region */
     if (f->locked_pages) {
-        for (i = 0; i <= f->rdahead; i++)
+        for (addr = FBASE(f); addr < FBASE(f) + FSIZE(f); addr += CHUNK_SIZE)
         {
-            clear_page_flags_and_thread(f->mr, f->page + i * CHUNK_SIZE, 
-                PFLAG_WORK_ONGOING, &oldflags, &owner_kthr);
+            clear_page_flags_and_thread(f->mr, addr, PFLAG_WORK_ONGOING,
+                &oldflags, &owner_kthr);
             
             /* check that the page was locked and that the saved kthread thread id
             * (if this fault was originally from a kthread) is same or different 
@@ -256,8 +255,8 @@ void fault_done(fault_t* f)
      * kernel (because the page was already serviced by someone else) */
     if (f->uffd_explicit_wake) {
         assert(f->from_kernel || false);
-        assert(f->rdahead == 0);
-        r = uffd_wake(userfault_fd, f->page, CHUNK_SIZE);
+        assert(FSIZE(f) == CHUNK_SIZE); /* no read-ahead */
+        r = uffd_wake(userfault_fd, FBASE(f), CHUNK_SIZE);
         assertz(r);
     }
 
@@ -276,7 +275,7 @@ enum fault_status handle_page_fault(int chan_id, fault_t* fault,
 {
     struct region_t* mr;
     bool page_present, was_locked, no_wake, wrprotect;
-    int i, ret, n_retries, nchunks, noverflow;
+    int i, ret, n_retries, nchunks, noverflow, offset;
     pgflags_t pflags, rflags, oldflags;
     unsigned long addr;
     unsigned long long pressure;
@@ -324,8 +323,12 @@ enum fault_status handle_page_fault(int chan_id, fault_t* fault,
              * a lock on the next few pages that have similar requirements 
              * as the current page so we can make the same choices for them 
              * throughout the fault handling */
-            for (i = 1; i <= fault->rdahead_max; i++) {
-                addr = fault->page + i * CHUNK_SIZE;
+            for (i = 1; i <= fault->rdahead_max; i++)
+            {
+                offset = (i * CHUNK_SIZE);
+                assert((unsigned long) fault->page >= offset);
+                if (fault->invert_rdahead)  addr = fault->page - offset;
+                else                        addr = fault->page + offset;
                 if(!is_in_memory_region_unsafe(mr, addr))
                     break;
 
@@ -354,6 +357,8 @@ enum fault_status handle_page_fault(int chan_id, fault_t* fault,
                 nchunks++;
                 fault->rdahead++;
             }
+
+            /* rdahead accounting */
             if (nchunks > 1) {
                 RSTAT(RDAHEADS)++;
                 RSTAT(RDAHEAD_PAGES) += fault->rdahead;
@@ -372,15 +377,15 @@ enum fault_status handle_page_fault(int chan_id, fault_t* fault,
                 assert(wrprotect);
                 
                 /* write fault on existing page; just remove wrprotection */
-                ret = uffd_wp_remove(userfault_fd, fault->page, 
-                    nchunks * CHUNK_SIZE, no_wake, true, &n_retries);
+                ret = uffd_wp_remove(userfault_fd, FBASE(fault), FSIZE(fault),
+                    no_wake, true, &n_retries);
                 assertz(ret);
                 RSTAT(UFFD_RETRIES) += n_retries;
 
                 /* done */
                 log_debug("%s - removed wp for %d pages", FSTR(fault), nchunks);
-                ret = set_page_flags_range(mr, fault->page, 
-                    nchunks * CHUNK_SIZE, PFLAG_DIRTY);
+                ret = set_page_flags_range(mr, FBASE(fault), 
+                    FSIZE(fault), PFLAG_DIRTY);
                 assert(ret == nchunks);
                 return FAULT_DONE;
             }
@@ -403,8 +408,8 @@ enum fault_status handle_page_fault(int chan_id, fault_t* fault,
                 /* no zero page allowed for first serving; mark them 
                  * registered and proceed to read from remote; be careful with 
                  * this setting as it returns non-zero initial pages */
-                ret = set_page_flags_range(mr, fault->page, 
-                    nchunks * CHUNK_SIZE, PFLAG_REGISTERED);
+                ret = set_page_flags_range(mr, FBASE(fault), FSIZE(fault),
+                    PFLAG_REGISTERED);
                 assert(ret == nchunks);
 #else
                 log_debug("%s - serving %d zero pages", FSTR(fault), nchunks);
@@ -421,8 +426,8 @@ enum fault_status handle_page_fault(int chan_id, fault_t* fault,
              * akin to __store_release(fault) */
             if (current_kthread_id) {
                 /* if this is a shenango kthread, save tid in page metadata */
-                ret = set_page_thread_range(mr, fault->page, 
-                    nchunks * CHUNK_SIZE, current_kthread_id);
+                ret = set_page_thread_range(mr, FBASE(fault), FSIZE(fault),
+                    current_kthread_id);
                 assert(ret == nchunks);
             }
             store_release(&fault->posted_chan_id, chan_id);

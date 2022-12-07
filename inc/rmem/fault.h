@@ -30,7 +30,7 @@ typedef struct fault {
     uint8_t locked_pages:1;         /* if the fault locked any pages */
     uint8_t stolen_from_cq:1;       /* stole this fault from other's cq */
     uint8_t uffd_explicit_wake:1;   /* need to issue uffd_wake() after done */
-    uint8_t unused1:1;
+    uint8_t invert_rdahead:1;       /* read-ahead but in the reverse way */
 
     uint8_t rdahead_max;        /* suggested max read-ahead */
     uint8_t rdahead;            /* actual read-ahead locked for this fault */
@@ -60,10 +60,33 @@ static inline char* fault_to_str(fault_t* f) {
         f->from_kernel ? "kern" : "user",
         f->is_read ? "r" : (f->is_write ? "w" : "wp"),
         f->stolen_from_cq ? "s" : "ns",
-        f->page, f->rdahead, f->evict_prio);
+        f->page, 
+        f->invert_rdahead ? f->rdahead: -(f->rdahead),
+        f->evict_prio);
     return fstr;
 }
 #define FSTR(f) fault_to_str(f)
+
+/* base page of the region being handled by the fault (which might be 
+ * different from the original faulting page due to inverted read-ahead)*/
+static inline unsigned long fault_base_page(fault_t* f)
+{
+    unsigned long addr;
+
+    assert(f);
+    addr = f->page;
+    if (f->invert_rdahead) {
+        assert(addr > f->rdahead * CHUNK_SIZE);
+        addr -= f->rdahead * CHUNK_SIZE;
+    }
+
+    return addr;
+}
+
+/* base addr and the size of the region handled by a fault */
+#define FBASE(f)    fault_base_page(f)
+#define FCHUNKS(f)  (f->rdahead + 1)
+#define FSIZE(f)    ((1 + f->rdahead) * CHUNK_SIZE)
 
 /*
  * Fault object tcache support
