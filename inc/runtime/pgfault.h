@@ -57,8 +57,8 @@ static __always_inline bool __is_fault_pending_vdso(void *address, bool write)
     assert(__is_page_mapped_vdso);
     assert(__is_page_mapped_and_readonly_vdso);
     return (!write)
-        ? __is_page_mapped_vdso(address)
-        : __is_page_mapped_and_readonly_vdso(address);
+        ? !__is_page_mapped_vdso(address)
+        : !__is_page_mapped_and_readonly_vdso(address);
 }
 
 /* use Eden's page state to determine an impending page fault */
