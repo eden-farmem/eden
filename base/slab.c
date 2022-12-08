@@ -300,7 +300,7 @@ static void *__slab_node_alloc(struct slab_node *n)
 
 		/* ran out of memory */
 		if (unlikely(!n->cur_pg)) {
-			log_info("out of memory for slabs!!");
+			log_warn_ratelimited("out of memory for slabs!!");
 			return NULL;
 		}
 		n->nr_pages++;
