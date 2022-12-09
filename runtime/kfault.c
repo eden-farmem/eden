@@ -36,6 +36,7 @@ int __vdso_init()
 #ifndef USE_VDSO_CHECKS
     BUG();
 #endif
+
     /* find vDSO symbols */
     unsigned long sysinfo_ehdr;
     sysinfo_ehdr = getauxval(AT_SYSINFO_EHDR);
@@ -55,6 +56,8 @@ int __vdso_init()
         log_err("Could not find %s in vdso", name_wp);
         return -ENOENT;
     }
+    
+    log_info("inited vdos page checks");
     return 0;
 }
 
