@@ -109,8 +109,7 @@ int kthr_fault_read_steal_done(fault_t* f)
     stealer->n_cq_steals_q++;
 
     /* add to stealer pending */
-    assert_spin_lock_held(&stealer->pf_lock);
-    stealer->pf_pending++;
+    atomic_inc(&stealer->pf_pending);
     return 0;
 }
 
@@ -164,10 +163,8 @@ int kthr_steal_completions(struct kthread* owner, int max_budget)
 
     /* remove them from owner kthead count, we will add to the stealer 
      * count in the callback */
-    spin_lock(&owner->pf_lock);
-    // assert(owner->pf_pending >= nfaults_stolen);
-    owner->pf_pending -= nfaults_stolen;
-    spin_unlock(&owner->pf_lock);
+    if (nfaults_stolen > 0)
+        atomic_sub_and_fetch(&owner->pf_pending, nfaults_stolen);
 
     if (ntotal > 0)
         log_debug("handled %d completions on chan %d, stolen %d reads", 
@@ -223,12 +220,12 @@ int kthr_steal_waiting_faults(struct kthread* stealer, struct kthread* owner)
             /* remove from owner's queue */
             // assert(owner->pf_pending > 0);
             assert(owner->n_wait_q > 0);
-            owner->pf_pending--;
+            atomic_dec(&owner->pf_pending);
             owner->n_wait_q--;
 
             /* add to stealer's queue */
             list_add_tail(&stealer->fault_wait_q, &f->link);
-            stealer->pf_pending++;
+            atomic_inc(&stealer->pf_pending);
             stealer->n_wait_q++;
             RSTAT(WAIT_STEALS)++;
 

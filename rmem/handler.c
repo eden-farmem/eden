@@ -153,11 +153,8 @@ bool handler_try_unblock_fault(fault_t* f)
             ntotal, owner->bkend_chan_id, nfaults_stolen);
 
     /* remove the stolen faults from owner kthreads count */
-    if (nfaults_stolen) {
-        spin_lock(&owner->pf_lock);
-        owner->pf_pending -= nfaults_stolen;
-        spin_unlock(&owner->pf_lock);
-    }
+    if (nfaults_stolen)
+        atomic_sub_and_fetch(&owner->pf_pending, nfaults_stolen);
 
     /* stealing done; reset the globally visible state */
     unblocked = load_acquire(&current_page_unblocked);

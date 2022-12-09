@@ -308,7 +308,7 @@ struct kthread {
 
 	/* 9th cache-line (all protected by the pf_lock) */
 	spinlock_t 			pf_lock;
-	unsigned int 		pf_pending;
+	atomic_t 			pf_pending;
 	int					bkend_chan_id;
     struct list_head 	fault_wait_q;
     struct list_head 	fault_cq_steals_q;

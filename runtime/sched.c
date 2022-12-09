@@ -185,10 +185,8 @@ static inline bool do_remote_memory_work(struct kthread *k)
 	nready += kthr_handle_waiting_faults(k);
 
 	/* set all these served faults as not-pending */
-	spin_lock(&k->pf_lock);
-    assert(k->pf_pending >= nready);
-    k->pf_pending -= nready;
-    spin_unlock(&k->pf_lock);
+	if (nready)
+		atomic_sub_and_fetch(&k->pf_pending, nready);
 
 	/* re-take the big lock and check the ready queue once more */
 	spin_lock(&k->lock);
@@ -348,9 +346,8 @@ static bool steal_work(struct kthread *l, struct kthread *r)
 
 	/* no ready work to steal. if the thread has no pending faults either, 
 	 * detach it if it was already parked */
-	if (r->parked && r->pf_pending == 0) {
+	if (r->parked && atomic_read(&r->pf_pending) == 0)
 		kthread_detach(r);
-	}
 	
 	spin_unlock(&r->lock);
 	return false;
@@ -463,7 +460,7 @@ again:
 	if (!preempt_needed() &&
 	    (++iters < RUNTIME_SCHED_POLL_ITERS ||
 	    rdtsc() - start_tsc < cycles_per_us * RUNTIME_SCHED_MIN_POLL_US ||
-		l->pf_pending > 0))
+		atomic_read(&l->pf_pending) > 0))
 		goto again;
 
 	/* did not find anything to run, park this kthread */
@@ -575,7 +572,8 @@ static __always_inline void enter_schedule(thread_t *myth)
 	/* slow path: switch from the uthread stack to the runtime stack 
 	 * WHEN there are no ready threads or some time has passed if watchdog 
 	 * or remote memory is enabled */
-	visit_runtime = !disable_watchdog || (rmem_enabled && k->pf_pending > 0);
+	visit_runtime = !disable_watchdog || 
+		(rmem_enabled && atomic_read(&k->pf_pending) > 0);
 	if (k->rq_head == k->rq_tail || 
 	    (visit_runtime && unlikely(rdtsc() - last_tsc > 
 			cycles_per_us * RUNTIME_VISIT_US))) {
@@ -703,16 +701,14 @@ again:
             spin_lock(&k->pf_lock);
             list_add_tail(&k->fault_wait_q, &f->link);
             k->n_wait_q++;
-            k->pf_pending++;
+            atomic_inc(&k->pf_pending);
             spin_unlock(&k->pf_lock);
             log_debug("%s - added to wait", FSTR(f));
 			goto schedule;
             break;
         case FAULT_READ_POSTED:
             /* nothing to do here, we check for completions later*/
-            spin_lock(&k->pf_lock);
-            k->pf_pending++;
-            spin_unlock(&k->pf_lock);
+            atomic_inc(&k->pf_pending);
             log_debug("%s - posted read", FSTR(f));
             if (nevicts_needed)
                 goto eviction;

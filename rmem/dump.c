@@ -66,7 +66,8 @@ void dump_rmem_state()
     for (i = 0; i < maxks; i++) {
         k = allks[i];
 
-        fprintf(dumpfp, "kthread %d - pending: %d\n",i, k->pf_pending);
+        fprintf(dumpfp, "kthread %d - pending: %d\n", 
+            i, atomic_read(&k->pf_pending));
 
         /* dump waiting faults */
         spin_lock(&k->pf_lock);
