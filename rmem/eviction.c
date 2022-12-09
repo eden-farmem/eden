@@ -593,7 +593,7 @@ static unsigned int write_region_to_backend(int chan_id, struct region_t *mr,
     /* post the write-back */
     start_tsc = 0;
     ncompletions = 0;
-    nwrites_done = -1;
+    nwrites_done = 0;
     do {
         r = rmbackend->post_write(chan_id, mr, addr, size);
         if (r == EAGAIN) {
@@ -604,7 +604,7 @@ static unsigned int write_region_to_backend(int chan_id, struct region_t *mr,
             /* write queue is full, nothing to do but repeat and keep 
              * checking for completions to free request slots; raising error
              * if we handled some write completions but still cannot post */
-            assert(nwrites_done != 0);
+            assert(nwrites_done == 0);
             ncompletions += rmbackend->check_for_completions(chan_id, cbs, 
                 RMEM_MAX_COMP_PER_OP, NULL, &nwrites_done);
         }

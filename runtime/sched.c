@@ -204,12 +204,6 @@ static inline bool do_remote_memory_work(struct kthread *k)
 /* steal remote memory completions and waiting fault from other threads */
 static inline bool steal_remote_memory_work(struct kthread *l, struct kthread *r)
 {
-#ifdef BLOCKING_HINTS
-	/* disable stealing when Eden is blocking all the work 
-	 * on the core on a fault */
-	return false;
-#endif
-
 	int nstolen = 0;
 
 	assert_spin_lock_held(&l->lock);
@@ -661,11 +655,17 @@ static __always_inline void enter_schedule_with_fault(thread_t *th, fault_t* f)
     struct kthread *k;
     struct region_t* mr;
     int nevicts_needed = 0, nevicts = 0;
+	int nready;
     enum fault_status fstatus;
+	bool blocking;
+	unsigned long start_tsc;
 
 	/* my kthread */
 	assert_preempt_disabled();
 	k = myk();
+
+	/* save fault blocking behavior */
+	blocking = f->is_blocking;
 
 	/* accounting */
 	RSTAT(FAULTS)++;
@@ -680,23 +680,23 @@ static __always_inline void enter_schedule_with_fault(thread_t *th, fault_t* f)
     f->mr = mr;
 
 	/* start handling fault */
-#ifdef BLOCKING_HINTS
 again:
-#endif
     fstatus = handle_page_fault(k->bkend_chan_id, f, &nevicts_needed, 
         &kthr_owner_cbs);
     switch (fstatus) {
         case FAULT_DONE:
 			/* unlikely but we're done before we started */
-            kthr_fault_done(f);
-			goto schedule;
+            fault_done(f);
+        	assert(th->state == THREAD_STATE_SLEEPING);
+        	th->state = THREAD_STATE_RUNNABLE;
+			goto activate_thread_and_return;
             break;
         case FAULT_IN_PROGRESS:
-#ifdef BLOCKING_HINTS
-			/* if we are blocking all work until the fault is resolved, 
-			 * keep trying until it is posted or resolved */
-			goto again;
-#endif
+			if (blocking)
+				/* if we are blocking the core until the fault is resolved, 
+				 * keep trying until it is posted and do not add to wait q */
+				goto again;
+
             /* otherwise, add to wait and yield to run another thread */
             spin_lock(&k->pf_lock);
             list_add_tail(&k->fault_wait_q, &f->link);
@@ -716,6 +716,11 @@ again:
             break;
     }
 
+	/* NOTE: that the fault object f would be freed or posted onto the 
+	 * read queue by this point and can no longer be assumed to be owned by 
+	 * this thread; any usage of `f` after this point will result in 
+	 * indefinite behavior */
+
 eviction:
     /* start eviction; evict only as much as needed on shenango cores */
     while(nevicts < nevicts_needed)
@@ -723,22 +728,23 @@ eviction:
             evict_batch_size);
 
 schedule:
-#ifdef BLOCKING_HINTS
-	/* if we are blocking all work until the fault is resolved, 
-	 * keep checking for completions until it is resolved and return here */
-	assert(fstatus == FAULT_DONE || fstatus == FAULT_READ_POSTED);
+	assert(fstatus == FAULT_IN_PROGRESS || fstatus == FAULT_READ_POSTED);
 
-	int nready;
-	unsigned long start_tsc;
-	if (fstatus == FAULT_READ_POSTED)
+	/* if this is a blocking fault, keep waiting here until we either see 
+	 * the read completion or associated thread is set ready (by a stolen 
+	 * completion on another core) */
+	if (blocking)
 	{
+		/* expected fault status */
+		assert(fstatus == FAULT_READ_POSTED);
+
 		/* check for completion once (before starting timer) */
 		nready = kthr_check_for_completions(k, RMEM_MAX_COMP_PER_OP);
 		if (nready > 0)
-			k->pf_pending -= nready;
+			atomic_sub_and_fetch(&k->pf_pending, nready);
 
 		start_tsc = 0;
-		while(!nready) {
+		while(load_acquire(&th->state) != THREAD_STATE_RUNNABLE) {
 			/* start timer */
 			if (!start_tsc)
 				start_tsc = rdtsc();
@@ -746,7 +752,7 @@ schedule:
 			/* keep checking for completions while waiting */
 			nready = kthr_check_for_completions(k, RMEM_MAX_COMP_PER_OP);
 			if (nready > 0)
-				k->pf_pending -= nready;
+				atomic_sub_and_fetch(&k->pf_pending, nready);
 
 			cpu_relax();
 		}
@@ -754,8 +760,22 @@ schedule:
 		/* record idle time */
 		if (start_tsc)
 			STAT(SCHED_CYCLES_IDLE) += rdtsc() - start_tsc;
+
+		goto activate_thread_and_return;
 	}
 
+	/* enter runtime */
+	enter_schedule(th);
+
+	/* back from runtime; just return, th state should be activated already */
+	assert(th->state == THREAD_STATE_RUNNING);
+	assert(!th->stack_busy);
+	assert(preempt_enabled());
+	assert(__self == th);
+	return;
+
+activate_thread_and_return:
+	/* serviced fault inline, go back to running the thread right away */
 	assert(th->state == THREAD_STATE_RUNNABLE);
 	th->state = THREAD_STATE_RUNNING;
 	th->stack_busy = false;
@@ -764,8 +784,6 @@ schedule:
 	preempt_enable();
 	RUNTIME_EXIT();
 	return;
-#endif
-	enter_schedule(th);
 }
 
 /**
@@ -775,8 +793,10 @@ schedule:
  * @write: whether the fault was due to a write operation
  * @rdahead: how many pages to read-ahead with the faulting page
  * @evprio: suggested eviction priority for the faulting page
+ * @block: do not yield the core until the fault is resolved
  */
-void thread_park_on_fault(void* address, bool write, int rdahead, int evprio)
+void thread_park_on_fault(void* address, bool write, int rdahead,
+	int evprio, bool block)
 {
     struct fault* fault;
 	thread_t *myth;
@@ -803,7 +823,6 @@ void thread_park_on_fault(void* address, bool write, int rdahead, int evprio)
 	myth->state = THREAD_STATE_SLEEPING;
 	store_release(&myth->stack_busy, true);
 
-
 	/* alloc fault object */
     fault = fault_alloc();
     if (unlikely(!fault)) {
@@ -811,6 +830,8 @@ void thread_park_on_fault(void* address, bool write, int rdahead, int evprio)
         BUG();
     }
     memset(fault, 0, sizeof(fault_t));
+
+	/* fill in the fault object */
     fault->page = ((unsigned long) address) & ~CHUNK_MASK;
     fault->is_read = !write;
     fault->is_write = write;
@@ -819,8 +840,13 @@ void thread_park_on_fault(void* address, bool write, int rdahead, int evprio)
     fault->rdahead_max = abs(rdahead);
     fault->rdahead = 0;
 	fault->evict_prio = evprio;
+	fault->is_blocking = block ? 1 : 0;
+#ifdef BLOCKING_HINTS
+	/* set all hinted faults as blocking */
+	fault->is_blocking = 1;
+#endif
     fault->thread = myth;
-    log_debug("fault posted at %lx write %d", fault->page, write);
+    log_debug("%s - fault posted", FSTR(fault));
 
 	/* enter scheduler with fault */
 	enter_schedule_with_fault(myth, fault);

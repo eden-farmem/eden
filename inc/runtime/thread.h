@@ -19,7 +19,8 @@ typedef struct thread thread_t;
  */
 
 extern void thread_park_and_unlock_np(spinlock_t *l);
-extern void thread_park_on_fault(void* address, bool write, int rdahead, int evprio);
+extern void thread_park_on_fault(void* address, bool write, int rdahead,
+	int evprio, bool block);
 extern void thread_ready(thread_t *thread);
 extern thread_t *thread_create(thread_fn_t fn, void *arg);
 extern thread_t *thread_create_with_buf(thread_fn_t fn, void **buf, size_t len);

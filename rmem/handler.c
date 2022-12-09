@@ -94,7 +94,17 @@ int hthr_fault_read_steal_done(fault_t* f)
 
     /* set the thread ready */
     assert(f->thread);
-    thread_ready_safe(owner, f->thread);
+    if (f->is_blocking) {
+        /* if the fault is blocking, the owner core will be waiting in the 
+         * faulting thread context, just waiting for it to be runnable. In 
+         * this case, do not add the thread to the ready queue; just setting 
+         * it runnable should do */
+        assert(f->thread->state == THREAD_STATE_SLEEPING);
+        store_release(&f->thread->state, THREAD_STATE_RUNNABLE); 
+    }
+    else
+        /* set the thread ready and add it to the owner queue */
+        thread_ready_safe(owner, f->thread);
 
     /* check if this fault was locking the target blocking page */
     if (current_blocking_page >= FBASE(f) &&

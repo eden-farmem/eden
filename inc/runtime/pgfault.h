@@ -21,24 +21,26 @@
 #endif
 
 /* Internal API */
-#define hint_fault(addr,write,rd,prio)                      \
-    do {                                                    \
-        if (__is_fault_pending(addr, write, true))          \
-            thread_park_on_fault(addr, write, rd, prio);    \
+#define hint_fault(addr,write,rd,prio,block)                    \
+    do {                                                        \
+        if (__is_fault_pending(addr, write, true))              \
+            thread_park_on_fault(addr, write, rd, prio, block); \
     } while (0);
 #else
 #define hint_fault(addr,write,rd,prio)      do {} while(0)
 #endif
 
 /* API */
-#define hint_read_fault(addr)               hint_fault(addr, false, 0,  0)
-#define hint_write_fault(addr)              hint_fault(addr, true,  0,  0)
-#define hint_read_fault_rdahead(addr,rd)    hint_fault(addr, false, rd, 0)
-#define hint_write_fault_rdahead(addr,rd)   hint_fault(addr, true,  rd, 0)
-#define hint_read_fault_prio(addr,pr)       hint_fault(addr, false, 0,  pr)
-#define hint_write_fault_prio(addr,rd)      hint_fault(addr, true,  0,  pr)
-#define hint_read_fault_all(addr,rd,pr)     hint_fault(addr, false, rd, pr)
-#define hint_write_fault_all(addr,rd,pr)    hint_fault(addr, true,  rd, pr)
+#define hint_read_fault(addr)               hint_fault(addr, false, 0,  0,  false)
+#define hint_write_fault(addr)              hint_fault(addr, true,  0,  0,  false)
+#define hint_read_fault_rdahead(addr,rd)    hint_fault(addr, false, rd, 0,  false)
+#define hint_write_fault_rdahead(addr,rd)   hint_fault(addr, true,  rd, 0,  false)
+#define hint_read_fault_prio(addr,pr)       hint_fault(addr, false, 0,  pr, false)
+#define hint_write_fault_prio(addr,pr)      hint_fault(addr, true,  0,  pr, false)
+#define hint_read_fault_block(addr)         hint_fault(addr, false, 0,  0,  true)
+#define hint_write_fault_block(addr)        hint_fault(addr, true,  0,  0,  true)
+#define hint_read_fault_all(addr,rd,pr,bl)  hint_fault(addr, false, rd, pr, bl)
+#define hint_write_fault_all(addr,rd,pr,bl) hint_fault(addr, true,  rd, pr, bl)
 
 /* back-compat API */
 #define possible_read_fault_on 	            hint_read_fault

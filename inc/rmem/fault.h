@@ -31,12 +31,14 @@ typedef struct fault {
     uint8_t stolen_from_cq:1;       /* stole this fault from other's cq */
     uint8_t uffd_explicit_wake:1;   /* need to issue uffd_wake() after done */
     uint8_t invert_rdahead:1;       /* read-ahead but in the reverse way */
+    uint8_t is_blocking:1;          /* block the core during this fault */       
+    uint8_t unused3:7;
 
     uint8_t rdahead_max;        /* suggested max read-ahead */
     uint8_t rdahead;            /* actual read-ahead locked for this fault */
     uint8_t evict_prio;         /* suggested eviction priority for the page */
     uint8_t posted_chan_id;
-    uint8_t unused2[3];
+    uint8_t unused2[2];
 
     /* associated resources */
     unsigned long page;
@@ -56,13 +58,14 @@ BUILD_ASSERT(EVICTION_MAX_PRIO <= UINT8_MAX);    /* due to evict_prio */
 #define __FAULT_STR_LEN 100
 extern __thread char fstr[__FAULT_STR_LEN];
 static inline char* fault_to_str(fault_t* f) {
-    snprintf(fstr, __FAULT_STR_LEN, "F[%p:%s:%s:%s:%lx:%dr:%dp]", f,
+    snprintf(fstr, __FAULT_STR_LEN, "F[%p:%s:%s:%s:%lx:%dr:%dp:%s]", f,
         f->from_kernel ? "kern" : "user",
         f->is_read ? "r" : (f->is_write ? "w" : "wp"),
         f->stolen_from_cq ? "s" : "ns",
         f->page, 
         f->invert_rdahead ? f->rdahead: -(f->rdahead),
-        f->evict_prio);
+        f->evict_prio,
+        f->is_blocking ? "b" : "nb");
     return fstr;
 }
 #define FSTR(f) fault_to_str(f)
