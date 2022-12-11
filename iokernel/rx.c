@@ -40,7 +40,7 @@ static struct rx_net_hdr *rx_prepend_rx_preamble(struct rte_mbuf *buf)
 }
 
 /**
- * rx_send_to_runtime - enqueues a command to an RXQ for a runtime
+ * rx_send_command_to_runtime - enqueues a command to an RXQ for a runtime
  * @p: the runtime's proc structure
  * @hash: the 5-tuple hash for the flow the command is related to
  * @cmd: the command to send
@@ -49,7 +49,7 @@ static struct rx_net_hdr *rx_prepend_rx_preamble(struct rte_mbuf *buf)
  * Returns true if the command was enqueued, otherwise a thread is not running
  * and can't be woken or the queue was full.
  */
-bool rx_send_to_runtime(struct proc *p, uint32_t hash, uint64_t cmd,
+bool rx_send_command_to_runtime(struct proc *p, uint32_t hash, uint64_t cmd,
 			unsigned long payload)
 {
 	struct thread *th;
@@ -67,16 +67,37 @@ bool rx_send_to_runtime(struct proc *p, uint32_t hash, uint64_t cmd,
 		proc_set_overloaded(p);
 	}
 
-	return lrpc_send(&th->rxq, cmd, payload);
+	return lrpc_send(&th->rxcmdq, cmd, payload);
 }
 
-
+/**
+ * rx_send_pkt_to_runtime - enqueues a packet to an RXQ for a runtime
+ * @p: the runtime's proc structure
+ * @hdr: the packet to send
+ *
+ * Returns true if the command was enqueued, otherwise a thread is not running
+ * and can't be woken or the queue was full.
+ */
 static bool rx_send_pkt_to_runtime(struct proc *p, struct rx_net_hdr *hdr)
 {
 	shmptr_t shmptr;
+	struct thread *th;
 
 	shmptr = ptr_to_shmptr(&ingress_mbuf_region, hdr, sizeof(*hdr));
-	return rx_send_to_runtime(p, hdr->rss_hash, RX_NET_RECV, shmptr);
+	if (likely(p->active_thread_count > 0)) {
+		/* load balance between active threads */
+		th = p->active_threads[hdr->rss_hash % p->active_thread_count];
+	} else if (p->sched_cfg.guaranteed_cores > 0 || get_nr_avail_cores() > 0) {
+		th = cores_add_core(p);
+		if (unlikely(!th))
+			return false;
+	} else {
+		/* enqueue to the first idle thread, which will be woken next */
+		th = list_top(&p->idle_threads, struct thread, idle_link);
+		proc_set_overloaded(p);
+	}
+
+	return lrpc_send(&th->rxq, RX_NET_RECV, shmptr);
 }
 
 static void rx_one_pkt(struct rte_mbuf *buf)

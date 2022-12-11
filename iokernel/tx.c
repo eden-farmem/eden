@@ -111,13 +111,13 @@ bool tx_send_completion(void *obj)
 	/* send completion to runtime */
 	th = priv_data->th;
 	if (!th->parked) {
-		if (likely(lrpc_send(&th->rxq, RX_NET_COMPLETE,
+		if (likely(lrpc_send(&th->rxcmdq, RX_NET_COMPLETE,
 			       priv_data->completion_data))) {
 			goto success;
 		}
 	} else {
-		if (likely(rx_send_to_runtime(p, p->next_thread_rr++, RX_NET_COMPLETE,
-					priv_data->completion_data))) {
+		if (likely(rx_send_command_to_runtime(p, p->next_thread_rr++,
+				RX_NET_COMPLETE, priv_data->completion_data))) {
 			goto success;
 		}
 	}
@@ -142,7 +142,7 @@ static int drain_overflow_queue(struct proc *p, int n)
 {
 	int i = 0;
 	while (p->nr_overflows > 0 && i < n) {
-		if (!rx_send_to_runtime(p, p->next_thread_rr++, RX_NET_COMPLETE,
+		if (!rx_send_command_to_runtime(p, p->next_thread_rr++, RX_NET_COMPLETE,
 				p->overflow_queue[--p->nr_overflows])) {
 			p->nr_overflows++;
 			break;

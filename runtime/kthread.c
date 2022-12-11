@@ -55,6 +55,8 @@ static struct kthread *allock(void)
 	spin_lock_init(&k->lock);
 	list_head_init(&k->rq_overflow);
 	k->rq_overflow_len = 0;
+	list_head_init(&k->frq_overflow);
+	k->frq_overflow_len = 0;
 	mbufq_init(&k->txpktq_overflow);
 	mbufq_init(&k->txcmdq_overflow);
 	spin_lock_init(&k->timer_lock);
@@ -139,6 +141,8 @@ void kthread_detach(struct kthread *r)
 		return;
 
 	/* one last check, an RX cmd could have squeaked in */
+	if (unlikely(!lrpc_empty(&r->rxcmdq)))
+		return;
 	if (unlikely(!lrpc_empty(&r->rxq)))
 		return;
 
@@ -165,6 +169,8 @@ found:
 	assert(r->rq_head == r->rq_tail);
 	assert(list_empty(&r->rq_overflow));
 	assert(k->rq_overflow_len == 0);
+	assert(list_empty(&r->frq_overflow));
+	assert(k->frq_overflow_len == 0);
 	assert(k->pf_pending == 0);
 	assert(list_empty(&r->fault_wait_q));
 	assert(k->n_wait_q == 0);

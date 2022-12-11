@@ -92,7 +92,7 @@ int hthr_fault_read_steal_done(fault_t* f)
 
     /* set the thread ready */
     assert(f->thread);
-    thread_ready_safe(owner, f->thread);
+    faulted_thread_ready_safe(owner, f->thread);
 
     /* check if this is the target blocking page */
     if (f->page == current_blocking_page)

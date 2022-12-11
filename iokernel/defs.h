@@ -42,6 +42,7 @@ struct thread {
 	unsigned int		waking:1;
 	unsigned int		reaffinitize:1;
 	struct lrpc_chan_out	rxq;
+	struct lrpc_chan_out	rxcmdq;
 	struct lrpc_chan_in	txpktq;
 	struct lrpc_chan_in	txcmdq;
 	pid_t			tid;
@@ -268,8 +269,8 @@ extern void print_stats(void);
  * RXQ command steering
  */
 
-extern bool rx_send_to_runtime(struct proc *p, uint32_t hash, uint64_t cmd,
-			       unsigned long payload);
+extern bool rx_send_command_to_runtime(struct proc *p, uint32_t hash,
+	uint64_t cmd, unsigned long payload);
 
 /*
  * Initialization

@@ -23,6 +23,7 @@ struct q_ptrs {
 /* describes a runtime kernel thread */
 struct thread_spec {
 	struct queue_spec	rxq;
+	struct queue_spec	rxcmdq;
 	struct queue_spec	txpktq;
 	struct queue_spec	txcmdq;
 	shmptr_t		q_ptrs;

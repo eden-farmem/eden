@@ -96,8 +96,13 @@ static struct proc *control_create_proc(mem_key_t key, size_t len, pid_t pid,
 		struct thread *th = &p->threads[i];
 		struct thread_spec *s = &threads[i];
 
-		/* attach the RX queue */
+		/* attach the RX packet queue */
 		ret = shm_init_lrpc_out(&reg, &s->rxq, &th->rxq);
+		if (ret)
+			goto fail_free_proc;
+		
+		/* attach the RX command queue */
+		ret = shm_init_lrpc_out(&reg, &s->rxcmdq, &th->rxcmdq);
 		if (ret)
 			goto fail_free_proc;
 

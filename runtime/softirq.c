@@ -43,26 +43,52 @@ static void softirq_gather_work(struct softirq_work *w, struct kthread *k,
 				unsigned int budget)
 {
 	unsigned int recv_cnt = 0, compl_cnt = 0, join_cnt = 0;
-	int budget_left, local_budget_left;
+	int budget_left, new_work_budget_left;
+	uint64_t cmd;
+	unsigned long payload;
+	int active_threads;
 
 	budget_left = min(budget, SOFTIRQ_MAX_BUDGET);
-	local_budget_left = SOFTIRQ_MAX_BUDGET;
 
+	/* check RX command queue first; this has TX completions which are 
+	 * more important than handling new work through RX packets */
+	while (budget_left > 0)
+	{
+		budget_left--;
+
+		if (!lrpc_recv(&k->rxcmdq, &cmd, &payload))
+			break;
+
+		switch (cmd) {
+		case RX_NET_COMPLETE:
+			w->compl_reqs[compl_cnt++] = (struct mbuf *)payload;
+			break;
+
+		case RX_JOIN:
+			w->join_reqs[join_cnt++] = (struct kthread *)payload;
+			break;
+
+		default:
+			log_err_ratelimited("net: invalid RXcmdQ cmd '%ld'", cmd);
+		}
+	}
+
+	new_work_budget_left = budget_left;
 	if (rmem_enabled) {
 		/* REMOTE MEMORY TODO: Is this really needed? */
 		/* supress new work when it gets congested. NOTE(TODO): we assume that 
 		* supressing RX means supressing new work, which is not always true. Also, 
 		* we're supressing other events for IO core like TX completions due to the 
 		* shared events queue, which may cause trouble in some cases. */
-		// int active_threads = (k->rq_head - k->rq_tail) + k->rq_overflow_len; 
-		// local_budget_left = CONGESTION_THRESHOLD - (active_threads + k->pf_pending);
+		// active_threads = (k->rq_head - k->rq_tail) + 
+		// 	k->rq_overflow_len + k->frq_overflow_len + k->pf_pending; 
+		// new_work_budget_left = CONGESTION_THRESHOLD - active_threads;
 	}
 
-	while (budget_left > 0 && local_budget_left > 0) {
-		budget_left--; local_budget_left--;
-
-		uint64_t cmd;
-		unsigned long payload;
+	/* then accept new packets if we still can */
+	while (budget_left > 0 && new_work_budget_left > 0)
+	{
+		budget_left--; new_work_budget_left--;
 
 		if (!lrpc_recv(&k->rxq, &cmd, &payload))
 			break;
@@ -75,17 +101,8 @@ static void softirq_gather_work(struct softirq_work *w, struct kthread *k,
 			BUG_ON(w->recv_reqs[recv_cnt] == NULL);
 			recv_cnt++;
 			break;
-
-		case RX_NET_COMPLETE:
-			w->compl_reqs[compl_cnt++] = (struct mbuf *)payload;
-			break;
-
-		case RX_JOIN:
-			w->join_reqs[join_cnt++] = (struct kthread *)payload;
-			break;
-
 		default:
-			log_err_ratelimited("net: invalid RXQ cmd '%ld'", cmd);
+			log_err_ratelimited("net: invalid RXpacketQ cmd '%ld'", cmd);
 		}
 	}
 
@@ -103,7 +120,7 @@ static void softirq_gather_work(struct softirq_work *w, struct kthread *k,
  */
 static inline bool softirq_ready(struct kthread* k) 
 {
-	return timer_needed(k) || !lrpc_empty(&k->rxq);
+	return timer_needed(k) || !lrpc_empty(&k->rxcmdq) || !lrpc_empty(&k->rxq);
 }
 
 /**

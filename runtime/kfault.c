@@ -78,7 +78,7 @@ int kthr_fault_done(fault_t* f)
 	f->thread->state = THREAD_STATE_RUNNABLE;
 #else
     /* wake up thread and add it back to the ready queue */
-    thread_ready_preempt_off(f->thread);
+    faulted_thread_ready_preempt_off(f->thread);
 #endif
 
     /* release fault */

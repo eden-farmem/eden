@@ -556,7 +556,9 @@ bool cores_park_kthread(struct thread *th, bool force)
 	/* check for race conditions with the runtime */
 	if (core_history[core].next == NULL && !force) {
 		lrpc_poll_send_tail(&th->rxq);
-		if (unlikely(lrpc_get_cached_length(&th->rxq) > 0)) {
+		lrpc_poll_send_tail(&th->rxcmdq);
+		if (unlikely(lrpc_get_cached_length(&th->rxq) > 0 || 
+				lrpc_get_cached_length(&th->rxcmdq) > 0)) {
 			/* the runtime parked while packets were in flight */
 			val = th->core + 1;
 			s = write(th->park_efd, &val, sizeof(val));

@@ -279,9 +279,15 @@ struct kthread {
 	uint32_t			rq_head;
 	uint32_t			rq_tail;
 	struct list_head	rq_overflow;
-	struct lrpc_chan_in	rxq;
 	unsigned int 		rq_overflow_len;
-	unsigned int		pad1[1];
+	struct list_head	frq_overflow;  /* overflow for ready faulted threads*/
+	unsigned int 		frq_overflow_len;
+	unsigned int 		pad0;
+
+	/* 2nd cacheline */
+	struct lrpc_chan_in	rxq;
+	struct lrpc_chan_in	rxcmdq;
+	unsigned int 		pad1[4];
 
 	/* 2nd cache-line */
 	struct q_ptrs		*q_ptrs;
@@ -324,6 +330,7 @@ struct kthread {
 
 /* compile-time verification of cache-line alignment */
 BUILD_ASSERT(offsetof(struct kthread, lock) % CACHE_LINE_SIZE == 0);
+BUILD_ASSERT(offsetof(struct kthread, rxq) % CACHE_LINE_SIZE == 0);
 BUILD_ASSERT(offsetof(struct kthread, q_ptrs) % CACHE_LINE_SIZE == 0);
 BUILD_ASSERT(offsetof(struct kthread, txpktq) % CACHE_LINE_SIZE == 0);
 BUILD_ASSERT(offsetof(struct kthread, rq) % CACHE_LINE_SIZE == 0);
@@ -403,7 +410,7 @@ extern struct cpu_record cpu_map[NCPU];
 /* amount of active threads that signal congestion before we start 
  * pushing back on new work. TODO: is the value too high? */
 #ifndef CONGESTION_THRESHOLD
-#define CONGESTION_THRESHOLD	128
+#define CONGESTION_THRESHOLD	16
 #endif
 
 extern bool disable_watchdog;
@@ -511,6 +518,8 @@ extern void join_kthread(struct kthread *k);
 /* internal thread management routines */
 extern void thread_ready_preempt_off(thread_t *thread);
 extern void thread_ready_safe(struct kthread *k, thread_t *th);
+extern void faulted_thread_ready_preempt_off(thread_t *th);
+extern void faulted_thread_ready_safe(struct kthread *k, thread_t *th);
 
 /* kthread fault handling helpers */
 extern bool rmem_hints_enabled;

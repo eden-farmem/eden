@@ -32,7 +32,7 @@ CFLAGS += -DDEBUG -DCCAN_LIST_DEBUG -rdynamic -O0 -ggdb
 LDFLAGS += -rdynamic
 else
 ifneq ($(GDB),)
-CFLAGS += -g -ggdb -O0
+CFLAGS += -g -ggdb
 else
 CFLAGS += -O3
 endif

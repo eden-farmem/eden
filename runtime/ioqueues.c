@@ -167,6 +167,7 @@ static int ioqueues_shm_setup(unsigned int threads)
 	for (i = 0; i < threads; i++) {
 		struct thread_spec *tspec = &iok.threads[i];
 		ioqueue_alloc(r, &tspec->rxq, &ptr, PACKET_QUEUE_MCOUNT, false);
+		ioqueue_alloc(r, &tspec->rxcmdq, &ptr, COMMAND_QUEUE_MCOUNT, false);
 		ioqueue_alloc(r, &tspec->txpktq, &ptr, PACKET_QUEUE_MCOUNT, true);
 		ioqueue_alloc(r, &tspec->txcmdq, &ptr, COMMAND_QUEUE_MCOUNT, true);
 
@@ -314,6 +315,9 @@ int ioqueues_init_thread(void)
 	spin_unlock(&qlock);
 
 	ret = shm_init_lrpc_in(r, &ts->rxq, &myk()->rxq);
+	BUG_ON(ret);
+
+	ret = shm_init_lrpc_in(r, &ts->rxcmdq, &myk()->rxcmdq);
 	BUG_ON(ret);
 
 	ret = shm_init_lrpc_out(r, &ts->txpktq, &myk()->txpktq);

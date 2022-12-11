@@ -144,6 +144,28 @@ static __noreturn void jmp_runtime_nosave(runtime_fn_t fn)
 	__jmp_runtime_nosave(fn, runtime_stack);
 }
 
+static bool drain_frq_overflow(struct kthread *l)
+{
+	thread_t *th;
+	bool drained;
+
+	assert_spin_lock_held(&l->lock);
+
+	/* first drain the ready faulting threads */
+	drained = false;
+	while (l->rq_head - l->rq_tail < RUNTIME_RQ_SIZE) {
+		th = list_pop(&l->frq_overflow, thread_t, link);
+		if (!th)
+			break;
+		l->rq[l->rq_head++ % RUNTIME_RQ_SIZE] = th;
+		l->q_ptrs->rq_head++;
+		l->frq_overflow_len--;
+		drained = true;
+	}
+
+	return drained;
+}
+
 static void drain_overflow(struct kthread *l)
 {
 	thread_t *th;
@@ -255,6 +277,16 @@ static inline bool steal_ready_work(struct kthread *l, struct kthread *r)
 		l->q_ptrs->rq_head += avail;
 		STAT(THREADS_STOLEN) += avail;
 		log_debug("%p stole %d threads from %p RQ", l, avail, r);
+		return true;
+	}
+
+	/* check for overflow of ready faulted threads first */
+	th = list_pop(&r->frq_overflow, thread_t, link);
+	if (th) {
+		r->frq_overflow_len--;
+		l->rq[l->rq_head++ % RUNTIME_RQ_SIZE] = th;
+		l->q_ptrs->rq_head++;
+		STAT(THREADS_STOLEN)++;
 		return true;
 	}
 
@@ -418,6 +450,11 @@ static __noreturn __noinline void schedule(void)
 			goto done;
 	}
 
+	/* move faulted but ready overflow tasks into the runqueue */
+	if (unlikely(!list_empty(&l->frq_overflow)))
+		if (drain_frq_overflow(l))
+			goto done;
+
 	/* move overflow tasks into the runqueue */
 	if (unlikely(!list_empty(&l->rq_overflow)))
 		drain_overflow(l);
@@ -487,6 +524,10 @@ done:
 		l->q_ptrs->rq_tail++;
 	}
 
+	/* move faulted but ready overflow tasks into the runqueue */
+	if (unlikely(!list_empty(&l->frq_overflow)))
+		drain_frq_overflow(l);
+
 	/* move overflow tasks into the runqueue */
 	if (unlikely(!list_empty(&l->rq_overflow)))
 		drain_overflow(l);
@@ -543,6 +584,10 @@ void join_kthread(struct kthread *k)
 		k->q_ptrs->rq_tail++;
 	}
 	k->rq_head = k->rq_tail = 0;
+
+	/* drain the faulted overflow runqueue */
+	list_append_list(&tmp, &k->frq_overflow);
+	k->frq_overflow_len = 0;
 
 	/* drain the overflow runqueue */
 	list_append_list(&tmp, &k->rq_overflow);
@@ -833,6 +878,38 @@ void thread_park_on_fault(void* address, bool write, int rdahead)
 }
 
 /**
+ * faulted_thread_ready_preempt_off - marks a faulted thread as a runnable
+ * @th: the thread to mark runnable
+ *
+ * This function can only be called when @th is sleeping because of a page 
+ * fault which is now serviced and preempt is disabled.
+ */
+void faulted_thread_ready_preempt_off(thread_t *th)
+{
+	struct kthread *k;
+	uint32_t rq_tail;
+
+	assert_preempt_disabled();
+	assert(th->state == THREAD_STATE_SLEEPING);
+	th->state = THREAD_STATE_RUNNABLE;
+
+	k = myk();
+	rq_tail = load_acquire(&k->rq_tail);
+	if (unlikely(k->rq_head - rq_tail >= RUNTIME_RQ_SIZE)) {
+		assert(k->rq_head - rq_tail == RUNTIME_RQ_SIZE);
+		spin_lock(&k->lock);
+		list_add_tail(&k->frq_overflow, &th->link);
+		k->frq_overflow_len++;
+		spin_unlock(&k->lock);
+		return;
+	}
+
+	k->rq[k->rq_head % RUNTIME_RQ_SIZE] = th;
+	store_release(&k->rq_head, k->rq_head + 1);
+	k->q_ptrs->rq_head++;
+}
+
+/**
  * thread_ready_preempt_off - marks a thread as a runnable
  * @th: the thread to mark runnable
  *
@@ -862,6 +939,31 @@ void thread_ready_preempt_off(thread_t *th)
 	k->rq[k->rq_head % RUNTIME_RQ_SIZE] = th;
 	store_release(&k->rq_head, k->rq_head + 1);
 	k->q_ptrs->rq_head++;
+}
+
+/**
+ * faulted_thread_ready_safe - marks a faulted thread as a runnable on a 
+ * specific kthread. 
+ * Unlike other functions, this function can be called from any other kthreads.
+ * @th: the thread to mark runnable
+ *
+ * This function can only be called when @th is sleeping due to a page fault 
+ * which is now serviced.
+ */
+void faulted_thread_ready_safe(struct kthread *k, thread_t *th)
+{
+	assert(th->state == THREAD_STATE_SLEEPING);
+	th->state = THREAD_STATE_RUNNABLE;
+
+	/* since this function needs to be thread-safe, we add the thread
+	 * to the overflow queue to avoid introducing locks on the main 
+	 * ready queue. this has implications on performance (since the 
+	 * overflow queue needs to be drained before the thread gets scheduled)
+	 * but the assumption is that the usage is rare */
+	spin_lock(&k->lock);
+	list_add_tail(&k->frq_overflow, &th->link);
+	k->frq_overflow_len++;
+	spin_unlock(&k->lock);
 }
 
 
