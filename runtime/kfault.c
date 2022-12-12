@@ -75,7 +75,7 @@ int kthr_fault_done(fault_t* f)
      * completions from the faulting thread, so just set it to ready but 
      * do not add it to the ready queue */
 	assert(f->thread->state == THREAD_STATE_SLEEPING);
-	f->thread->state = THREAD_STATE_RUNNABLE;
+    store_release(&f->thread->state, THREAD_STATE_RUNNABLE);
 #else
     /* wake up thread and add it back to the ready queue */
     thread_ready_preempt_off(f->thread);

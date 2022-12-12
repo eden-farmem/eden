@@ -663,11 +663,20 @@ static __always_inline void enter_schedule_with_fault(thread_t *th, fault_t* f)
     struct kthread *k;
     struct region_t* mr;
     int nevicts_needed = 0, nevicts = 0;
+	int nready;
     enum fault_status fstatus;
+	bool blocking;
+	unsigned long start_tsc;
 
 	/* my kthread */
 	assert_preempt_disabled();
 	k = myk();
+
+	/* blocking behavior */
+	blocking = false;
+#ifdef BLOCKING_HINTS
+	blocking = true;
+#endif
 
 	/* accounting */
 	RSTAT(FAULTS)++;
@@ -682,23 +691,23 @@ static __always_inline void enter_schedule_with_fault(thread_t *th, fault_t* f)
     f->mr = mr;
 
 	/* start handling fault */
-#ifdef BLOCKING_HINTS
 again:
-#endif
     fstatus = handle_page_fault(k->bkend_chan_id, f, &nevicts_needed, 
         &kthr_owner_cbs);
     switch (fstatus) {
         case FAULT_DONE:
 			/* unlikely but we're done before we started */
-            kthr_fault_done(f);
-			goto schedule;
+            fault_done(f);
+        	assert(th->state == THREAD_STATE_SLEEPING);
+        	th->state = THREAD_STATE_RUNNABLE;
+			goto activate_thread_and_return;
             break;
         case FAULT_IN_PROGRESS:
-#ifdef BLOCKING_HINTS
-			/* if we are blocking all work until the fault is resolved, 
-			 * keep trying until it is posted or resolved */
-			goto again;
-#endif
+			if (blocking)
+				/* if we are blocking the core until the fault is resolved, 
+				 * keep trying until it is posted and do not add to wait q */
+				goto again;
+
             /* otherwise, add to wait and yield to run another thread */
             spin_lock(&k->pf_lock);
             list_add_tail(&k->fault_wait_q, &f->link);
@@ -720,6 +729,11 @@ again:
             break;
     }
 
+	/* NOTE: that the fault object f would be freed or posted onto the 
+	 * read queue by this point and can no longer be assumed to be owned by 
+	 * this thread; any usage of `f` after this point will result in 
+	 * indefinite behavior */
+
 eviction:
     /* start eviction; evict only as much as needed on shenango cores */
     while(nevicts < nevicts_needed)
@@ -727,30 +741,40 @@ eviction:
             evict_batch_size);
 
 schedule:
-#ifdef BLOCKING_HINTS
-	/* if we are blocking all work until the fault is resolved, 
-	 * keep checking for completions until it is resolved and return here */
-	assert(fstatus == FAULT_DONE || fstatus == FAULT_READ_POSTED);
+	assert(fstatus == FAULT_IN_PROGRESS || fstatus == FAULT_READ_POSTED);
 
-	int nready;
-	unsigned long start_tsc;
-	if (fstatus == FAULT_READ_POSTED)
+	/* if this is a blocking fault, keep waiting here until we either see 
+	 * the read completion or associated thread is set ready (by a stolen 
+	 * completion on another core) */
+	if (blocking)
 	{
+		/* expected fault status */
+		assert(fstatus == FAULT_READ_POSTED);
+
 		/* check for completion once (before starting timer) */
 		nready = kthr_check_for_completions(k, RMEM_MAX_COMP_PER_OP);
-		if (nready > 0)
+		if (nready > 0) {
+			spin_lock(&k->pf_lock);
 			k->pf_pending -= nready;
+			spin_unlock(&k->pf_lock);
+		}
 
 		start_tsc = 0;
-		while(!nready) {
+		while(load_acquire(&th->state) != THREAD_STATE_RUNNABLE) {
+			/* FIXME: BUG: (nready == 0) should also work here but it 
+			 * does not! something going on in the check_cq */
+
 			/* start timer */
 			if (!start_tsc)
 				start_tsc = rdtsc();
 
 			/* keep checking for completions while waiting */
 			nready = kthr_check_for_completions(k, RMEM_MAX_COMP_PER_OP);
-			if (nready > 0)
+			if (nready > 0) {
+				spin_lock(&k->pf_lock);
 				k->pf_pending -= nready;
+				spin_unlock(&k->pf_lock);
+			}
 
 			cpu_relax();
 		}
@@ -758,8 +782,22 @@ schedule:
 		/* record idle time */
 		if (start_tsc)
 			STAT(SCHED_CYCLES_IDLE) += rdtsc() - start_tsc;
+
+		goto activate_thread_and_return;
 	}
 
+	/* enter runtime */
+	enter_schedule(th);
+
+	/* back from runtime; just return, th state should be activated already */
+	assert(th->state == THREAD_STATE_RUNNING);
+	assert(!th->stack_busy);
+	assert(preempt_enabled());
+	assert(__self == th);
+	return;
+
+activate_thread_and_return:
+	/* serviced fault inline, go back to running the thread right away */
 	assert(th->state == THREAD_STATE_RUNNABLE);
 	th->state = THREAD_STATE_RUNNING;
 	th->stack_busy = false;
@@ -768,8 +806,6 @@ schedule:
 	preempt_enable();
 	RUNTIME_EXIT();
 	return;
-#endif
-	enter_schedule(th);
 }
 
 /**
