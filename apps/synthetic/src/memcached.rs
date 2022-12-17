@@ -91,11 +91,12 @@ impl PacketHeader {
     }
 }
 
-pub static NVALUES: u64 = 10000000;
-// pub static NVALUES: u64 = 10000;
-static PCT_SET: u64 = 2; // out of 1000
-static VALUE_SIZE: usize = 80;
-static KEY_SIZE: usize = 20;
+// // pub static NVALUES: u64 = 30000000;     // Large
+pub static NVALUES: u64 = 10000000;  // Small
+// pub static NVALUES: u64 = 1000000;     // Debug
+static PCT_SET: u64 = 0; // out of 1000
+static VALUE_SIZE: usize = 512;
+static KEY_SIZE: usize = 32;
 
 #[inline(always)]
 fn write_key(buf: &mut Vec<u8>, key: u64) {
