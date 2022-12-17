@@ -83,7 +83,7 @@ typedef enum {
  * 176 GB Memory */
 #define RDMA_SERVER_MEMORY_GB       64
 #define RMEM_HANDLER_CORE_HIGH      55
-#define RMEM_HANDLER_CORE_LOW       52
+#define RMEM_HANDLER_CORE_LOW       55
 #define PIN_SERVER_CORE             51
 #define PIN_SERVER_POLLER_CORE      50
 #define PIN_RACK_CNTRL_CORE         49

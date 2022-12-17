@@ -46,7 +46,9 @@ int rmem_init()
 
 #ifdef USE_VDSO_CHECKS
     /* init vdso objects */
-    __vdso_init();
+    r = __vdso_init();
+    if (r)
+        return r;
 #endif
 
     return 0;

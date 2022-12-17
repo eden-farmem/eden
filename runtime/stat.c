@@ -7,6 +7,7 @@
 #include <pthread.h>
 #include <time.h>
 
+#include <base/atomic.h>
 #include <base/stddef.h>
 #include <base/log.h>
 #include <base/time.h>
@@ -195,6 +196,15 @@ static inline int rstat_write_buf(char *buf, char *buf_hthr, size_t len)
 		}
 		pos += ret;
 	}
+
+	/* report memory used */
+	ret = append_stat(pos, end - pos, "memory_used", atomic64_read(&memory_used));
+	if (ret < 0) {
+		return -EINVAL;
+	} else if (ret >= end - pos) {
+		return -E2BIG;
+	}
+	pos += ret;
 	pos[-1] = '\0'; /* clip off last ',' */
 
 
@@ -210,7 +220,17 @@ static inline int rstat_write_buf(char *buf, char *buf_hthr, size_t len)
 		}
 		pos += ret;
 	}
+
+	/* report memory used (again so that rstats and rstats_hthr are consistent) */
+	ret = append_stat(pos, end - pos, "memory_used", atomic64_read(&memory_used));
+	if (ret < 0) {
+		return -EINVAL;
+	} else if (ret >= end - pos) {
+		return -E2BIG;
+	}
+	pos += ret;
 	pos[-1] = '\0'; /* clip off last ',' */
+
 	return 0;
 }
 

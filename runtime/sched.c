@@ -731,8 +731,35 @@ schedule:
 	/* if we are blocking all work until the fault is resolved, 
 	 * keep checking for completions until it is resolved and return here */
 	assert(fstatus == FAULT_DONE || fstatus == FAULT_READ_POSTED);
+
+	int nready;
+	unsigned long start_tsc;
 	if (fstatus == FAULT_READ_POSTED)
-		while(!kthr_check_for_completions(k, RMEM_MAX_COMP_PER_OP));
+	{
+		/* check for completion once (before starting timer) */
+		nready = kthr_check_for_completions(k, RMEM_MAX_COMP_PER_OP);
+		if (nready > 0)
+			k->pf_pending -= nready;
+
+		start_tsc = 0;
+		while(!nready) {
+			/* start timer */
+			if (!start_tsc)
+				start_tsc = rdtsc();
+
+			/* keep checking for completions while waiting */
+			nready = kthr_check_for_completions(k, RMEM_MAX_COMP_PER_OP);
+			if (nready > 0)
+				k->pf_pending -= nready;
+
+			cpu_relax();
+		}
+
+		/* record idle time */
+		if (start_tsc)
+			STAT(SCHED_CYCLES_IDLE) += rdtsc() - start_tsc;
+	}
+
 	assert(th->state == THREAD_STATE_RUNNABLE);
 	th->state = THREAD_STATE_RUNNING;
 	th->stack_busy = false;
@@ -802,6 +829,7 @@ void thread_park_on_fault(void* address, bool write, int rdahead, int evprio)
 	enter_schedule_with_fault(myth, fault);
 
     /* fault serviced when we get back here */
+	assert(!__is_fault_pending(address, write, false));
     assert(NOT_IN_RUNTIME());
 }
 

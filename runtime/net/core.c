@@ -51,7 +51,7 @@ static void net_rx_send_completion(unsigned long completion_data)
 	k = getk();
 	if (unlikely(!lrpc_send(&k->txcmdq, TXCMD_NET_COMPLETE,
 				completion_data))) {
-		WARN();
+		log_warn_ratelimited("rx send completion failed");
 	}
 	putk();
 }
