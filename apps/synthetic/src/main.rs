@@ -255,6 +255,7 @@ fn run_memcached_preload(
     nthreads: usize,
 ) -> bool {
     eprintln!("preloading {} kv pairs", memcached::NVALUES);
+    println!("NVALUES:{}", memcached::NVALUES);
     let perthread = (memcached::NVALUES as usize + nthreads - 1) / nthreads;
     let join_handles: Vec<JoinHandle<_>> = (0..nthreads)
         .map(|i| {
@@ -268,7 +269,7 @@ fn run_memcached_preload(
                 });
                 let socket = sock1.clone();
                 backend.spawn_thread(move || {
-                    backend.sleep(Duration::from_secs(60));
+                    backend.sleep(Duration::from_secs(300));
                     if Arc::strong_count(&socket) > 1 {
                         println!("Preload took long, terminating");
                         socket.shutdown();
@@ -1048,7 +1049,7 @@ fn main() {
 
                     // Run at full pps 3 times for 20 seconds
                     let sched = gen_classic_packet_schedule(
-                        Duration::from_secs(20),
+                        runtime,
                         packets_per_second,
                         OutputMode::Silent,
                         distribution,
@@ -1066,7 +1067,7 @@ fn main() {
                             &sched,
                             0,
                             Some(true),
-                            0.1         // Randomized warmup
+                            zipfs
                         );
                         backend.sleep(Duration::from_secs(5));
                     }
