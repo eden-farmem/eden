@@ -19,18 +19,29 @@ static DEFINE_SPINLOCK(thread_lock);
 
 unsigned int thread_count;
 void *perthread_offsets[NTHREAD];
+bool perthread_inited[NTHREAD];
 __thread void *perthread_ptr;
 
 __thread unsigned int thread_numa_node;
 __thread unsigned int thread_id;
 __thread bool thread_init_done;
 
+#ifndef KEEP_PERTHREAD_DATA
+/* symbols exported from the linker command file */
 extern const char __perthread_start[];
 extern const char __perthread_end[];
+#endif
 
 static int thread_alloc_perthread(void)
 {
 	void *addr;
+
+#ifndef KEEP_PERTHREAD_DATA
+	/* by default, we define the per-thread variables as @nobits to 
+	 * avoid filling them in the object files (whose size would otherwise 
+	 * blow up with the number of threads).We then allocate memory for them
+	 * on heap during runtime (for each initialized thread) and point 
+	 * the per-thread data to this memory - we do that below */
 	size_t len = __perthread_end - __perthread_start;
 
 	/* no perthread data */
@@ -42,8 +53,15 @@ static int thread_alloc_perthread(void)
 		return -ENOMEM;
 
 	memset(addr, 0, len);
+#else
+	/* keep per-thread variables in the object files. setting the offsets 
+	 * to 0 should suffice */
+	addr = 0;
+#endif
+
 	perthread_ptr = addr;
 	perthread_offsets[thread_id] = addr;
+	perthread_inited[thread_id] = true;
 	return 0;
 }
 

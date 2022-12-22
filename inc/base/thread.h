@@ -12,15 +12,21 @@
 #include <base/cpu.h>
 
 /* used to define perthread variables */
+#ifndef KEEP_PERTHREAD_DATA
 #define DEFINE_PERTHREAD(type, name) \
 	__typeof__(type) __perthread_##name __perthread \
 	__attribute__((section(".perthread,\"\",@nobits#")))
+#else
+#define DEFINE_PERTHREAD(type, name) \
+	__typeof__(type) __perthread_##name
+#endif
 
 /* used to make perthread variables externally available */
 #define DECLARE_PERTHREAD(type, name) \
 	extern DEFINE_PERTHREAD(type, name)
 
 extern void *perthread_offsets[NTHREAD];
+extern bool perthread_inited[NTHREAD];
 extern __thread void *perthread_ptr;
 extern unsigned int thread_count;
 int thread_init_perthread(void);
@@ -50,19 +56,11 @@ static inline void *__perthread_get(void __perthread *key)
 #define perthread_get(var)					\
 	(*((__typeof__(__perthread_##var) *)(__perthread_get(&__perthread_##var))))
 
-/**
- * thread_is_active - is the thread initialized?
- * @thread: the thread id
- *
- * Returns true if yes, false if no.
- */
-#define thread_is_active(thread)					\
-	(perthread_offsets[thread] != NULL)
-
+/* returns the next initalized thread */
 static inline int __thread_next_active(int thread)
 {
 	while (thread < thread_count) {
-		if (thread_is_active(++thread))
+		if (perthread_inited[++thread])
 			return thread;
 	}
 
