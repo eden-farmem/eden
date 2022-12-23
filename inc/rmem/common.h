@@ -23,6 +23,8 @@ extern int evict_nprio;
 extern int nhandlers;
 extern hthread_t** handlers;
 extern atomic64_t memory_used;
+extern atomic64_t memory_allocd;
+extern atomic64_t memory_freed;
 
 /* thread-local */
 extern __thread pgthread_t current_kthread_id;

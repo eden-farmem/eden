@@ -31,6 +31,8 @@ int userfault_fd = -1;
 hthread_t** handlers = NULL;
 int nhandlers = 1;
 atomic64_t memory_used = ATOMIC_INIT(0);
+atomic64_t memory_allocd = ATOMIC_INIT(0);
+atomic64_t memory_freed = ATOMIC_INIT(0);
 
 /* common thread-local state for remote memory */
 __thread uint64_t* rstats_ptr = NULL;
@@ -150,6 +152,7 @@ int rmem_common_destroy_thread()
 int rmem_common_destroy()
 {
     int i, ret;
+    struct region_t *mr;
 
     /* stop and destroy handlers */
     for (i = 0; i < nhandlers; i++) {
@@ -172,11 +175,11 @@ int rmem_common_destroy()
     sampler_destroy(&fault_sampler);
 #endif
 
-    /* ensure all regions freed */
-    struct region_t *mr = NULL;
-    CIRCLEQ_FOREACH(mr, &region_list, link)   
+    /* ensure all regions freed and removed */
+    while(!CIRCLEQ_EMPTY(&region_list)) {
+        mr = CIRCLEQ_FIRST(&region_list);
         remove_memory_region(mr);
-    assert(CIRCLEQ_EMPTY(&region_list));
+    }
 
     /* destroy backend */
     if (rmbackend != NULL) {

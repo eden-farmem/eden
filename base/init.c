@@ -6,6 +6,7 @@
 
 #include <base/init.h>
 #include <base/log.h>
+#include <base/mem.h>
 #include <base/thread.h>
 
 #include "init_internal.h"
@@ -120,6 +121,14 @@ static int init_thread_internal(void)
 int base_init_thread(void)
 {
 	int ret;
+
+    /* assuming that all threads calling base init start (and/or run
+	 * forever) in runtime; this is important when running with
+	 * memory interposition because we don't want any of the runtime
+	 * allocations to end up in uffd-based memory because it will
+	 * result in page faults in the runtime threads that will need
+	 * to be handled by the same threads */
+    RUNTIME_ENTER();
 
 	ret = thread_init_perthread();
 	if (ret)

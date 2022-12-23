@@ -10,6 +10,7 @@
 #include <unistd.h>
 
 #include "base/cpu.h"
+#include "base/mem.h"
 #include "base/sampler.h"
 #include "rmem/backend.h"
 #include "rmem/common.h"
@@ -180,7 +181,6 @@ static inline fault_t* read_uffd_fault()
     struct fault* fault;
     unsigned long long addr, flags, size;
     struct region_t* mr;
-    struct fault_sample fs;
 
     struct pollfd evt = { .fd = userfault_fd, .events = POLLIN };
     if (poll(&evt, 1, 0) > 0) {
@@ -227,6 +227,7 @@ static inline fault_t* read_uffd_fault()
                 fault->evict_prio = 0;
 #ifdef FAULT_SAMPLER
                 /* record the fault information if sampling */
+                struct fault_sample fs;
                 fs.tstamp = time(NULL);
                 fs.ip = message.ip;
                 fs.addr = addr;
@@ -299,7 +300,7 @@ static inline fault_t* read_uffd_fault()
  */
 static void* rmem_handler(void *arg) 
 {
-    bool need_eviction, unblocked, work_done;
+    bool need_eviction, work_done;
     unsigned long long pressure;
     fault_t *fault, *next;
     int nevicts, nevicts_needed, batch, r;
@@ -309,9 +310,8 @@ static void* rmem_handler(void *arg)
     my_hthr = (hthread_t*) arg; /* save our hthread_t */
     unsigned long now_tsc, last_tsc;
 
-    /* init */
-    r = thread_init_perthread();    /* for tcache support */
-	assertz(r);
+    /* init per-thread resources */
+    r = base_init_thread(); assertz(r); /* for base library support */
     rmem_common_init_thread(&my_hthr->bkend_chan_id, my_hthr->rstats, 0);
     list_head_init(&my_hthr->fault_wait_q);
     my_hthr->n_wait_q = 0;
@@ -370,9 +370,8 @@ static void* rmem_handler(void *arg)
                     {
                         log_debug("%s - waited too long", FSTR(fault));
                         fault->tstamp_tsc = now_tsc;
-                        unblocked = handler_try_unblock_fault(fault);
-                        /* if unblocked, try this fault again */
-                        if (unblocked)
+                        if (handler_try_unblock_fault(fault))
+                            /* if unblocked, try this fault again */
                             continue;
                     }
 #endif
@@ -472,7 +471,7 @@ eviction:
     }
 
     /* destroy state */
-    zero_page_free_thread();
+    rmem_common_destroy_thread();
     assert(list_empty(&my_hthr->fault_wait_q));
     return NULL;
 }
@@ -508,9 +507,6 @@ int stop_rmem_handler_thread(hthread_t* hthr)
     hthr->stop = true;
 	pthread_join(hthr->thread, NULL);
 
-    /* destroy per thread */
-    rmem_common_destroy_thread();
-
     /* deallocate */
     free(hthr);
     return 0;
@@ -522,11 +518,13 @@ struct bkend_completion_cbs hthr_cbs = {
     .write_completion = owner_write_back_completed
 };
 
+#ifndef RMEM_STANDALONE
 /* handler thread backend read/write completion ops when stealing */
 struct bkend_completion_cbs hthr_stealer_cbs = {
     .read_completion = hthr_fault_read_steal_done,
     .write_completion = stealer_write_back_completed
 };
+#endif
 
 /**
  * Kernel fault sampling functions

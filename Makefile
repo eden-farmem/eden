@@ -150,13 +150,15 @@ rcntrl_obj = $(rcntrl_src:.c=.o)
 memserver_src = tools/rmserver/memserver.c tools/rmserver/rdma.c
 memserver_obj = $(memserver_src:.c=.o)
 
-# rmlib - rmclient library
-RMLIB = rmlib.so
-rmlib_src = $(wildcard tools/rmlib/*.c)
-rmlib_obj = $(rmlib_src:.c=.o)
-ifeq ($(MAKECMDGOALS),$(RMLIB))
-CFLAGS += -fPIC # (rmlib is a shared library)
+# fltrace - fault tracing library
+FLTRACE = fltrace.so
+fltrace_src = $(wildcard tools/fltrace/*.c)
+fltrace_obj = $(fltrace_src:.c=.o)
+ifeq ($(MAKECMDGOALS),$(FLTRACE))
+CFLAGS += -fPIC # (fltrace is a shared library)
+CFLAGS += -DREMOTE_MEMORY
 CFLAGS += -DRMEM_STANDALONE
+CFLAGS += -DKEEP_PERTHREAD_DATA
 endif
 
 tools_src = $(wildcard tools/*/*.c)
@@ -213,11 +215,12 @@ rcntrl: $(rcntrl_obj) libbase.a
 memserver: $(memserver_obj) libbase.a 
 	$(LD) $(LDFLAGS) -o $@ $(memserver_obj) libbase.a -lpthread -lm $(RDMA_LIBS)
 
-# rmlib.so has to be built separately as it uses different flags
-# use "make rmlib.so"
-$(RMLIB): $(rmlib_obj) librmem.a libbase.a je_jemalloc
-	$(LD) $(CFLAGS) $(LDFLAGS) -shared $(rmlib_obj) -o $(RMLIB)		\
-		librmem.a libbase.a -lpthread -lm $(RDMA_LIBS) $(JEMALLOC_LIBS)
+# fltrace.so has to be built separately as it uses different flags
+# use "make fltrace.so"
+$(FLTRACE): $(fltrace_obj) librmem.a libbase.a base/base.ld
+	$(LD) $(CFLAGS) $(LDFLAGS) -shared $(fltrace_obj) -o $(FLTRACE)		\
+		librmem.a libbase.a $(RDMA_LIBS) $(JEMALLOC_LIBS) -lpthread -lm -ldl 
+#-Wl,-Map=fltrace.map
 
 ## tests
 $(test_targets): $(test_obj) libbase.a libruntime.a librmem.a libnet.a base/base.ld
@@ -256,4 +259,4 @@ sparse: $(src)
 .PHONY: clean
 clean:
 	rm -f $(obj) $(dep) libbase.a libnet.a librmem.a libruntime.a \
-	iokerneld iokerneld-noht rcntrl memserver $(RMLIB) $(test_targets)
+	iokerneld iokerneld-noht rcntrl memserver $(FLTRACE) $(test_targets)
