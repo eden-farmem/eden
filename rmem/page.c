@@ -93,6 +93,8 @@ void rmpage_node_tcache_init_thread(void)
  */
 int rmpage_node_tcache_init(void)
 {
+    int pgsize;
+
     /* check if we can support local memory (with some (+5%) slack)  */
     max_rmpage_nodes = RMEM_MAX_LOCAL_MEM / CHUNK_SIZE;
     max_rmpage_nodes += (max_rmpage_nodes * 5) / 100;
@@ -105,11 +107,18 @@ int rmpage_node_tcache_init(void)
     /* check we're with in limit */
     BUG_ON(local_memory > RMEM_MAX_LOCAL_MEM);
 
+    /* determine page size */
+    pgsize = PGSIZE_2MB;
+#ifdef RMEM_STANDALONE
+    /* avoid huge-page dependency when running without Shenango */
+    pgsize = PGSIZE_4KB;
+#endif
+
     /* create backing region with huge pages on current numa node */
-    log_info("allocating %ld page nodes with %lu huge pages", max_rmpage_nodes,
-        max_rmpage_nodes * sizeof(rmpage_node_t) / PGSIZE_2MB);
+    log_info("allocating %ld page nodes with %lu (%dB) pages", max_rmpage_nodes,
+        max_rmpage_nodes * sizeof(rmpage_node_t) / pgsize, pgsize);
     rmpage_nodes = mem_map_anom(NULL, max_rmpage_nodes * sizeof(rmpage_node_t),
-        PGSIZE_2MB, NUMA_NODE);
+        pgsize, NUMA_NODE);
     if(rmpage_nodes == MAP_FAILED) {
         log_err("out of huge pages for rmpage_nodes");
         return -ENOMEM;
@@ -117,7 +126,7 @@ int rmpage_node_tcache_init(void)
 
     /* allocate free page tracker */
     free_rmpage_nodes = mem_map_anom(NULL, max_rmpage_nodes * 
-        sizeof(rmpage_node_t*), PGSIZE_2MB, NUMA_NODE);
+        sizeof(rmpage_node_t*), pgsize, NUMA_NODE);
     if(free_rmpage_nodes == MAP_FAILED) {
         log_err("out of huge pages for free_rmpage_nodes");
         return -ENOMEM;

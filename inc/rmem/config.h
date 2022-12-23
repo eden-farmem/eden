@@ -11,8 +11,9 @@
 #include "base/mem.h"
 
 /* Default configs */
-#define WP_ON_READ          /* not available on kernel v < 5.0? */
-#define NO_DYNAMIC_REGIONS  /* regions added/deleted only at startup/exit */
+#define WP_ON_READ              /* not available on kernel v < 5.0? */
+#define NO_DYNAMIC_REGIONS      /* regions added/deleted only at startup/exit */
+// #define RMEM_STANDALONE      /* Eden with pure userfaultfd, decoupled from Shenango */
 
 /* memory backend */
 typedef enum {

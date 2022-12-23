@@ -93,9 +93,18 @@ void fault_tcache_init_thread(void)
  */
 int fault_tcache_init(void)
 {
+    int pgsize;
+
+    /* determine page size */
+    pgsize = PGSIZE_2MB;
+#ifdef RMEM_STANDALONE
+    /* avoid huge-page dependency when running without Shenango */
+    pgsize = PGSIZE_4KB;
+#endif
+
     /* create backing region with huge pages on current NUMA node */
     backing_memory = mem_map_anom(NULL, RUNTIME_MAX_FAULTS * sizeof(fault_t),
-        PGSIZE_2MB, NUMA_NODE);
+        pgsize, NUMA_NODE);
     if(backing_memory == MAP_FAILED) {
         log_err("out of huge pages for fault_tcache pool");
         return -ENOMEM;

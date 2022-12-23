@@ -126,17 +126,26 @@ void bkend_buf_tcache_init_thread(void)
  */
 int bkend_buf_tcache_init(void)
 {
+	int pgsize;
+
     /* create backing region */
     backend_region_size = MAX_BACKEND_BUFS * BACKEND_BUF_SIZE;
 	BUILD_ASSERT(is_power_of_two(BACKEND_BUF_SIZE));
-    
+
+	/* determine page size */
+    pgsize = PGSIZE_2MB;
+#ifdef RMEM_STANDALONE
+    /* avoid huge-page dependency when running without Shenango */
+    pgsize = PGSIZE_4KB;
+#endif
+
 	backend_buf_region = 
-		mem_map_anom(NULL, backend_region_size, PGSIZE_2MB, NUMA_NODE);
+		mem_map_anom(NULL, backend_region_size, pgsize, NUMA_NODE);
 	if (backend_buf_region == MAP_FAILED) {
         log_err("out of huge pages for backend_buf_region");
         return -ENOMEM;
 	}
-	BUG_ON((unsigned long) backend_buf_region % PGSIZE_2MB != 0);
+	BUG_ON((unsigned long) backend_buf_region % pgsize != 0);
 
     /* create pool */
 	bkend_buf_tcache = tcache_create("bkend_bufs_tcache", &bkend_buf_tcache_ops, 
