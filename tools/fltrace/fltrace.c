@@ -9,7 +9,6 @@
 #endif
 
 #include <ctype.h>
-#include <dlfcn.h>
 #include <errno.h>
 #include <pthread.h>
 #include <stdarg.h>
@@ -29,6 +28,7 @@
 #include "base/init.h"
 #include "base/log.h"
 #include "base/mem.h"
+#include "base/realmem.h"
 #include "rmem/api.h"
 #include "rmem/common.h"
 #include "rmem/region.h"
@@ -47,21 +47,12 @@ enum init_state {
 __thread bool __from_internal_jemalloc = false;
 __thread bool __init_in_progress = false;
 static atomic_t rmlib_state = ATOMIC_INIT(NOT_STARTED);
-
-/* Interposed alloc fn signatures */
-static void *(*real_malloc)(size_t) = NULL;
-static void *(*real_realloc)(void *, size_t) = NULL;
-static void (*real_free)(void *) = NULL;
-static void *(*real_mmap)(void *, size_t, int, int, int, off_t) = NULL;
-static int (*real_madvise)(void *, size_t, int) = NULL;
-static int (*real_munmap)(void *, size_t) = NULL;
-static void *libc6 = NULL;
 int shm_id;
 
 /**
  * We need modified versions of logging calls that do not call 
- * malloc internally. We will use these functions for logging in 
- * this file
+ * malloc internally to avoid recursive behavior. 
+ * We will only use these functions for logging in this file.
  */
 #define ft_log(fmt, ...)                                    \
   do {                                                      \
@@ -106,33 +97,8 @@ int parse_env_settings()
 }
 
 /**
- * Alloclib wrappers for RMem API
+ * Some wrappers for RMem API
  */
-void *rmlib_rmalloc(size_t size)
-{
-    ft_log_debug("[%s] size=%lu", __func__, size);
-    void *p = rmalloc(size);
-    return p;
-}
-
-void *rmlib_rmrealloc(void *ptr, size_t size, size_t old_size)
-{
-    ft_log_debug("[%s] ptr=%p,size=%lu,old_size=%lu", 
-        __func__, ptr, size, old_size);
-    void *p = rmrealloc(ptr, size, old_size);
-    return p;
-}
-
-void *rmlib_realloc(void *ptr, size_t size, size_t old_size)
-{
-    ft_log_debug("[%s] ptr=%p,size=%lu,old_size=%lu", 
-        __func__, ptr, size, old_size);
-    void *p = rmalloc(size);
-    if (ptr != NULL && old_size > 0) {
-        memmove(p, ptr, old_size);
-    }
-    return p;
-}
 
 void *rmlib_rmmap(void *addr, size_t length, int prot, 
     int flags, int fd, off_t offset)
@@ -150,8 +116,8 @@ void *rmlib_rmmap(void *addr, size_t length, int prot,
         assertz(flags & MAP_DENYWRITE);
         assert(fd == -1);
         assert(length);
-        ft_log_debug("using rmlib_rmalloc'");
-        p = rmlib_rmalloc(length);
+        ft_log_debug("%s - using rmalloc", __func__);
+        p = rmalloc(length);
     }
     return p;
 }
@@ -164,111 +130,6 @@ int rmlib_rmunmap(void *ptr, size_t length)
     } else {
         return rmunmap(ptr, length);
     }
-}
-
-/**
- * Inits to save original alloc fns 
-**/
-
-static void init_malloc(void) {
-    char *error;
-    /* clear existing errors */
-    dlerror();
-    real_malloc = dlsym(RTLD_NEXT, "malloc");
-    if ((error = dlerror()) != NULL) {
-        ft_log_err("Error in dlsym: %s", error);
-        exit(1);
-    }
-    ft_log_debug("set real_malloc");
-}
-
-static void init_realloc(void) {
-    char *error;
-    /* clear existing errors */
-    dlerror();
-    real_realloc = dlsym(RTLD_NEXT, "realloc");
-    if ((error = dlerror()) != NULL) {
-        ft_log_err("Error in dlsym: %s", error);
-        exit(1);
-    }
-    ft_log_debug("set real_realloc");
-}
-
-static void init_free(void) {
-    char *error;
-    /* clear existing errors */
-    dlerror();
-    real_free = dlsym(RTLD_NEXT, "free");
-    if ((error = dlerror()) != NULL) {
-        ft_log_err("Error in dlsym: %s", error);
-        exit(1);
-    }
-    ft_log_debug("set real_free");
-}
-
-static void init_libc6(void) {
-    char *error;
-    dlerror();
-    libc6 = dlopen("libc.so.6", RTLD_LAZY | RTLD_GLOBAL);
-    if ((error = dlerror()) != NULL) {
-        ft_log_err("Error in dlopen: %s", error);
-        exit(1);
-    }
-    ft_log_debug("set libc6");
-}
-
-static void init_mmap() {
-    if (NULL == libc6) {
-        init_libc6();
-    }
-    char *error;
-    /* clear existing errors */
-    dlerror();
-    real_mmap = dlsym(libc6, "mmap");
-    if ((error = dlerror()) != NULL) {
-        ft_log_err("Error in `dlsym`: %s", error);
-        exit(1);
-    }
-    ft_log_debug("set real_mmap");
-}
-
-static void init_madvise() {
-    if (NULL == libc6) {
-        init_libc6();
-    }
-    char *error;
-    /* clear existing errors */
-    dlerror();
-    real_madvise = dlsym(libc6, "madvise");
-    if ((error = dlerror()) != NULL) {
-        ft_log_err("Error in `dlsym`: %s", error);
-        exit(1);
-    }
-    ft_log_debug("set real_madvise");
-}
-
-static void init_munmap() {
-    if (NULL == libc6) {
-        init_libc6();
-    }
-    char *error;
-    /* clear existing errors */
-    dlerror();
-    real_munmap = dlsym(libc6, "munmap");
-    if ((error = dlerror()) != NULL) {
-        ft_log_err("Error in `dlsym`: %s", error);
-        exit(1);
-    }
-    ft_log_debug("set real_munmap");
-}
-
-static void init_real_libs() {
-    init_malloc();
-    init_realloc();
-    init_free();
-    init_mmap();
-    init_madvise();
-    init_munmap();
 }
 
 /**
@@ -338,10 +199,6 @@ again:
 
     /* i started init */
     __init_in_progress = true;
-    RUNTIME_ENTER();
-
-    /* do this first to avoid relying on libc functions */
-    init_real_libs();
 
     /* check for fork'ed processes that inherit LD_PRELOAD */
     key = ftok("rmem_rmlib", 65);
@@ -394,62 +251,8 @@ error:
     goto out;
 
 out:
-    RUNTIME_EXIT();
     __init_in_progress = false;
     return status;
-}
-
-/**
- * Lib C Alloc Functions
- */
-
-void *libc_malloc(size_t size)
-{
-    ft_log_debug("size=%lu", size);
-    // TODO: save pointers returned by libc malloc to use
-    // libc_free on them later.
-    extern void *__libc_malloc(size_t);
-    void *ptr = __libc_malloc(size);
-    ft_log_debug("return=%p", ptr);
-    return ptr;
-}
-
-void *libc_realloc(void *ptr, size_t size)
-{
-    ft_log_debug("[%s] ptr=%p size=%lu", __func__, ptr, size);
-    // TODO: save pointers returned by libc malloc to use
-    // libc_free on them later.
-    extern void *__libc_realloc(void *, size_t);
-    void *newptr = __libc_realloc(ptr, size);
-    ft_log_debug("return=%p", newptr);
-    return newptr;
-}
-
-void *libc_calloc(size_t nitems, size_t size)
-{
-    ft_log_debug("nitems=%lu size=%lu", nitems, size);
-    // TODO: save pointers returned by libc malloc to use
-    // libc_free on them later.
-    extern void *__libc_calloc(size_t, size_t);
-    void *newptr = __libc_calloc(nitems, size);
-    ft_log_debug("return=%p", newptr);
-    return newptr;
-}
-
-void *libc_memalign(size_t alignment, size_t size)
-{
-    ft_log_debug("alignment=%lu size=%lu", alignment, size);
-    extern void *__libc_memalign(size_t, size_t);
-    void *ptr = __libc_memalign(alignment, size);
-    ft_log_debug("return=%p", ptr);
-    return ptr;
-}
-
-void libc_free(void *ptr)
-{
-    ft_log_debug("[%s] ptr=%p", __func__, ptr);
-    extern void __libc_free(void *);
-    __libc_free(ptr);
 }
 
 /**
@@ -458,43 +261,59 @@ void libc_free(void *ptr)
 
 void *malloc(size_t size)
 {
-    void *p;
+    bool from_runtime;
+    void* retptr;
 
-    ft_log_debug("[%s], size=%lu, from-rlib=%d from-jemalloc=%d",
-        __func__, size, IN_RUNTIME(), __from_internal_jemalloc);
+    from_runtime = IN_RUNTIME();
+    RUNTIME_ENTER();
 
-    if (IN_RUNTIME()) {
+    ft_log_debug("[%s], size=%lu, from-runtime=%d from-jemalloc=%d",
+        __func__, size, from_runtime, __from_internal_jemalloc);
+
+    if (from_runtime) {
         ft_log_debug("%s from runtime, using libc", __func__);
-        return libc_malloc(size);
+        retptr = libc_malloc(size);
+        goto out;
     }
 
     /* rmlib status */
     if (!init(false)) {
         ft_log_debug("%s not initialized, using libc", __func__);
-        return libc_malloc(size);
+        retptr = libc_malloc(size);
+        goto out;
     }
 
     /* application malloc */
     __from_internal_jemalloc = true;
     ft_log_debug("using je_malloc");
-    p = rmlib_je_malloc(size);
+    retptr = rmlib_je_malloc(size);
     __from_internal_jemalloc = false;
-    ft_log_debug("[%s] return=%p", __func__, p);
-    return p;
+
+out:
+    ft_log_debug("[%s] return=%p", __func__, retptr);
+    if (!from_runtime)
+        RUNTIME_EXIT();
+    return retptr;
 }
 
 void free(void *ptr)
 {
     int initd;
-    ft_log_debug("[%s] ptr=%p from-rlib=%d from-jemalloc=%d", __func__,
-        ptr, IN_RUNTIME(), __from_internal_jemalloc);
+    bool from_runtime;
+
     if (ptr == NULL)
         return;
 
-    if (IN_RUNTIME()) {
+    from_runtime = IN_RUNTIME();
+    RUNTIME_ENTER();
+
+    ft_log_debug("[%s] ptr=%p from-runtime=%d from-jemalloc=%d", __func__,
+        ptr, from_runtime, __from_internal_jemalloc);
+
+    if (from_runtime) {
         ft_log_debug("%s from runtime, using libc", __func__);
         libc_free(ptr);
-        return;
+        goto out;
     }
 
     /* rmlib status */
@@ -502,7 +321,8 @@ void free(void *ptr)
     BUG_ON(initd == NOT_STARTED);
     if (initd == INIT_FAILED) {
         ft_log_debug("%s not initialized, using libc", __func__);
-        return libc_free(ptr);
+        libc_free(ptr);
+        goto out;
     }
 
     /** FIXME: there may have been some non-runtime libc mallocs that occurred
@@ -513,109 +333,143 @@ void free(void *ptr)
     __from_internal_jemalloc = true;
     rmlib_je_free(ptr);
     __from_internal_jemalloc = false;
+
+out:
     ft_log_debug("[%s] return", __func__);
+    if (!from_runtime)
+        RUNTIME_EXIT();
 }
 
 void *realloc(void *ptr, size_t size)
 {
-    void *p;
-    ft_log_debug("[%s] ptr=%p, size=%lu, from-rlib=%d from-jemalloc=%d",
-        __func__, ptr, size, IN_RUNTIME(), __from_internal_jemalloc);
+    void *retptr;
+    bool from_runtime;
 
     if (ptr == NULL) 
         return malloc(size);
 
-    if (IN_RUNTIME()) {
+    from_runtime = IN_RUNTIME();
+    RUNTIME_ENTER();
+
+    ft_log_debug("[%s] ptr=%p, size=%lu, from-runtime=%d from-jemalloc=%d",
+        __func__, ptr, size, from_runtime, __from_internal_jemalloc);
+
+    if (from_runtime) {
         ft_log_debug("%s from runtime, using libc", __func__);
-        return libc_realloc(ptr, size);
+        retptr = libc_realloc(ptr, size);
+        goto out;
     }
 
     /* rmlib status */
     if (!init(true)) {
         ft_log_debug("%s not initialized, using libc", __func__);
-        return libc_realloc(ptr, size);
+        retptr = libc_realloc(ptr, size);
+        goto out;
     }
     
     /* application realloc */
     __from_internal_jemalloc = true;
-    p = rmlib_je_realloc(ptr, size);
+    retptr = rmlib_je_realloc(ptr, size);
     __from_internal_jemalloc = false;
-    ft_log_debug("[%s] return=%p", __func__, p);
-    return p;
+
+out:
+    ft_log_debug("[%s] return=%p", __func__, retptr);
+    if (!from_runtime)
+        RUNTIME_EXIT();
+    return retptr;
 }
 
 void *calloc(size_t nitems, size_t size)
 {
-    void *p;
-    ft_log_debug("[%s] number=%lu, size=%lu, from-rlib=%d", 
-        __func__, nitems, size, IN_RUNTIME());
+    void *retptr;
+    bool from_runtime;
 
-    if (IN_RUNTIME()) {
+    from_runtime = IN_RUNTIME();
+    RUNTIME_ENTER();
+
+    ft_log_debug("[%s] number=%lu, size=%lu, from-runtime=%d", 
+        __func__, nitems, size, from_runtime);
+
+    if (from_runtime) {
         ft_log_debug("%s from runtime, using libc", __func__);
-        return libc_calloc(nitems, size);
+        retptr = libc_calloc(nitems, size);
+        goto out;
     }
 
     /* rmlib status */
     if (!init(false)) {
         ft_log_debug("%s not initialized, using libc", __func__);
-        return libc_calloc(nitems, size);
+        retptr = libc_calloc(nitems, size);
+        goto out;
     }
 
     /* application calloc */
     __from_internal_jemalloc = true;
-    p = rmlib_je_calloc(nitems, size);
+    retptr = rmlib_je_calloc(nitems, size);
     __from_internal_jemalloc = false;
-    ft_log_debug("return=%p", p);
-    return p;
+
+out:
+    ft_log_debug("[%s] return=%p", __func__, retptr);
+    if (!from_runtime)
+        RUNTIME_EXIT();
+    return retptr;
 }
 
-void *internal_aligned_alloc(size_t alignment, size_t size)
+void *__internal_aligned_alloc(size_t alignment, size_t size)
 {
-    void *p;
-    ft_log_debug("[%s] alignment=%lu, size=%lu, from-rlib=%d", 
-        __func__, alignment, size, IN_RUNTIME());
+    void *retptr;
+    bool from_runtime;
 
-    if (IN_RUNTIME()) {
+    from_runtime = IN_RUNTIME();
+    RUNTIME_ENTER();
+
+    ft_log_debug("[%s] alignment=%lu, size=%lu, from-runtime=%d", 
+        __func__, alignment, size, from_runtime);
+
+    if (from_runtime) {
         ft_log_debug("%s from runtime, using libc", __func__);
-        return libc_memalign(alignment, size);
+        retptr = libc_memalign(alignment, size);
+        goto out;
     }
 
     /* rmlib status */
     if (!init(false)) {
         ft_log_debug("%s not initialized, using libc", __func__);
-        return libc_memalign(alignment, size);
+        retptr = libc_memalign(alignment, size);
+        goto out;
     }
 
     /* application aligned alloc */
     __from_internal_jemalloc = true;
-    p = rmlib_je_aligned_alloc(alignment, size);
+    retptr = rmlib_je_aligned_alloc(alignment, size);
     __from_internal_jemalloc = false;
-    ft_log_debug("return=%p", p);
-    return p;
+
+out:
+    ft_log_debug("[%s] return=%p", __func__, retptr);
+    if (!from_runtime)
+        RUNTIME_EXIT();
+    return retptr;
 }
 
 int posix_memalign(void **ptr, size_t alignment, size_t size)
 {
-    ft_log_debug("[%s] ptr=%p, alignment=%lu, size=%lu, from-rlib=%d", 
-         __func__, ptr, alignment, size, IN_RUNTIME());
+    ft_log_debug("[%s] ptr=%p, alignment=%lu, size=%lu", 
+        __func__, ptr, alignment, size);
     /* TODO: need to check alignment, check return values */
-    *ptr = internal_aligned_alloc(alignment, size);
-    ft_log_debug("[%s] ptr=%p allocated=%p", __func__, ptr, *ptr);
+    *ptr = __internal_aligned_alloc(alignment, size);
     return 0;
 }
 
 void *memalign(size_t alignment, size_t size)
 {
-    ft_log_debug("[%s] alignment=%lu, size=%lu, from-rlib=%d", 
-        __func__, alignment, size, IN_RUNTIME());
-    return internal_aligned_alloc(alignment, size);
+    ft_log_debug("[%s] alignment=%lu, size=%lu", __func__, alignment, size);
+    return __internal_aligned_alloc(alignment, size);
 }
 
 void *aligned_alloc(size_t alignment, size_t size)
 {
-    ft_log_debug("[%s] alignment=%lu, size=%lu, from-rlib=%d", 
-        __func__, alignment, size, IN_RUNTIME());
-    return internal_aligned_alloc(alignment, size);
+    ft_log_debug("[%s] alignment=%lu, size=%lu", __func__, alignment, size);
+    return __internal_aligned_alloc(alignment, size);
 }
 
 /**
@@ -623,147 +477,173 @@ void *aligned_alloc(size_t alignment, size_t size)
  */
 void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset)
 {
-    void *p;
+    void *retptr;
+    bool from_runtime;
+
+    from_runtime = IN_RUNTIME();
+    RUNTIME_ENTER();
+
     ft_log_debug("[%s] addr=%p,length=%lu,prot=%d,flags=%d,fd=%d,offset=%ld,from-"
-    "rlib=%d", __func__, addr, length, prot, flags, fd, offset, IN_RUNTIME());
+    "runtime=%d", __func__, addr, length, prot, flags, fd, offset, from_runtime);
 
-    if (IN_RUNTIME()) {
-        ft_log_debug("%s from runtime, using real mmap", __func__);
-        p = real_mmap(addr, length, prot, flags, fd, offset);
-        ft_log_debug("real mmap; return=%p", p);
-        return p;
-    }
-
-    /* rmlib status */
-    if (!init(false)) {
-        /* we expect to be init'd by the time mmap is called (no libc mmap). It 
-         * may very well be called before, but don't know how to handle yet */
-        BUG_ON(!real_mmap);
-        ft_log_debug("%s not initialized, using real mmap", __func__);
-        p = real_mmap(addr, length, prot, flags, fd, offset);
-        ft_log_debug("real mmap; return=%p", p);
-        return p;
-    }
-
-    assert((fd == -1) || !(flags & MAP_ANONYMOUS));
-    
-    /* We interpose all the calls and send to je_malloc but je_malloc itself 
-     * calls mmap/munmap for backend pages so we need to forward these to 
-     * remote memory */
+    /* First check for calls coming from jemalloc. These allocations are 
+     * meant to be forwarded to remote memory; the tool must have been inited
+     * by now as jemalloc calls are triggered by our own calls after init */
     if (__from_internal_jemalloc) {
-        ft_log_debug("internal jemalloc mmap, fwd to RLib: addr=%p,length=%lu,"
-            "prot=%d,flags=%d,fd=%d,offset=%ld,from-rlib=%d",
-            addr, length, prot, flags, fd, offset, IN_RUNTIME());
-        p = rmlib_rmmap(addr, length, prot, flags, fd, offset);
-        ft_log_debug("return=%p", p);
-        return p;
+        ft_log_debug("internal jemalloc mmap, fwd to RLib: addr=%p", addr);
+        if (rmlib_state.cnt != INITIALIZED) {
+            ft_log_err("ERROR! rmlib not initialized before jemalloc mmap");
+            exit(1);
+        }
+        retptr = rmlib_rmmap(addr, length, prot, flags, fd, offset);
+        goto out;
     }
 
-    /* directly from the app */
-    ft_log_debug("app mmap, fwd to RLib: addr=%p,length=%lu,prot=%d,flags=%d,"
-        "fd=%d,offset=%ld,from-rlib=%d",
-        addr, length, prot, flags, fd, offset, IN_RUNTIME());
-    p = rmlib_rmmap(addr, length, prot, flags, fd, offset);
-    ft_log_debug("return=%p", p);
-    return p;
+    /* mmap coming directly from runtime */
+    if (from_runtime) {
+        ft_log_debug("%s from runtime, using real mmap", __func__);
+        retptr = real_mmap(addr, length, prot, flags, fd, offset);
+        goto out;
+    }
+
+    /* mmap coming from the app, initialize */
+    if (!init(false)) {
+        ft_log_debug("%s not initialized, using real mmap", __func__);
+        retptr = real_mmap(addr, length, prot, flags, fd, offset);
+        goto out;
+    }
+
+    if ((fd != -1) && (flags & MAP_ANONYMOUS)) {
+        ft_log_err("ERROR! bad mmap args: fd=%d, flags=%d", fd, flags);
+        exit(1);
+    }
+
+    ft_log_debug("%s directly from the app, fwd to RLib", __func__);
+    retptr = rmlib_rmmap(addr, length, prot, flags, fd, offset);
+
+out:
+    ft_log_debug("[%s] return=%p", __func__, retptr);
+    if (!from_runtime)
+        RUNTIME_EXIT();
+    return retptr;
 }
 
 int munmap(void *ptr, size_t length)
 {
-    int r, initd;
-    ft_log_debug("[%s] ptr=%p, length=%lu, from-rlib=%d", __func__, ptr, 
-        length, IN_RUNTIME());
+    int ret;
+    bool from_runtime;
+    enum init_state initd;
 
     if (!ptr) 
         return 0;
+    
+    from_runtime = IN_RUNTIME();
+    RUNTIME_ENTER();
 
-    if (IN_RUNTIME()) {
-        ft_log_debug("%s from runtime, using real munmap", __func__);
-        r = real_munmap(ptr, length);
-        ft_log_debug("real mmap; return=%d", r);
-        return r;
-    }
+    ft_log_debug("[%s] ptr=%p, length=%lu, from-runtime=%d", __func__, ptr, 
+        length, from_runtime);
 
-    /* rmlib status */
+    /* check init status */
     initd = atomic_read(&rmlib_state);
-    BUG_ON(initd == NOT_STARTED);
-    if (initd == INIT_FAILED) {
-        r = real_munmap(ptr, length);
-        ft_log_debug("child process; return=%d", r);
-        return r;
+
+    /* First check for calls coming from jemalloc. These deallocations are 
+     * meant to be forwarded to remote memory; the tool must have been init'd 
+     * by now as jemalloc calls are triggered by our own calls after init */
+    if (__from_internal_jemalloc) {
+        ft_log_debug("internal jemalloc munmap, fwd to RLib: addr=%p", ptr);
+        if (initd != INITIALIZED) {
+            ft_log_err("ERROR! rmlib not initialized before jemalloc munmap");
+            exit(1);
+        }
+        ret = rmlib_rmunmap(ptr, length);
+        goto out;
     }
 
-    /* We interpose all the calls and send to je_malloc but je_malloc itself 
-     * calls mmap/munmap for backend pages so we need to forward these to 
-     * remote memory */
-    if (__from_internal_jemalloc) {
-        ft_log_debug("internal jemalloc munmap, fwd to RLib: ptr=%p,length=%lu,"
-            "from-rlib=%d", ptr, length, IN_RUNTIME());
-        r = rmlib_rmunmap(ptr, length);
-        ft_log_debug("return=%d", r);
-        return r;
+    if (from_runtime) {
+        ft_log_debug("%s from runtime, using real munmap", __func__);
+        ret = real_munmap(ptr, length);
+        goto out;
     }
 
     /* directly from the app */
-    ft_log_debug("app munmap, fwd to RLib: ptr=%p,length=%lu,from-rlib=%d", 
-        ptr, length, IN_RUNTIME());
-    r = rmlib_rmunmap(ptr, length);
-    ft_log_debug("return=%d", r);
-    return r;
+    if (initd == NOT_STARTED) {
+        ft_log_err("ERROR! rmlib init not started before app munmap");
+        exit(1);
+    }
+
+    if (initd == INIT_FAILED) {
+        ret = real_munmap(ptr, length);
+        ft_log_debug("child process; return=%d", ret);
+        goto out;
+    }
+    ft_log_debug("munmap directly from the app, fwd to RLib: addr=%p", ptr);
+    ret = rmlib_rmunmap(ptr, length);
+
+out:
+    ft_log_debug("[%s] return=%d", __func__, ret);
+    if (!from_runtime)
+        RUNTIME_EXIT();
+    return ret;
 }
 
 int madvise(void *addr, size_t length, int advice)
 {
-    int r;
-    bool ret;
+    int ret;
+    bool from_runtime, initd;
 
-    ft_log_debug("[%s] addr=%p, size=%lu, advice=%d, from-rlib=%d from-je=%d", 
-        __func__, addr,length, advice, IN_RUNTIME(), __from_internal_jemalloc);
+    from_runtime = IN_RUNTIME();
+    RUNTIME_ENTER();
+
+    ft_log_debug("[%s] addr=%p, size=%lu, advice=%d, from-runtime=%d from-je=%d", 
+        __func__, addr, length, advice, from_runtime, __from_internal_jemalloc);
     if (advice == MADV_DONTNEED)    ft_log_debug("MADV_DONTNEED flag");
     if (advice == MADV_HUGEPAGE)    ft_log_debug("MADV_HUGEPAGE flag");
     if (advice == MADV_FREE)        ft_log_debug("MADV_FREE flag");
 
-    if (IN_RUNTIME()) {
+    if (from_runtime) {
         ft_log_debug("%s from runtime, using real madvise", __func__);
-        r = real_madvise(addr, length, advice);
-        ft_log_debug("real madvise; return=%d", r);
-        return r;
+        ret = real_madvise(addr, length, advice);
+        ft_log_debug("real madvise; return=%d", ret);
+        goto out;
     }
     
     /* rmlib status */
-    ret = init(false);
-    BUG_ON(!real_madvise);
+    initd = init(false);
+    if (initd && within_memory_region(addr))
+        ret = rmadvise(addr, length, advice);
+    else
+        ret = real_madvise(addr, length, advice);
 
-    if (ret && within_memory_region(addr)) {
-        r = rmadvise(addr, length, advice);
-    } else {
-        r = real_madvise(addr, length, advice);
-    }
-
-    ft_log_debug("return=%d", r);
-    return r;
+out:
+    ft_log_debug("[%s] return=%d", __func__, ret);
+    if (!from_runtime)
+        RUNTIME_EXIT();
+    return ret;
 }
 
 #if 0
 /* others? */
 void *mremap(void *old_addr, size_t old_size, size_t new_size, int flags,
                          ... /* void *new_address */) {
-    ft_log_debug("addr=%p,old_size=%lu,new_size=%lu,flags=%d,from-rlib=%d",
-       old_addr, old_size, new_size, flags, IN_RUNTIME());
+    ft_log_debug("addr=%p,old_size=%lu,new_size=%lu,flags=%d,from-runtime=%d",
+       old_addr, old_size, new_size, flags, from_runtime);
     return 0;
 }
 #endif
 
 static __attribute__((constructor)) void __init__(void)
 {
-    ft_log_debug("Alloclib Constructor!");
+    ft_log_debug("ftrace constructor!");
 }
 
 static __attribute__((destructor)) void finish(void)
 {
-    RUNTIME_ENTER();
-    rmem_common_destroy();
+    ft_log_debug("ftrace destructor!");
+    /* NOTE: ideally we should free all remote memory resources
+     * with rmem_common_destroy() here but since we assume that 
+     * the program begins in "application" mode rather than in 
+     * "runtime" mode, we send all initial (before main()) 
+     * allocations to remote memory; hence we need them running 
+     * even during destroy. */
     shmctl(shm_id, IPC_RMID, NULL);
-    RUNTIME_EXIT();
-    ft_log_debug("Alloclib Destructor!");
 }

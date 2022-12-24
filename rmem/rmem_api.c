@@ -8,15 +8,26 @@
 
 #include <sys/mman.h>
 
+#include "base/atomic.h"
 #include "base/log.h"
 #include "base/mem.h"
-#include "base/atomic.h"
+#include "base/realmem.h"
 #include "rmem/api.h"
 #include "rmem/common.h"
 #include "rmem/eviction.h"
 #include "rmem/page.h"
 #include "rmem/pgnode.h"
 #include "rmem/region.h"
+
+/**
+ * When using interposition, make sure the API calls in 
+ * this file are only called from the runtime
+ */
+#ifdef RMEM_STANDALONE
+#define ASSERT_IN_RUNTIME() BUG_ON(!IN_RUNTIME())
+#else
+#define ASSERT_IN_RUNTIME() {}
+#endif
 
 /**
  * Internal methods
@@ -90,7 +101,8 @@ static inline void __remove_and_unlock_page_range(struct region_t *mr,
     /* unlock all pages while also setting them unregistered and freeing the 
      * page nodes for pages that were locally present (if munmap worked) */
     evicted = 0;
-    for (offset = 0; offset < length; offset += CHUNK_SIZE) {
+    for (offset = 0; offset < length; offset += CHUNK_SIZE)
+    {
         page = (unsigned long) start + offset;
 
         /* unlock the page */
@@ -133,8 +145,7 @@ void *rmalloc(size_t size)
     struct region_t *mr;
     void* retptr = NULL;
 
-    BUG_ON(IN_RUNTIME());
-    RUNTIME_ENTER();
+    ASSERT_IN_RUNTIME();
 
     log_debug("rmalloc with size %ld", size);
     if (size <= 0)
@@ -150,7 +161,6 @@ void *rmalloc(size_t size)
 
     put_mr(mr);
 OUT:
-    RUNTIME_EXIT();
     log_debug("rmalloc done, ptr %p", retptr);
     return retptr;
 }
@@ -168,8 +178,7 @@ void *rmrealloc(void *ptr, size_t size, size_t oldsize)
     if (ptr == NULL || oldsize <= 0)
         return rmalloc(size);
 
-    BUG_ON(IN_RUNTIME());
-    RUNTIME_ENTER();
+    ASSERT_IN_RUNTIME();
 
     log_debug("rmrealloc at %p with size %ld", ptr, size);
     retptr = ptr;
@@ -227,7 +236,6 @@ void *rmrealloc(void *ptr, size_t size, size_t oldsize)
 OUT_MR:
     put_mr(mr);
 OUT:
-    RUNTIME_EXIT();
     log_debug("rmrealloc done at %p, newptr %p", ptr, retptr);
     return retptr;
 }
@@ -241,8 +249,7 @@ int rmunmap(void *addr, size_t length)
     unsigned long max_addr;
     int ret = 0;
 
-    BUG_ON(IN_RUNTIME());
-    RUNTIME_ENTER();
+    ASSERT_IN_RUNTIME();
 
     log_debug("rmunmap at %p", addr);
     if (!addr) 
@@ -265,7 +272,7 @@ int rmunmap(void *addr, size_t length)
     /* Now we can do munmap (if UFFD_REGISTER_MUNMAP is defined, this will
      * result in a notif to the handler but I don't see why that would help 
      * except add perf overhead as we lock all the pages anyway */
-    ret = munmap(addr, length);
+    ret = real_munmap(addr, length);
 
     /* remove pages and unlock */
     if (ret == 0) {   
@@ -276,7 +283,6 @@ int rmunmap(void *addr, size_t length)
 
     put_mr(mr);
 OUT:
-    RUNTIME_EXIT();
     log_debug("rmunmap done at %p, retcode %d", addr, ret);
     return ret;
 }
@@ -290,8 +296,7 @@ int rmadvise(void *addr, size_t length, int advice)
     unsigned long max_addr;
     int ret = 0;
 
-    BUG_ON(IN_RUNTIME());
-    RUNTIME_ENTER();
+    ASSERT_IN_RUNTIME();
 
     log_debug("rmadvise at %p size %ld advice %d", addr, length, advice);
     if (!addr) 
@@ -315,12 +320,10 @@ int rmadvise(void *addr, size_t length, int advice)
     /* lock pages */
     __lock_page_range(mr, addr, length);
 
-    assert(IN_RUNTIME());
     /* Now we can do madvise (if UFFD_REGISTER_MADVISE is defined, this will
      * result in a notif to the handler but I don't see why that would help 
      * except add perf overhead as we lock all the pages anyway */
-    ret = madvise((void *)addr, length, advice);
-    assert(IN_RUNTIME());
+    ret = real_madvise((void *)addr, length, advice);
 
     /* remove pages and/or unlock */
     if (ret == 0) __remove_and_unlock_page_range(mr, addr, length, true);
@@ -328,7 +331,6 @@ int rmadvise(void *addr, size_t length, int advice)
 
     put_mr(mr);
 OUT:
-    RUNTIME_EXIT();
     log_debug("rmadvise done at %p, retcode %d", addr, ret);
     return ret;
 }
@@ -341,11 +343,9 @@ OUT:
  */
 int rmfree(void *ptr)
 {
-    BUG_ON(IN_RUNTIME());
-    RUNTIME_ENTER();
+    ASSERT_IN_RUNTIME();
     log_debug("rfree");
     /* TODO */
-    RUNTIME_EXIT();
     return 0;
 }
 
@@ -354,11 +354,9 @@ int rmfree(void *ptr)
  */
 int rmpin(void *addr, size_t size)
 {
-    BUG_ON(IN_RUNTIME());
-    RUNTIME_ENTER();
+    ASSERT_IN_RUNTIME();
     log_debug("rmpin for %p size %ld", addr, size);
     BUG();  /* not supported, should work with eviction */
-    RUNTIME_EXIT();
     return 0;
 }
 
@@ -367,10 +365,8 @@ int rmpin(void *addr, size_t size)
  */
 int rmflush(void *addr, size_t size, bool evict)
 {
-    BUG_ON(IN_RUNTIME());
-    RUNTIME_ENTER();
+    ASSERT_IN_RUNTIME();
     log_debug("rflush for %p size %ld", addr, size);
     BUG();  /* not supported, should work with eviction */
-    RUNTIME_EXIT();
     return 0;
 }
