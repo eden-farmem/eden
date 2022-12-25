@@ -43,6 +43,8 @@ enum init_state {
     INIT_FAILED = 3
 };
 
+extern int start_stats_thread(int stats_core);
+
 /* State */
 __thread bool __from_internal_jemalloc = false;
 __thread bool __init_in_progress = false;
@@ -235,6 +237,10 @@ again:
     rmbackend_type = RMEM_BACKEND_LOCAL;
     r = rmem_common_init();
     if (r)  goto error;
+
+    /* kick-off stats thread */
+    ft_log_debug("starting stats thread");
+    start_stats_thread(-1);
 
     /* done initializing */
     ret = atomic_cmpxchg(&rmlib_state, INIT_STARTED, INITIALIZED);

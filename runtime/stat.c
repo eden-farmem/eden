@@ -55,57 +55,6 @@ static const char *stat_names[] = {
 /* must correspond exactly to STAT_* enum definitions in defs.h */
 BUILD_ASSERT(ARRAY_SIZE(stat_names) == STAT_NR);
 
-static const char *rstat_names[] = {
-	/* fault stats */
-    "faults",
-    "faults_r",
-    "faults_w",
-    "faults_wp",
-    "wp_upgrades",
-    "faults_zp",
-    "faults_done",
-    "uffd_notif",
-    "uffd_retries",
-    "rdahead_ops",
-    "rdahead_pages",
-
-    /* eviction stats */
-    "evict_ops",
-    "evict_pages_popped",
-	"evict_no_candidates",
-	"evict_incomplete_batch",
-    "evict_writes",
-    "evict_wp_retries",
-    "evict_madv",
-    "evict_ops_done",
-    "evict_pages_done",
-
-    /* network read/writes */
-    "net_reads",
-    "net_writes",
-
-    /* work stealing */
-    "steals_ready",
-    "steals_wait",
-    "wait_retries",
-
-    /* memory accounting */
-    "rmalloc_size",
-    "rmunmap_size",
-    "rmadv_size",
-
-    /* time accounting */
-    "total_cycles",		/* only valid for handler cores */
-    "work_cycles",		/* only valid for handler cores */
-	"backend_wait_cycles",
-
-	/* rmem hints */
-	"annot_hits",
-};
-
-/* must correspond exactly to RSTAT_* enum definitions in rmem/stats.h */
-BUILD_ASSERT(ARRAY_SIZE(rstat_names) == RSTAT_NR);
-
 static inline int append_stat(char *pos, size_t len, 
 	const char *name, uint64_t val)
 {

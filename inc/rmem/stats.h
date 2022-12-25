@@ -1,5 +1,5 @@
 /*
- * stats.h - remote memory stats
+ * stats.h - remote memory stat counters
  */
 
 #ifndef __RMEM_STATS_H__
@@ -71,5 +71,8 @@ static inline uint64_t* rstats_ptr_safe()
     return rstats_ptr;
 }
 #define RSTAT(counter) (rstats_ptr_safe()[RSTAT_ ## counter])
+
+/* stat counter names */
+extern const char *rstat_names[];
 
 #endif  // __RMEM_STATS_H__
