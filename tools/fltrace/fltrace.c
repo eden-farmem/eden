@@ -149,9 +149,8 @@ int rmlib_rmunmap(void *ptr, size_t length)
  *
  * This whole interposition is infested with potential infinite loops
  * so tread carefully. E.g., To initialize real mmap, we use dlopen
- * which calls malloc internally -- hence the use of libc calls.
- * Similarly, printf and other logging calls during init may call
- * malloc too.
+ * which calls malloc internally. Similarly, printf and other logging
+ * calls during init may call malloc too.
  */
 static bool init(bool init_start_expected)
 {
@@ -272,14 +271,14 @@ void *malloc(size_t size)
 
     if (from_runtime) {
         ft_log_debug("%s from runtime, using libc", __func__);
-        retptr = libc_malloc(size);
+        retptr = real_malloc(size);
         goto out;
     }
 
     /* rmlib status */
     if (!init(false)) {
         ft_log_debug("%s not initialized, using libc", __func__);
-        retptr = libc_malloc(size);
+        retptr = real_malloc(size);
         goto out;
     }
 
@@ -312,7 +311,7 @@ void free(void *ptr)
 
     if (from_runtime) {
         ft_log_debug("%s from runtime, using libc", __func__);
-        libc_free(ptr);
+        real_free(ptr);
         goto out;
     }
 
@@ -321,13 +320,13 @@ void free(void *ptr)
     BUG_ON(initd == NOT_STARTED);
     if (initd == INIT_FAILED) {
         ft_log_debug("%s not initialized, using libc", __func__);
-        libc_free(ptr);
+        real_free(ptr);
         goto out;
     }
 
     /** FIXME: there may have been some non-runtime libc mallocs that occurred
      * between INIT_STARTED and INITIALIZED that we would be passing to 
-     * jemalloc. We should keep track of these and use libc_free on them. */
+     * jemalloc. We should keep track of these and use real_free on them. */
 
     /* application free */
     __from_internal_jemalloc = true;
@@ -356,14 +355,14 @@ void *realloc(void *ptr, size_t size)
 
     if (from_runtime) {
         ft_log_debug("%s from runtime, using libc", __func__);
-        retptr = libc_realloc(ptr, size);
+        retptr = real_realloc(ptr, size);
         goto out;
     }
 
     /* rmlib status */
     if (!init(true)) {
         ft_log_debug("%s not initialized, using libc", __func__);
-        retptr = libc_realloc(ptr, size);
+        retptr = real_realloc(ptr, size);
         goto out;
     }
     
@@ -392,14 +391,14 @@ void *calloc(size_t nitems, size_t size)
 
     if (from_runtime) {
         ft_log_debug("%s from runtime, using libc", __func__);
-        retptr = libc_calloc(nitems, size);
+        retptr = real_calloc(nitems, size);
         goto out;
     }
 
     /* rmlib status */
     if (!init(false)) {
         ft_log_debug("%s not initialized, using libc", __func__);
-        retptr = libc_calloc(nitems, size);
+        retptr = real_calloc(nitems, size);
         goto out;
     }
 
@@ -428,14 +427,14 @@ void *__internal_aligned_alloc(size_t alignment, size_t size)
 
     if (from_runtime) {
         ft_log_debug("%s from runtime, using libc", __func__);
-        retptr = libc_memalign(alignment, size);
+        retptr = real_memalign(alignment, size);
         goto out;
     }
 
     /* rmlib status */
     if (!init(false)) {
         ft_log_debug("%s not initialized, using libc", __func__);
-        retptr = libc_memalign(alignment, size);
+        retptr = real_memalign(alignment, size);
         goto out;
     }
 
