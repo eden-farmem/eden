@@ -17,7 +17,8 @@
  * Sampler type
  */
 enum sampler_type {
-    SAMPLER_TYPE_UNIFORM = 0,
+    SAMPLER_TYPE_NONE = 0,
+    SAMPLER_TYPE_UNIFORM,
     SAMPLER_TYPE_POISSON,
 };
 
@@ -33,14 +34,16 @@ typedef struct sampler_ops sampler_ops_t;
 /**
  * Sampler
  */
-struct sampler {
-    /* params */
+struct sampler
+{
+    /* settings */
     enum sampler_type type;
     int max_samples;
     int samples_per_sec;
     int dumps_per_sec;
     int sample_size;
     sampler_ops_t* ops;
+
     /* state */
     FILE* outfile;
     spinlock_t lock;
@@ -64,22 +67,31 @@ void __dump_samples_update_tsc(sampler_t* s, int max_str_len,
  * Sampler API
  */
 
-void sampler_init(sampler_t* s, const char* fname, enum sampler_type stype, 
-    sampler_ops_t* ops, int sample_size, int max_samples, int samples_per_sec, 
-    int dumps_per_sec);
+void sampler_init(sampler_t* s, const char* fname,
+    enum sampler_type stype, sampler_ops_t* ops,
+    int sample_size, int max_samples,
+    int samples_per_sec, int dumps_per_sec);
 void sampler_destroy(sampler_t* s);
+
+/**
+ * Check if it is time to take a new sample
+ */
+static inline bool sampler_is_time(sampler_t* s, unsigned long now_tsc)
+{
+    return now_tsc >= s->next_sample_tsc;
+}
 
 /**
  * Record a given sample when it is time (tsc for current time provided)
  */
-static inline void sampler_add_tsc_provided(sampler_t* s, void* sample,
-    unsigned long now_tsc)
+static inline void sampler_add_provide_tsc(sampler_t* s,
+    void* sample, unsigned long now_tsc)
 {
     assert(s && s->ops && s->ops->add_sample);
 
     /* check if it is time and wait for a lock */
     do {
-        if (now_tsc <= s->next_sample_tsc)
+        if (now_tsc < s->next_sample_tsc)
             return;
         cpu_relax();
     } while(!spin_try_lock(&s->lock));
@@ -97,11 +109,12 @@ static inline void sampler_add_tsc_provided(sampler_t* s, void* sample,
  */
 static inline void sampler_add(sampler_t* s, void* sample)
 {
-    sampler_add_tsc_provided(s, sample, rdtsc());
+    sampler_add_provide_tsc(s, sample, rdtsc());
 }
 
 /**
- * Dump samples collected since last time to the file
+ * Dump samples collected since last time to the file. Dumps when the 
+ * queue is full or when the dump interval has expired.
  * This should be called periodically (more often than dump interval) 
  * to empty out the samples queue.
  */ 
@@ -110,9 +123,10 @@ static inline void sampler_dump_provide_tsc(sampler_t* s,
 {
     assert(s && s->ops && s->ops->sample_to_str);
 
-    /* check if it is time and wait for a lock */
+    /* check if it is time or the queue is full and wait for a lock */
     do {
-        if (now_tsc <= s->next_dump_tsc)
+        if ((now_tsc < s->next_dump_tsc) && 
+            ((s->sq_tail + 1) % s->max_samples != s->sq_head))
             return;
         cpu_relax();
     } while(!spin_try_lock(&s->lock));

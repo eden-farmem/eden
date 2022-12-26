@@ -31,6 +31,10 @@ void __add_sample_update_tsc(sampler_t* s, void* sample,
      * do the same can give up and leave */
     next_sample_tsc = 0;
     switch (s->type) {
+        case SAMPLER_TYPE_NONE:
+            /* no sampling, record everything */
+            next_sample_tsc = now_tsc + 1;
+            break;
         case SAMPLER_TYPE_UNIFORM:
             next_sample_tsc = now_tsc + 
                 (cycles_per_us * 1000000ULL / s->samples_per_sec);
@@ -73,7 +77,8 @@ void __dump_samples_update_tsc(sampler_t* s, int max_str_len,
 
     /* update next dump time first so that other threads trying to 
      * do the same can give up and leave */
-    s->next_dump_tsc = now_tsc + (cycles_per_us * 1000000ULL / s->dumps_per_sec);
+    s->next_dump_tsc = now_tsc + 
+        (cycles_per_us * 1000000ULL / s->dumps_per_sec);
     
     /* dump */
     count = 0;

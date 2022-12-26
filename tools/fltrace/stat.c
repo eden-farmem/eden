@@ -17,7 +17,9 @@
 #include <runtime/timer.h>
 
 #define STAT_INTERVAL_SECS  1
-#define MAX_PAYLOAD         1500
+#define MAX_STAT_STR_LEN    1500
+
+/* state */
 static const char statsfile[] = "fault-stats.out";
 
 static inline int append_stat(char *pos, size_t len, 
@@ -99,7 +101,7 @@ static void* stats_worker(void *arg)
     /* stats thread always part of runtime */
     RUNTIME_ENTER();
 
-    char buf[MAX_PAYLOAD];
+    char buf[MAX_STAT_STR_LEN];
     unsigned long now;
     FILE* fp;
     int ret;
@@ -112,7 +114,7 @@ static void* stats_worker(void *arg)
         now = time(NULL);
 
         /* print remote memory stats */
-        ret = rstat_write_buf(buf, MAX_PAYLOAD);
+        ret = rstat_write_buf(buf, MAX_STAT_STR_LEN);
         if (ret < 0) {
             log_err("rstat err %d: couldn't generate stat buffer", ret);
             continue;
@@ -129,7 +131,7 @@ static void* stats_worker(void *arg)
 /**
  * start_stats_thread - starts the stats thread
  */
-int start_stats_thread(int stats_core)
+int start_stats_thread(int pincore_id)
 {
     pthread_t stats_thread;
     int ret;
@@ -139,8 +141,8 @@ int start_stats_thread(int stats_core)
     assertz(ret);
 
     /* pin thread */
-    if (stats_core >= 0) {
-        ret = cpu_pin_thread(stats_thread, stats_core);
+    if (pincore_id >= 0) {
+        ret = cpu_pin_thread(stats_thread, pincore_id);
         assertz(ret);
     }
 

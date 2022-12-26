@@ -92,7 +92,7 @@ int rmem_common_init()
 #ifdef FAULT_SAMPLER
     /* init fault sampler */
     BUG_ON(nhandlers > 1);  /* not thread-safe yet */
-    sampler_init(&fault_sampler, "fault_samples", SAMPLER_TYPE_POISSON,
+    sampler_init(&fault_sampler, "fault_samples", SAMPLER_TYPE_NONE,
         &fault_sampler_ops, sizeof(struct fault_sample), 1000, 1000, 1);
 #endif
 

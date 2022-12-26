@@ -159,6 +159,7 @@ CFLAGS += -fPIC # (fltrace is a shared library)
 CFLAGS += -DREMOTE_MEMORY
 CFLAGS += -DRMEM_STANDALONE
 CFLAGS += -DKEEP_PERTHREAD_DATA
+CFLAGS += -DFAULT_SAMPLER
 endif
 
 tools_src = $(wildcard tools/*/*.c)

@@ -43,6 +43,7 @@ enum init_state {
     INIT_FAILED = 3
 };
 
+/* stats thread */
 extern int start_stats_thread(int stats_core);
 
 /* State */
@@ -90,11 +91,6 @@ int parse_env_settings()
     }
     local_memory = atoll(memory_limit);
 
-    /* set eviction threshold */
-    evict_thr = getenv("EVICTION_THRESHOLD");
-    if (evict_thr != NULL)
-        eviction_threshold = atof(evict_thr);
-    
     return 0;
 }
 
@@ -244,7 +240,7 @@ again:
 
     /* done initializing */
     ret = atomic_cmpxchg(&rmlib_state, INIT_STARTED, INITIALIZED);
-    BUG_ON(!ret);
+    if(!ret) goto error;
     status = true;
     goto out;
 
@@ -647,8 +643,13 @@ static __attribute__((destructor)) void finish(void)
     /* NOTE: ideally we should free all remote memory resources
      * with rmem_common_destroy() here but since we assume that 
      * the program begins in "application" mode rather than in 
-     * "runtime" mode, we send all initial (before main()) 
-     * allocations to remote memory; hence we need them running 
-     * even during destroy. */
+     * "runtime" mode, we send all initial (even before main()) 
+     * allocations to remote memory; hence we need the remote 
+     * memory running even during destroy. */
+
+    /* give a sec for handler and stats threads to empty 
+     * their sample/stat buffers */
+    sleep(1);
+
     shmctl(shm_id, IPC_RMID, NULL);
 }
