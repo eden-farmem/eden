@@ -165,5 +165,6 @@ popd
 # save paths
 JE_BUILD_DIR=`pwd`/build
 echo "-L${JE_BUILD_DIR}/lib -Wl,-rpath,${JE_BUILD_DIR}/lib -ljemalloc" > je_libs
+echo "${JE_BUILD_DIR}/lib/libjemalloc_pic.a" > je_static_libs
 echo "-I${JE_BUILD_DIR}/include" > je_includes
 popd

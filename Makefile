@@ -102,8 +102,9 @@ CFLAGS += $(DPDK_INCLUDES)
 JEMALLOC_PATH = ${MKFILE_DIR}/jemalloc
 JEMALLOC_INC = $(shell cat $(JEMALLOC_PATH)/je_includes)
 JEMALLOC_LIBS = $(shell cat $(JEMALLOC_PATH)/je_libs)
+JEMALLOC_STATIC_LIBS = $(shell cat $(JEMALLOC_PATH)/je_static_libs)
 ifneq ($(MAKECMDGOALS),clean)
-ifeq ($(JEMALLOC_LIBS),)
+ifeq ($(JEMALLOC_STATIC_LIBS),)
 $(error JEMALLOC libs not found. Please run ./setup.sh)
 endif
 endif
@@ -219,8 +220,8 @@ memserver: $(memserver_obj) libbase.a
 # fltrace.so has to be built separately as it uses different flags
 # use "make fltrace.so"
 $(FLTRACE): $(fltrace_obj) librmem.a libbase.a base/base.ld
-	$(LD) $(CFLAGS) $(LDFLAGS) -shared $(fltrace_obj) -o $(FLTRACE)		\
-		librmem.a libbase.a $(RDMA_LIBS) $(JEMALLOC_LIBS) -lpthread -lm -ldl 
+	$(LD) $(CFLAGS) $(LDFLAGS) -shared $(fltrace_obj) -o $(FLTRACE)	\
+		librmem.a libbase.a $(JEMALLOC_STATIC_LIBS) -lpthread -lm -ldl 
 #-Wl,-Map=fltrace.map
 
 ## tests
