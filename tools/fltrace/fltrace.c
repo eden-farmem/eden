@@ -76,7 +76,7 @@ int shm_id;
  */
 int parse_env_settings()
 {
-    char *memory_limit, *evict_thr; 
+    char *memory_limit; 
     
     /* set local memory */
     memory_limit = getenv("LOCAL_MEMORY");
@@ -86,10 +86,14 @@ int parse_env_settings()
             memory_limit++;
 
     if (memory_limit == NULL) {
-        ft_log_err("set LOCAL_MEMORY (in bytes) env var to enable remote memory");
+        ft_log_err("ERROR! set LOCAL_MEMORY (in bytes) env var to "
+            "enable remote memory");
         return 1;
     }
     local_memory = atoll(memory_limit);
+
+    if (local_memory < 100 * PGSIZE_4KB)
+        ft_log_warn("WARN! very low LOCAL_MEMORY, not recommended");
 
     return 0;
 }
@@ -634,12 +638,12 @@ void *mremap(void *old_addr, size_t old_size, size_t new_size, int flags,
 
 static __attribute__((constructor)) void __init__(void)
 {
-    ft_log_debug("ftrace constructor!");
+    ft_log_info("ftrace constructor!");
 }
 
 static __attribute__((destructor)) void finish(void)
 {
-    ft_log_debug("ftrace destructor!");
+    ft_log_info("ftrace destructor!");
     /* NOTE: ideally we should free all remote memory resources
      * with rmem_common_destroy() here but since we assume that 
      * the program begins in "application" mode rather than in 
