@@ -18,6 +18,7 @@
 #include "rmem/dump.h"
 #include "rmem/eviction.h"
 #include "rmem/fault.h"
+#include "rmem/fsampler.h"
 #include "rmem/handler.h"
 #include "rmem/page.h"
 #include "rmem/region.h"
@@ -32,10 +33,6 @@ __thread struct hthread *my_hthr = NULL;
 __thread int current_stealing_kthr_id = -1;
 __thread unsigned long current_blocking_page = 0;
 __thread bool current_page_unblocked = false;
-
-/* handler global state */
-struct sampler fault_sampler;
-struct sampler_ops fault_sampler_ops;
 
 /* check if a fault already exists in the wait queue */
 bool does_fault_exist_in_wait_q(struct fault *fault)
@@ -59,7 +56,6 @@ int hthr_fault_read_done(fault_t* f)
     fault_done(f);
     return 0;
 }
-
 
 #ifndef RMEM_STANDALONE
 
@@ -190,14 +186,6 @@ static inline fault_t* read_uffd_fault()
             return NULL;
         }
 
-        /* get fault object to save the read */
-        fault = fault_alloc();
-        if (unlikely(!fault)) {
-            log_debug("couldn't get a fault object");
-            return NULL;    /* we'll try again later */
-        }
-        memset(fault, 0, sizeof(fault_t));
-
         read_size = read(evt.fd, &message, sizeof(struct uffd_msg));
         if (unlikely(read_size != sizeof(struct uffd_msg))) {
             /* EAGAIN is fine; another handler may have gotten to it first */
@@ -206,17 +194,27 @@ static inline fault_t* read_uffd_fault()
                     read_size, errno);
                 BUG();
             }
-            fault_free(fault);
             return NULL;
         }
 
         /* we have successfully read data into message */
         switch (message.event) {
             case UFFD_EVENT_PAGEFAULT:
+                /* new fault */
                 addr = message.arg.pagefault.address;
                 flags = message.arg.pagefault.flags;
                 log_debug("uffd pagefault event %d: addr=%llx, flags=0x%llx",
                     message.event, addr, flags);
+
+                /* create new fault object */
+                fault = fault_alloc();
+                if (unlikely(!fault)) {
+                    log_debug("couldn't get a fault object");
+                    return NULL;    /* we'll try again later */
+                }
+            
+                /* populate it */
+                memset(fault, 0, sizeof(fault_t));
                 fault->page = addr & ~CHUNK_MASK;
                 fault->is_wrprotect = !!(flags & UFFD_PAGEFAULT_FLAG_WP);
                 fault->is_write = !!(flags & UFFD_PAGEFAULT_FLAG_WRITE);
@@ -227,12 +225,8 @@ static inline fault_t* read_uffd_fault()
                 fault->evict_prio = 0;
 #ifdef FAULT_SAMPLER
                 /* record the fault information if sampling */
-                struct fault_sample fs;
-                fs.tstamp = time(NULL);
-                fs.ip = message.ip;
-                fs.addr = addr;
-                fs.kind = flags;
-                sampler_add(&fault_sampler, &fs);
+                fsampler_add_fault_sample(my_hthr->fsampler_id, flags, addr,
+                    message.arg.pagefault.feat.ptid);
 #endif
                 return fault;
             case UFFD_EVENT_FORK:
@@ -315,6 +309,10 @@ static void* rmem_handler(void *arg)
     rmem_common_init_thread(&my_hthr->bkend_chan_id, my_hthr->rstats, 0);
     list_head_init(&my_hthr->fault_wait_q);
     my_hthr->n_wait_q = 0;
+#ifdef FAULT_SAMPLER
+    my_hthr->fsampler_id = fsampler_get_sampler();
+#endif
+
 
     /* do work */
     last_tsc = 0;
@@ -466,7 +464,7 @@ eviction:
         sampler_dump_provide_tsc(&epoch_sampler, 32, now_tsc);
 #endif
 #ifdef FAULT_SAMPLER
-        sampler_dump_provide_tsc(&fault_sampler, 64, now_tsc);
+        fsampler_dump(my_hthr->fsampler_id);
 #endif
     }
 
@@ -486,6 +484,7 @@ hthread_t* new_rmem_handler_thread(int pincore_id)
 
     /* create thread */
     hthr->stop = false;
+    hthr->fsampler_id = -1;
     r = pthread_create(&hthr->thread, NULL, rmem_handler, (void*)hthr);
     if (r < 0) {
         log_err("pthread_create for rmem handler failed: %d", errno);
@@ -493,8 +492,10 @@ hthread_t* new_rmem_handler_thread(int pincore_id)
     }
 
     /* pin thread */
-    r = cpu_pin_thread(hthr->thread, pincore_id);
-    assertz(r);
+    if (pincore_id >= 0) {
+        r = cpu_pin_thread(hthr->thread, pincore_id);
+        assertz(r);
+    }
 
     return hthr;
 }
@@ -525,31 +526,3 @@ struct bkend_completion_cbs hthr_stealer_cbs = {
     .write_completion = stealer_write_back_completed
 };
 #endif
-
-/**
- * Kernel fault sampling functions
- */
-void fault_add_sample(void* buffer, void* sample)
-{
-    /* note: shallow copy */
-    assert(buffer && sample);
-    memcpy(buffer, sample, sizeof(struct fault_sample));
-}
-
-void fault_sample_to_str(void* sample, char* sbuf, int max_len)
-{
-    int n;
-    struct fault_sample* fs;
-
-    assert(sbuf && sample);
-    fs = (struct fault_sample*) sample;
-    n = snprintf(sbuf, max_len, "%lu,%lx,%d,%lx", fs->tstamp, fs->ip,
-        fs->kind, fs->addr);
-    BUG_ON(n >= max_len);   /* truncated */
-}
-
-/* epoch sampler ops */
-struct sampler_ops fault_sampler_ops = {
-    .add_sample = fault_add_sample,
-    .sample_to_str = fault_sample_to_str,
-};

@@ -23,19 +23,10 @@ typedef struct hthread {
     int bkend_chan_id;
     struct list_head fault_wait_q;
     int n_wait_q;
+    int fsampler_id;
     uint64_t rstats[RSTAT_NR];
 } hthread_t __aligned(CACHE_LINE_SIZE);
 extern __thread struct hthread *my_hthr;
-
-/* fault sample def */
-struct fault_sample {
-    unsigned long tstamp;
-    unsigned long ip;
-    unsigned long addr;
-    int kind;
-};
-extern struct sampler fault_sampler;
-extern struct sampler_ops fault_sampler_ops;
 
 /* methods */
 hthread_t* new_rmem_handler_thread(int pincore_id);

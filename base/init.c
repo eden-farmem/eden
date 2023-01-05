@@ -2,6 +2,7 @@
  * init.c - support for initialization
  */
 
+#include <stdio.h>
 #include <stdlib.h>
 
 #include <base/init.h>
@@ -61,6 +62,8 @@ static int init_internal(void)
 {
 	int ret;
 
+	fprintf(stderr, "entered %s", __FUNCTION__);
+	
 	ret = cpu_init();
 	if (ret)
 		return ret;
@@ -96,11 +99,15 @@ int base_init(void)
 	if (ret)
 		return ret;
 
+	fprintf(stderr, "init: initializing base library");
+
 	for (i = 0; i < ARRAY_SIZE(init_base_levels); i++) {
 		ret = init_one_level(&init_base_levels[i]);
 		if (ret)
 			return ret;
 	}
+
+	fprintf(stderr, "init: done initializing base library");
 
 	base_init_done = true;
 	return 0;

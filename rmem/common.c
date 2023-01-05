@@ -12,6 +12,7 @@
 #include "rmem/common.h"
 #include "rmem/config.h"
 #include "rmem/fault.h"
+#include "rmem/fsampler.h"
 #include "rmem/handler.h"
 #include "rmem/pgnode.h"
 #include "rmem/region.h"
@@ -90,14 +91,13 @@ int rmem_common_init()
     eviction_init();
 
 #ifdef FAULT_SAMPLER
-    /* init fault sampler */
-    BUG_ON(nhandlers > 1);  /* not thread-safe yet */
-    sampler_init(&fault_sampler, "fault_samples", SAMPLER_TYPE_NONE,
-        &fault_sampler_ops, sizeof(struct fault_sample), 1000, 1000, 1);
+    /* init fault samplers */
+    fsampler_init();
 #endif
 
     /* kick off rmem handlers - need at least one for kernel faults */
     BUG_ON(nhandlers <= 0);
+    BUG_ON(nhandlers > MAX_HANDLER_CORES);
     BUG_ON(nhandlers > (RMEM_HANDLER_CORE_HIGH - RMEM_HANDLER_CORE_LOW + 1));
     handlers = malloc(nhandlers*sizeof(hthread_t*));
     for (i = 0; i < nhandlers; i++)
@@ -171,8 +171,8 @@ int rmem_common_destroy()
     fault_tcache_destroy();
 
 #ifdef FAULT_SAMPLER
-    /* free fault sampler */
-    sampler_destroy(&fault_sampler);
+    /* free fault sampler resources */
+    fsampler_destroy();
 #endif
 
     /* ensure all regions freed and removed */

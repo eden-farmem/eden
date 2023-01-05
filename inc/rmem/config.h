@@ -84,7 +84,7 @@ typedef enum {
  * 176 GB Memory */
 #define RDMA_SERVER_MEMORY_GB       64
 #define RMEM_HANDLER_CORE_HIGH      55
-#define RMEM_HANDLER_CORE_LOW       55
+#define RMEM_HANDLER_CORE_LOW       52
 #define PIN_SERVER_CORE             51
 #define PIN_SERVER_POLLER_CORE      50
 #define PIN_RACK_CNTRL_CORE         49
@@ -114,22 +114,27 @@ BUILD_ASSERT(CHUNK_SIZE >= PGSIZE_4KB);
 #define EVICTION_EPOCH_LEN_MUS      100
 #define EVICTION_TLB_FLUSH_MIN      2       /* TODO: must be 32 or something */
 #define EVICTION_MAX_BUMPS_PER_OP   (5*EVICTION_MAX_BATCH_SIZE)
+#define OS_MEM_PROBE_INTERVAL       1e6
 BUILD_ASSERT(EVICTION_MAX_BATCH_SIZE <= RMEM_MAX_CHUNKS_PER_OP);
 
-/* Eviction policy (default is none) */
+/* eviction policy (default is none) */
 // #define SC_EVICTION     /* second-chance eviction */
 // #define LRU_EVICTION    /* LRU eviction */
 #if (defined(SC_EVICTION) && defined(LRU_EVICTION))
 #pragma GCC error "Only one policy (SC_EVICTION/LRU_EVICTION) can be defined"
 #endif
 
-/* Fault handling */
+/* fault handling */
+#define MAX_HANDLER_CORES               8
 #define RUNTIME_MAX_FAULTS              2048
 #define FAULT_TCACHE_MAG_SIZE           64
-#define OS_MEM_PROBE_INTERVAL           1e6
 #define FAULT_MAX_RDAHEAD_SIZE          63
 #define HANDLER_WAIT_BEFORE_STEAL_US    100
 BUILD_ASSERT((1 + FAULT_MAX_RDAHEAD_SIZE) <= RMEM_MAX_CHUNKS_PER_OP);
+
+/* fault sampling */
+#define MAX_FAULT_SAMPLERS          (MAX_HANDLER_CORES)
+#define FAULT_TRACE_STEPS           50
 
 /* Region settings  */
 #define RMEM_MAX_REGIONS            1

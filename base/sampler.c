@@ -122,9 +122,9 @@ void sampler_init(sampler_t* s, const char* fname, enum sampler_type stype,
     s->outfile = fopen(fname, "w");
     BUG_ON(!s->outfile);
 
-    log_info("sampler initialized: %s, %d samples/sec, %d max samples, "
-        "%d sample size, %d dumps/sec", fname, samples_per_sec, max_samples,
-        sample_size, dumps_per_sec);
+    log_info("sampler initialized: %s, type: %d, %d samples/sec, %d max samples,"
+        " %d sample size, %d dumps/sec", fname, stype, samples_per_sec,
+        max_samples, sample_size, dumps_per_sec);
 }
 
 /**

@@ -33,7 +33,9 @@ int uffd_init(void) {
     int r;
     struct uffdio_api api = {
             .api = UFFD_API,
-            .features = UFFD_FEATURE_EVENT_FORK | UFFD_FEATURE_EVENT_REMAP
+            .features = UFFD_FEATURE_EVENT_FORK
+                | UFFD_FEATURE_EVENT_REMAP
+                | UFFD_FEATURE_THREAD_ID
     };
 
 #ifdef REGISTER_MADVISE_REMOVE
