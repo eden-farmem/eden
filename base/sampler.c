@@ -92,26 +92,36 @@ void __dump_samples_update_tsc(sampler_t* s, int max_str_len,
         s->sq_head = newhead;
         count++;
     }
-    if (count > 0)
+    if (count > 0) {
+        fflush(s->outfile);
         log_info("dumped %d samples", count);
+    }
 }
 
 /**
  * Sampler init
  */
-void sampler_init(sampler_t* s, const char* fname, enum sampler_type stype, 
-    sampler_ops_t* ops, int sample_size, int max_samples, int samples_per_sec, 
-    int dumps_per_sec)
+void sampler_init(sampler_t* s,   /* sampler instance */
+    const char* fname,            /* output file name */
+    enum sampler_type stype,      /* sampling type */
+    sampler_ops_t* ops,           /* base sampler ops */
+    int sample_size,              /* size of each sample object */
+    int max_samples,              /* max sample queue entries */
+    int samples_per_sec,          /* samples per second */
+    int dumps_per_sec,            /* min buffer dump to file every sec */
+    bool dump_on_full             /* dump on full queue without waiting */)
 {
     s->type = stype;
-    s->max_samples = max_samples;
+    s->ops = ops;
     s->sample_size = sample_size;
+    s->max_samples = max_samples;
     s->samples_per_sec = samples_per_sec;
     s->dumps_per_sec = dumps_per_sec;
     s->sq_head = s->sq_tail = 0;
     s->next_sample_tsc = 0;
+    s->dump_on_full = dump_on_full;
+
     spin_lock_init(&s->lock);
-    s->ops = ops;
     rand_seed(&s->randst, time(NULL));
 
     /* samples storage */

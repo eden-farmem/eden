@@ -106,6 +106,12 @@ void *rmlib_rmmap(void *addr, size_t length, int prot,
     int flags, int fd, off_t offset)
 {
     void *p = NULL;
+
+    if ((fd != -1) && (flags & MAP_ANONYMOUS)) {
+        ft_log_err("ERROR! bad mmap args: fd=%d, flags=%d", fd, flags);
+        exit(1);
+    }
+
     if (!(flags & MAP_ANONYMOUS) || !(flags & MAP_ANON) || (prot & PROT_EXEC) 
             || (flags & (MAP_STACK | MAP_FIXED | MAP_DENYWRITE))
             || (addr && !within_memory_region(addr))) {
@@ -303,7 +309,6 @@ out:
 
 void free(void *ptr)
 {
-    int initd;
     bool from_runtime;
 
     if (ptr == NULL)
@@ -316,23 +321,24 @@ void free(void *ptr)
         ptr, from_runtime, __from_internal_jemalloc);
 
     if (from_runtime) {
-        ft_log_debug("%s from runtime, using libc", __func__);
+        ft_log_debug("[%s] from runtime, using libc", __func__);
         real_free(ptr);
         goto out;
     }
 
     /* rmlib status */
-    initd = atomic_read(&rmlib_state);
-    BUG_ON(initd == NOT_STARTED);
-    if (initd == INIT_FAILED) {
-        ft_log_debug("%s not initialized, using libc", __func__);
+    if (!init(true)) {
+        ft_log_debug("[%s] not initialized, using libc", __func__);
         real_free(ptr);
         goto out;
     }
 
-    /** FIXME: there may have been some non-runtime libc mallocs that occurred
-     * between INIT_STARTED and INITIALIZED that we would be passing to 
-     * jemalloc. We should keep track of these and use real_free on them. */
+    /* if we are here, this should be a remote pointer. just warn for now */
+    if (!within_memory_region(ptr)) {
+        ft_log_debug("[%s] WARN - unexpected real ptr from app", __func__);
+        real_free(ptr);
+        goto out;
+    }
 
     /* application free */
     __from_internal_jemalloc = true;
@@ -518,11 +524,6 @@ void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset)
         goto out;
     }
 
-    if ((fd != -1) && (flags & MAP_ANONYMOUS)) {
-        ft_log_err("ERROR! bad mmap args: fd=%d, flags=%d", fd, flags);
-        exit(1);
-    }
-
     ft_log_debug("%s directly from the app, fwd to RLib", __func__);
     retptr = rmlib_rmmap(addr, length, prot, flags, fd, offset);
 
@@ -570,17 +571,20 @@ int munmap(void *ptr, size_t length)
         goto out;
     }
 
-    /* directly from the app */
-    if (initd == NOT_STARTED) {
-        ft_log_err("ERROR! rmlib init not started before app munmap");
-        exit(1);
-    }
-
-    if (initd == INIT_FAILED) {
+    /* from the app, check on rmlib status again */
+    if (!init(true)) {
+        ft_log_debug("[%s] not initialized, using libc", __func__);
         ret = real_munmap(ptr, length);
-        ft_log_debug("child process; return=%d", ret);
         goto out;
     }
+
+    /* if we are here, this should be a remote pointer. just warn for now */
+    if (!within_memory_region(ptr)) {
+        ft_log_debug("[%s] WARN - unexpected real ptr from app", __func__);
+        ret = real_munmap(ptr, length);
+        goto out;
+    }
+
     ft_log_debug("munmap directly from the app, fwd to RLib: addr=%p", ptr);
     ret = rmlib_rmunmap(ptr, length);
 

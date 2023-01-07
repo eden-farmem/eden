@@ -42,6 +42,7 @@ struct sampler
     int samples_per_sec;
     int dumps_per_sec;
     int sample_size;
+    bool dump_on_full;
     sampler_ops_t* ops;
 
     /* state */
@@ -70,7 +71,7 @@ void __dump_samples_update_tsc(sampler_t* s, int max_str_len,
 void sampler_init(sampler_t* s, const char* fname,
     enum sampler_type stype, sampler_ops_t* ops,
     int sample_size, int max_samples,
-    int samples_per_sec, int dumps_per_sec);
+    int samples_per_sec, int dumps_per_sec, bool dump_on_full);
 void sampler_destroy(sampler_t* s);
 
 /**
@@ -121,12 +122,14 @@ static inline void sampler_add(sampler_t* s, void* sample)
 static inline void sampler_dump_provide_tsc(sampler_t* s, 
     int max_str_len, unsigned long now_tsc)
 {
+    bool its_time, queue_full;
     assert(s && s->ops && s->ops->sample_to_str);
 
-    /* check if it is time or the queue is full and wait for a lock */
+    /* check if (it is time or the queue is full) and wait for the lock */
     do {
-        if ((now_tsc < s->next_dump_tsc) && 
-            ((s->sq_tail + 1) % s->max_samples != s->sq_head))
+        its_time = now_tsc >= s->next_dump_tsc;
+        queue_full = (s->sq_tail + 1) % s->max_samples == s->sq_head;
+        if (!its_time && !(s->dump_on_full && queue_full)) 
             return;
         cpu_relax();
     } while(!spin_try_lock(&s->lock));

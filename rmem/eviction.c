@@ -976,7 +976,7 @@ int eviction_init(void)
 #ifdef EPOCH_SAMPLER
     /* init epoch sampler */
     sampler_init(&epoch_sampler, "epoch_distance_samples", SAMPLER_TYPE_POISSON,
-        &epoch_sampler_ops, sizeof(unsigned long), 1000, 1000, 1);
+        &epoch_sampler_ops, sizeof(unsigned long), 1000, 1000, 1, false);
 #endif
 
 #ifdef LRU_EVICTION

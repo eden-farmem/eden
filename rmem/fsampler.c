@@ -99,8 +99,10 @@ int fsampler_get_sampler()
 
     /* initialize sampler */
     sprintf(fsname, "fault_samples%d", 1 + fsid);
-    sampler_init(&fsamplers[fsid], fsname, SAMPLER_TYPE_POISSON,
-        &fault_sampler_ops, sizeof(struct fsample), 1000, 1000, 1);
+    sampler_init(&fsamplers[fsid], fsname, SAMPLER_TYPE_NONE,
+        &fault_sampler_ops, sizeof(struct fsample), 
+        /* queue size = */ 1000, /* sampling rate = */ 1000,
+        /* dumps per sec = */ 1, /* dump on full = */ true);
     log_info("initialized fault sampler %d", 1 + fsid);
 
     return fsid;
@@ -173,9 +175,19 @@ void fsampler_dump(int fsid)
     sampler_dump(sampler, MAX_FAULT_SAMPLE_LEN);
 }
 
+/* signal handler for saving stacktrace */
 void save_stacktrace(int signum, siginfo_t *siginfo, void *context)
 {
     int fsid;
+    bool from_runtime;
+
+    /* this handler is only triggered on the application threads during 
+     * a page fault but faults can happen both in application or runtime 
+     * code (e.g., in interposed malloc). Make sure that we are in 
+     * runtime during this fn to avoid remote memory interpostion but 
+     * keep track of the original state and revert to it when exiting */
+    from_runtime = IN_RUNTIME();
+    RUNTIME_ENTER();
 
     fsid = siginfo->si_value.sival_int;
     log_debug("received signal %d for sampler %d", signum, fsid);
@@ -190,6 +202,10 @@ void save_stacktrace(int signum, siginfo_t *siginfo, void *context)
     /* set done */
     store_release(&fsample_data[fsid].busy, 0);
     log_debug("backtrace done for sampler %d", fsid);
+
+    /* exit runtime if necessary */
+    if (!from_runtime)
+        RUNTIME_EXIT();
 }
 
 /**
