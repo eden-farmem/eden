@@ -21,67 +21,107 @@
 #include "base/assert.h"
 
 #ifdef REMOTE_MEMORY
-/* Some UFFD features are only available in recent kernel versions (i.e., 
- * headers) so putting this under the REMOTE_MEMORY flag so that we can still 
- * build Shenango without remote memory on earlier kernels. */
+/* Some UFFD features are only available in recent kernel versions 
+ * so placing entire uffd wrapping under the REMOTE_MEMORY flag so that
+ * we can still build Shenango without remote memory on earlier kernels. */
 
-int userfaultfd(int flags) { 
-    return syscall(SYS_userfaultfd, flags); 
+/**
+ * Check uffd features required for certain configurations at compile time
+ */
+
+/* UFFD feature for dirty-page tracking */
+#ifdef TRACK_DIRTY
+#if !defined(UFFD_FEATURE_PAGEFAULT_FLAG_WP)
+#error "UFFD_WP feature not available to support write-protection on read"
+#endif
+#endif
+
+/* UFFD features for batched write-protect */
+#ifdef VECTORED_MPROTECT
+#ifndef UFFD_FEATURE_PAGEFAULT_FLAG_WP
+#error "UFFD_WP must be set for vectored mprotect"
+#endif
+#ifndef UFFDIO_WRITEPROTECTV
+#error "UFFDIO_WRITEPROTECTV not available to support vectored mprotect"
+#endif
+#endif
+
+/* need UFFD WP to avoid uncorrupted copy to buffer during eviction */
+#ifndef UFFD_FEATURE_PAGEFAULT_FLAG_WP
+#error "UFFD_WP feature not available to support eviction"
+#endif
+
+/* state */
+static int saved_fd = -1;
+static uint64_t saved_features;
+
+/**
+ * UFFD wrappers
+ */
+
+static inline int uffd_not_supported_error()
+{
+    log_err("uffd feature not supported");
+    BUG();
 }
 
-int uffd_init(void) {
-    int r;
-    struct uffdio_api api = {
-            .api = UFFD_API,
-            .features = UFFD_FEATURE_EVENT_FORK
-                | UFFD_FEATURE_EVENT_REMAP
-                | UFFD_FEATURE_THREAD_ID
-    };
+int uffd_init(void)
+{
+    int r, fd;
+    unsigned long features;
+    unsigned long ioctl_mask;
 
-#ifdef REGISTER_MADVISE_REMOVE
-    features |= UFFD_FEATURE_EVENT_REMOVE;
-#endif
-#ifdef REGISTER_MADVISE_UNMAP
-    features |= UFFD_FEATURE_EVENT_UNMAP;
-#endif
-// #ifdef UFFD_APP_POLL
-//     api.features |= UFFD_FEATURE_POLL;
-// #endif
-
-    uint64_t ioctl_mask =
-            (1ull << _UFFDIO_REGISTER) | (1ull << _UFFDIO_UNREGISTER);
-
-    int fd = userfaultfd(O_NONBLOCK | O_CLOEXEC);
+    /* create fd */
+    fd = syscall(SYS_userfaultfd, O_NONBLOCK | O_CLOEXEC);
     if (fd < 0) {
         log_err("userfaultfd failed");
-        BUG();
         return -1;
     }
 
+    /* enabling required features */
+    features = 0;
+#ifdef UFFD_FEATURE_PAGEFAULT_FLAG_WP
+    features |= UFFD_FEATURE_PAGEFAULT_FLAG_WP;
+#endif
+#ifdef UFFD_FEATURE_THREAD_ID
+    features |= UFFD_FEATURE_THREAD_ID;
+#endif
+
+    struct uffdio_api api = {
+        .api = UFFD_API,
+        .features = features
+    };
     r = ioctl(fd, UFFDIO_API, &api);
     if (r < 0) {
         log_err("ioctl(fd, UFFDIO_API, ...) failed");
-        BUG();
         return -1;
     }
+
+    /* check required ioctls supported */
+    ioctl_mask = (1ull << _UFFDIO_REGISTER) | (1ull << _UFFDIO_UNREGISTER);
     if ((api.ioctls & ioctl_mask) != ioctl_mask) {
-        log_err("supported features %llx ioctls %llx", api.features, api.ioctls);
-        BUG();
+        log_err("uffd unsupported features. features: %llx ioctls %llx",
+            api.features, api.ioctls);
         return -1;
     }
+
+    /* save uffd info */
+    saved_fd = fd;
+    saved_features = api.features;
 
     return fd;
 }
 
-int uffd_register(int fd, unsigned long addr, size_t size, int writeable) {
-    int r;
-    uint64_t ioctls_mask = (1ull << _UFFDIO_COPY);
+int uffd_register(int fd, unsigned long addr, size_t size, int writeable)
+{
+    int r, mode;
+    uint64_t ioctls_mask;
 
-    int mode;
+    mode = UFFDIO_REGISTER_MODE_MISSING;
+#ifdef UFFDIO_REGISTER_MODE_WP
     if (writeable)
-        mode = UFFDIO_REGISTER_MODE_MISSING | UFFDIO_REGISTER_MODE_WP;
-    else
-        mode = UFFDIO_REGISTER_MODE_MISSING;
+        mode |= UFFDIO_REGISTER_MODE_WP;
+#endif
 
     struct uffdio_register reg = {
         .mode = mode, 
@@ -90,26 +130,30 @@ int uffd_register(int fd, unsigned long addr, size_t size, int writeable) {
 
     r = ioctl(fd, UFFDIO_REGISTER, &reg);
     if (r < 0) {
-        log_err("ioctl(fd, UFFDIO_REGISTER, ...) failed: size %ld addr %lx",
-            size, addr);
-        BUG();
+        log_err("UFFDIO_REGISTER failed: size %ld addr %lx", size, addr);
         goto out;
     }
 
+    ioctls_mask = (1ull << _UFFDIO_COPY);
+#ifdef _UFFDIO_WRITEPROTECT
+    if (writeable)
+        ioctls_mask |= (1ull << _UFFDIO_WRITEPROTECT);
+#endif
     if ((reg.ioctls & ioctls_mask) != ioctls_mask) {
-        log_debug("unexpected UFFD ioctls");
+        log_err("unexpected UFFD register ioctls %llx, expected %lx",
+            reg.ioctls, ioctls_mask);
         r = -1;
         goto out;
     }
-    log_debug("ioctl(fd, UFFDIO_REGISTER, ...) succeed: size %ld addr %lx", 
-        size, addr);
+    log_debug("UFFDIO_REGISTER succeeded: size %ld addr %lx", size, addr);
 
 out:
     return r;
 }
 
-int uffd_unregister(int fd, unsigned long addr, size_t size) {
-    int r = 0;
+int uffd_unregister(int fd, unsigned long addr, size_t size)
+{
+    int r;
     struct uffdio_range range = {.start = addr, .len = size};
     r = ioctl(fd, UFFDIO_UNREGISTER, &range);
     if (r < 0) log_err("ioctl(fd, UFFDIO_UNREGISTER, ...) failed");
@@ -120,13 +164,16 @@ int uffd_copy(int fd, unsigned long dst, unsigned long src, size_t size,
     bool wrprotect, bool no_wake, bool retry, int *n_retries) 
 {
     int r;
-    int mode = 0;
+    int mode;
 
     assert(n_retries);
     *n_retries = 0;
 
+    mode = 0;
+#ifdef UFFDIO_COPY_MODE_WP
     if (wrprotect)  
         mode |= UFFDIO_COPY_MODE_WP;
+#endif
     if (no_wake)    
         mode |= UFFDIO_COPY_MODE_DONTWAKE;
     struct uffdio_copy copy = {
@@ -174,6 +221,20 @@ int uffd_copy(int fd, unsigned long dst, unsigned long src, size_t size,
     return r;
 }
 
+/* check if write-protection is supported on the current kernel */
+bool uffd_is_wp_supported(int fd)
+{
+    /* only valid after init */
+    assert(saved_fd >= 0 && saved_fd == fd);
+
+#ifdef UFFD_FEATURE_PAGEFAULT_FLAG_WP
+    return !!(saved_features & UFFD_FEATURE_PAGEFAULT_FLAG_WP);
+#else
+    return false;
+#endif
+}
+
+#ifdef UFFD_FEATURE_PAGEFAULT_FLAG_WP
 int uffd_wp(int fd, unsigned long addr, size_t size, bool wrprotect, 
     bool no_wake, bool retry, int *n_retries) 
 {
@@ -220,6 +281,14 @@ int uffd_wp(int fd, unsigned long addr, size_t size, bool wrprotect,
     } while (r && errno == EAGAIN);
     return r;
 }
+#else
+int uffd_wp(int fd, unsigned long addr, size_t size, bool wrprotect, 
+    bool no_wake, bool retry, int *n_retries)
+{
+    return uffd_not_supported_error();
+}
+#endif
+
 
 int uffd_wp_add(int fd, unsigned long fault_addr, size_t size, bool nowake, 
     bool retry, int *n_retries) 
@@ -234,14 +303,10 @@ int uffd_wp_remove(int fd, unsigned long fault_addr, size_t size, bool nowake,
     return uffd_wp(fd, fault_addr, size, false, nowake, retry, n_retries);
 }
 
+#ifdef VECTORED_MPROTECT
 int uffd_wp_vec(int fd, struct iovec* iov, int iov_len, bool wrprotect, 
     bool no_wake, bool retry, int *n_retries, size_t* wp_bytes) 
 {
-#ifndef VECTORED_MPROTECT
-    /* UFFDIO_WRITEPROTECTV is only available as a patch right now, so keeping
-     * it under a flag to not affect build on unpatched kernels */
-    BUG();
-#else
     int r;
     int mode = 0;
 
@@ -293,8 +358,14 @@ int uffd_wp_vec(int fd, struct iovec* iov, int iov_len, bool wrprotect,
       r = 0;
     }
     return r;
-#endif
 }
+#else
+int uffd_wp_vec(int fd, struct iovec* iov, int iov_len, bool wrprotect, 
+    bool no_wake, bool retry, int *n_retries, size_t* wp_bytes)
+{
+    return uffd_not_supported_error();
+}
+#endif
 
 int uffd_wp_add_vec(int fd, struct iovec* iov, int iov_len, bool no_wake, 
     bool retry, int *n_retries, size_t* wp_bytes)
@@ -358,7 +429,8 @@ int uffd_zero(int fd, unsigned long addr, size_t size, bool no_wake,
     return r;
 }
 
-int uffd_wake(int fd, unsigned long addr, size_t size) {
+int uffd_wake(int fd, unsigned long addr, size_t size)
+{
     // This will wake all threads waiting on this range:
     // From https://lore.kernel.org/lkml/5661B62B.2020409@gmail.com/T/
     //
@@ -399,6 +471,11 @@ int uffd_copy(int fd, unsigned long dst, unsigned long src, size_t size,
     bool wrprotect, bool no_wake, bool retry, int *n_retries) {
     return rmem_undefined_error();
 }
+
+bool uffd_is_wp_supported(int fd) {
+    return  rmem_undefined_error();
+}
+
 int uffd_wp(int fd, unsigned long addr, size_t size, bool wrprotect, 
     bool no_wake, bool retry, int *n_retries) {
     return rmem_undefined_error();

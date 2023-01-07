@@ -11,7 +11,7 @@
 #include "base/mem.h"
 
 /* Default configs */
-#define WP_ON_READ              /* not available on kernel v < 5.0? */
+#define TRACK_DIRTY             /* not available for kernels v < 5.7 */
 #define NO_DYNAMIC_REGIONS      /* regions added/deleted only at startup/exit */
 // #define RMEM_STANDALONE      /* Eden with pure userfaultfd, decoupled from Shenango */
 

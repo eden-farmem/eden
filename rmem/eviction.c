@@ -574,8 +574,8 @@ static inline bool needs_write_back(pgflags_t flags)
     /* if the page was unmapped, no need to write-back */
     if (!(flags & PFLAG_REGISTERED))
         return false;
-#ifdef WP_ON_READ
-    /* DIRTY bit is only valid when WP is enabled */
+#ifdef TRACK_DIRTY
+    /* DIRTY bit is only valid when dirty tracking is enabled */
     return !!(flags & PFLAG_DIRTY);
 #endif
     return true;
@@ -679,7 +679,7 @@ static bool flush_pages(int chan_id, struct list_head* pglist, int npages,
        
         /* for each page */
         for (i = 0; i < niov; i++) {
-            if (!vectored_mprotect) {
+            if (!vectored_mprotect && uffd_is_wp_supported(userfault_fd)) {
                 /* batch mprotect is not available, mprotect individually */
                 nretries = 0;
                 r = uffd_wp_add(userfault_fd, 
@@ -983,6 +983,11 @@ int eviction_init(void)
     /* init LRU epoch distance estimator */
     mov_p2estimator_init(&epoch_p2estimator, 0.9, 1000);
 #endif
+
+    /* check if write-protect is supported */
+    if (!uffd_is_wp_supported(userfault_fd))
+        log_warn("!!WARNING!! uffd write-protect not supported on this machine,"
+            " eviction may corrupt the data. Proceed at your own risk!");
 
     return 0;
 }

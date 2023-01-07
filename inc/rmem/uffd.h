@@ -24,6 +24,7 @@ int uffd_zero(int fd, unsigned long addr, size_t size, bool no_wake,
 /**
  * Change Write Protection
  */
+bool uffd_is_wp_supported(int fd);
 int uffd_wp(int fd, unsigned long addr, size_t size, bool wrprotect, 
     bool no_wake, bool retry, int *n_retries);
 int uffd_wp_add(int fd, unsigned long fault_addr, size_t size, bool no_wake, 

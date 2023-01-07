@@ -55,7 +55,7 @@ int rmem_common_init()
 
     /* init userfaultfd */
     userfault_fd = uffd_init();
-    assert(userfault_fd >= 0);
+    BUG_ON(userfault_fd < 0);
 
     /* initialize backend buf pool (used by backend) */
     ret = bkend_buf_tcache_init();

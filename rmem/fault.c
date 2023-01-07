@@ -391,10 +391,10 @@ enum fault_status handle_page_fault(int chan_id, fault_t* fault,
                 RSTAT(WP_UPGRADES)++;
             }
 
-#ifndef WP_ON_READ
-            /* no WP on READ means every fault is a write fault */
+#ifndef TRACK_DIRTY
+            /* no dirty page tracking means every fault is a write fault */
             if (fault->is_read)
-                fault_upgrade_to_write(fault, "no WP_ON_READ");
+                fault_upgrade_to_write(fault, "no TRACK_DIRTY");
 #endif
 
             /* first time adding page, use zero page */

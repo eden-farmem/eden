@@ -175,8 +175,7 @@ static inline fault_t* read_uffd_fault()
     ssize_t read_size;
     struct uffd_msg message;
     struct fault* fault;
-    unsigned long long addr, flags, size;
-    struct region_t* mr;
+    unsigned long long addr, flags;
 
     struct pollfd evt = { .fd = userfault_fd, .events = POLLIN };
     if (poll(&evt, 1, 0) > 0) {
@@ -186,6 +185,7 @@ static inline fault_t* read_uffd_fault()
             return NULL;
         }
 
+        /* read uffd event data into message */
         read_size = read(evt.fd, &message, sizeof(struct uffd_msg));
         if (unlikely(read_size != sizeof(struct uffd_msg))) {
             /* EAGAIN is fine; another handler may have gotten to it first */
@@ -197,94 +197,47 @@ static inline fault_t* read_uffd_fault()
             return NULL;
         }
 
-        /* we have successfully read data into message */
-        switch (message.event) {
-            case UFFD_EVENT_PAGEFAULT:
-                /* new fault */
-                addr = message.arg.pagefault.address;
-                flags = message.arg.pagefault.flags;
-                log_debug("uffd pagefault event %d: addr=%llx, flags=0x%llx",
-                    message.event, addr, flags);
-
-                /* create new fault object */
-                fault = fault_alloc();
-                if (unlikely(!fault)) {
-                    log_debug("couldn't get a fault object");
-                    return NULL;    /* we'll try again later */
-                }
-            
-                /* populate it */
-                memset(fault, 0, sizeof(fault_t));
-                fault->page = addr & ~CHUNK_MASK;
-                fault->is_wrprotect = !!(flags & UFFD_PAGEFAULT_FLAG_WP);
-                fault->is_write = !!(flags & UFFD_PAGEFAULT_FLAG_WRITE);
-                fault->is_read = !(fault->is_write || fault->is_wrprotect);
-                fault->from_kernel = true;
-                fault->rdahead_max = 0;   /*no readaheads for kernel faults*/
-                fault->rdahead  = 0;
-                fault->evict_prio = 0;
-#ifdef FAULT_SAMPLER
-                /* record the fault information if sampling */
-                fsampler_add_fault_sample(my_hthr->fsampler_id, flags, addr,
-                    message.arg.pagefault.feat.ptid);
-#endif
-                return fault;
-            case UFFD_EVENT_FORK:
-                /* fork not supported */
-                log_err("faulted process performed a fork or clone, fd:%d",
-                    message.arg.fork.ufd);
-                BUG();
-            case UFFD_EVENT_REMAP:
-                /* remap: hopefully won't be here due to interposition? */
-                log_warn("faulted process performed a mremap");
-                return NULL;
-            case UFFD_EVENT_REMOVE:
-                /* we get here for evicted pages with REGISTER_MADVISE_REMOVE */
-#ifndef REGISTER_MADVISE_REMOVE
-                log_err("REMOVE event unexpected without REGISTER_MADVISE_REMOVE");
-                BUG();
-#endif
-                log_debug("process madvise at %p to %p, size=%llu",
-                    (void *)message.arg.remove.start,
-                    (void *)(message.arg.remove.end - 1),
-                    message.arg.remove.end - message.arg.remove.start);
-                addr = message.arg.remove.start & ~CHUNK_MASK;
-                size = message.arg.remove.end - message.arg.remove.start;
-
-                /* mark pages not present and adjust memory counters */
-                mr = get_region_by_addr_safe(addr);
-                /* we should have locked the page by this point */
-                assert(!!(get_page_flags(mr, addr) & PFLAG_WORK_ONGOING));
-                clear_page_flags_range(mr, addr, size, PFLAG_PRESENT);
-                put_mr(mr);
-                RSTAT(UFFD_NOTIF)++;
-                return NULL;
-            case UFFD_EVENT_UNMAP:
-                /* we get here (presumably) for unintercepted munmap */
-#ifndef REGISTER_MADVISE_UNMAP
-                log_err("UNMAP event unexpected without REGISTER_MADVISE_UNMAP");
-                BUG();
-#endif
-                log_debug("process munmap at %p to %p, size=%llu",
-                    (void *)message.arg.remove.start,
-                    (void *)(message.arg.remove.end - 1),
-                    message.arg.remove.end - message.arg.remove.start);
-                addr = message.arg.remove.start & ~CHUNK_MASK;
-                size = message.arg.remove.end - message.arg.remove.start;
-
-                /* deregister pages (we will adjust memory after eviction) */
-                mr = get_region_by_addr_safe(addr);
-                /* we should have locked the page by this point */
-                assert(!!(get_page_flags(mr, addr) & PFLAG_WORK_ONGOING));
-                clear_page_flags_range(mr, addr, size, PFLAG_REGISTERED);
-                /* TODO: add these pages as readily evictible!! */
-                put_mr(mr);
-                RSTAT(UFFD_NOTIF)++;
-                return NULL;
-            default:
-                log_err("unknown uffd event %d", message.event);
-                BUG();
+        /* only need page fault events */
+        if (unlikely(message.event != UFFD_EVENT_PAGEFAULT)) {
+            /* we don't need other events right now; a lot of them are 
+             * for reporting changes to memory layout to the handler, but 
+             * we hope to handle them with memory lib interposition (see 
+             * fltrace.c) or provide explicit calls (see rmem_api.c) */
+            log_err("uffd event %d not supported", message.event);
+            BUG();
         }
+
+        /* new fault */
+        addr = message.arg.pagefault.address;
+        flags = message.arg.pagefault.flags;
+        log_debug("uffd pagefault event %d: addr=%llx, flags=0x%llx",
+            message.event, addr, flags);
+
+        /* create new fault object */
+        fault = fault_alloc();
+        if (unlikely(!fault)) {
+            log_debug("couldn't get a fault object");
+            return NULL;    /* we'll try again later */
+        }
+    
+        /* populate it */
+        memset(fault, 0, sizeof(fault_t));
+        fault->page = addr & ~CHUNK_MASK;
+        fault->is_wrprotect = !!(flags & UFFD_PAGEFAULT_FLAG_WP);
+        fault->is_write = !!(flags & UFFD_PAGEFAULT_FLAG_WRITE);
+        fault->is_read = !(fault->is_write || fault->is_wrprotect);
+        fault->from_kernel = true;
+        fault->rdahead_max = 0;   /*no readaheads for kernel faults*/
+        fault->rdahead  = 0;
+        fault->evict_prio = 0;
+
+#ifdef FAULT_SAMPLER
+        /* record the fault information if sampling */
+        fsampler_add_fault_sample(my_hthr->fsampler_id, flags, addr,
+            message.arg.pagefault.feat.ptid);
+#endif
+
+        return fault;
     }
     return NULL;
 }
