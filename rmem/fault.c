@@ -50,10 +50,11 @@ void zero_page_free_thread()
  */
 
 /* are we already in the state that the fault hoped to acheive? */
-bool is_fault_serviced_nolock(fault_t* f)
+bool is_fault_serviced(fault_t* f, bool locked)
 {    
     pgflags_t pflags;
     bool page_present, page_dirty, page_evicting;
+    bool cannot_trust_present_flag;
 
     pflags = get_page_flags(f->mr, f->page);
     page_present = !!(pflags & PFLAG_PRESENT);
@@ -64,8 +65,10 @@ bool is_fault_serviced_nolock(fault_t* f)
      * window during eviction (after madvise() removed the page and before 
      * clearing the PRESENT bit when a kernel fault could get here with the 
      * PRESENT bit set while the page is absent; in this case, be on the 
-     * safe side and return not serviced */
-    if(page_present && !(f->from_kernel && page_evicting)){
+     * safe side and return not serviced when the page is not locked */
+    cannot_trust_present_flag = !locked && (f->from_kernel && page_evicting);
+
+    if(page_present && !cannot_trust_present_flag){
         if (f->is_read)
             return true;
         if((f->is_write || f->is_wrprotect) && page_dirty)
@@ -285,7 +288,7 @@ enum fault_status handle_page_fault(int chan_id, fault_t* fault,
 
     /* see if this fault needs to be acted upon, because some other fault 
      * on the same page might have handled it by now */
-    if (is_fault_serviced_nolock(fault)) {
+    if (is_fault_serviced(fault, /*page locked=*/ false)) {
         /* some other fault addressed the page, fault done */
         fault->uffd_explicit_wake = fault->from_kernel;
         log_debug("%s - fault done, was redundant", FSTR(fault));
@@ -308,6 +311,14 @@ enum fault_status handle_page_fault(int chan_id, fault_t* fault,
             nchunks = 1;
             fault->locked_pages = true;
             log_debug("%s - no ongoing work, start handling", FSTR(fault));
+
+            /* see if the fault got serviced during the locking */
+            if (unlikely(is_fault_serviced(fault, /*locked=*/ true))) {
+                /* some other fault addressed the page, fault done */
+                fault->uffd_explicit_wake = fault->from_kernel;
+                log_debug("%s - fault done, was redundant", FSTR(fault));
+                return FAULT_DONE;
+            }
 
             /* at this point, we can check for read-ahead. see if we can get 
              * a lock on the next few pages that have similar requirements 
@@ -356,13 +367,9 @@ enum fault_status handle_page_fault(int chan_id, fault_t* fault,
                 wrprotect = (fault->is_wrprotect | fault->is_write);
                 no_wake = fault->from_kernel ? false : true;
 
-                /* it's a read fault and page was present; we're done. this was 
-                 * probably missed by is_fault_serviced_nolock() above */
-                if (unlikely(!wrprotect)) {
-                    fault->uffd_explicit_wake = fault->from_kernel;
-                    log_debug("%s - fault done, was redundant", FSTR(fault));
-                    return FAULT_DONE;
-                }
+                /* we should have already handled the (page_present && 
+                 * !wrprotect) case earlier in is_fault_serviced() */
+                assert(wrprotect);
                 
                 /* write fault on existing page; just remove wrprotection */
                 ret = uffd_wp_remove(userfault_fd, fault->page, 
