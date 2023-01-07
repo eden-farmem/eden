@@ -18,7 +18,7 @@
 	__attribute__((section(".perthread,\"\",@nobits#")))
 #else
 #define DEFINE_PERTHREAD(type, name) \
-	__typeof__(type) __perthread_##name
+	__thread __typeof__(type) __perthread_##name
 #endif
 
 /* used to make perthread variables externally available */
