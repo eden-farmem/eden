@@ -177,11 +177,11 @@ index f9f17e4f6..d5039691d 100644
 +++ b/drivers/net/mlx5/rte_pmd_mlx5_version.map
 @@ -1,3 +1,7 @@
  DPDK_20.0 {
- 	local: *;
-+
 +	global:
 +	mlx5_manual_reg_mr;
 +	mlx5_manual_dereg_mr;
++
+ 	local: *;
  };
 -- 
 2.25.1

@@ -25,7 +25,6 @@
 
 #include "base/assert.h"
 #include "base/atomic.h"
-#include "base/init.h"
 #include "base/log.h"
 #include "base/mem.h"
 #include "base/realmem.h"
@@ -42,6 +41,9 @@ enum init_state {
     INIT_STARTED = 2,
     INIT_FAILED = 3
 };
+
+/* from base lib */
+extern int time_init(void);
 
 /* stats thread */
 extern int start_stats_thread(int stats_core);
@@ -232,9 +234,9 @@ again:
         goto error;
     }
 
-    /* init base library */
-    ft_log_debug("calling base init");
-    r = base_init();
+    /* init some base library things */
+    ft_log_debug("calling time init");
+    r = time_init();
     if (r)  goto error;
 
     /* init rmem (with local backend) */

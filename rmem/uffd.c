@@ -31,29 +31,31 @@
 
 /* UFFD feature for dirty-page tracking */
 #ifdef TRACK_DIRTY
-#if !defined(UFFD_FEATURE_PAGEFAULT_FLAG_WP)
-#error "UFFD_WP feature not available to support write-protection on read"
+#if !defined(UFFD_FEATURE_PAGEFAULT_FLAG_WP) || !defined(UFFDIO_WRITEPROTECT)
+#error "UFFD WP features not available to support write-protection on read"
 #endif
 #endif
 
 /* UFFD features for batched write-protect */
 #ifdef VECTORED_MPROTECT
-#ifndef UFFD_FEATURE_PAGEFAULT_FLAG_WP
-#error "UFFD_WP must be set for vectored mprotect"
+#ifndef UFFDIO_WRITEPROTECT
+#error "UFFDIO_WRITEPROTECT not available for vectored mprotect"
 #endif
 #ifndef UFFDIO_WRITEPROTECTV
 #error "UFFDIO_WRITEPROTECTV not available to support vectored mprotect"
 #endif
 #endif
 
-/* need UFFD WP to avoid uncorrupted copy to buffer during eviction */
-#ifndef UFFD_FEATURE_PAGEFAULT_FLAG_WP
-#error "UFFD_WP feature not available to support eviction"
+/* UFFD Thread Id is required for fault sampling */
+#ifdef FAULT_SAMPLER
+#ifndef UFFD_FEATURE_THREAD_ID
+#error "Fault sampling not supported without uffd thread id feature"
+#endif
 #endif
 
 /* state */
 static int saved_fd = -1;
-static uint64_t saved_features;
+static uint64_t saved_ioctls;
 
 /**
  * UFFD wrappers
@@ -80,7 +82,7 @@ int uffd_init(void)
 
     /* enabling required features */
     features = 0;
-#ifdef UFFD_FEATURE_PAGEFAULT_FLAG_WP
+#ifdef TRACK_DIRTY
     features |= UFFD_FEATURE_PAGEFAULT_FLAG_WP;
 #endif
 #ifdef UFFD_FEATURE_THREAD_ID
@@ -107,7 +109,7 @@ int uffd_init(void)
 
     /* save uffd info */
     saved_fd = fd;
-    saved_features = api.features;
+    saved_ioctls = api.ioctls;
 
     return fd;
 }
@@ -118,7 +120,7 @@ int uffd_register(int fd, unsigned long addr, size_t size, int writeable)
     uint64_t ioctls_mask;
 
     mode = UFFDIO_REGISTER_MODE_MISSING;
-#ifdef UFFDIO_REGISTER_MODE_WP
+#ifdef TRACK_DIRTY
     if (writeable)
         mode |= UFFDIO_REGISTER_MODE_WP;
 #endif
@@ -135,7 +137,7 @@ int uffd_register(int fd, unsigned long addr, size_t size, int writeable)
     }
 
     ioctls_mask = (1ull << _UFFDIO_COPY);
-#ifdef _UFFDIO_WRITEPROTECT
+#ifdef TRACK_DIRTY
     if (writeable)
         ioctls_mask |= (1ull << _UFFDIO_WRITEPROTECT);
 #endif
@@ -227,14 +229,14 @@ bool uffd_is_wp_supported(int fd)
     /* only valid after init */
     assert(saved_fd >= 0 && saved_fd == fd);
 
-#ifdef UFFD_FEATURE_PAGEFAULT_FLAG_WP
-    return !!(saved_features & UFFD_FEATURE_PAGEFAULT_FLAG_WP);
+#ifdef UFFDIO_WRITEPROTECT
+    return !!(saved_ioctls & (1ull << _UFFDIO_WRITEPROTECT));
 #else
     return false;
 #endif
 }
 
-#ifdef UFFD_FEATURE_PAGEFAULT_FLAG_WP
+#ifdef UFFDIO_WRITEPROTECT
 int uffd_wp(int fd, unsigned long addr, size_t size, bool wrprotect, 
     bool no_wake, bool retry, int *n_retries) 
 {

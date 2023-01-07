@@ -247,6 +247,9 @@ static inline fault_t* read_uffd_fault()
  */
 static void* rmem_handler(void *arg) 
 {
+    /* handler threads run entirely in runtime */
+    RUNTIME_ENTER();
+
     bool need_eviction, work_done;
     unsigned long long pressure;
     fault_t *fault, *next;
@@ -258,7 +261,7 @@ static void* rmem_handler(void *arg)
     unsigned long now_tsc, last_tsc;
 
     /* init per-thread resources */
-    r = base_init_thread(); assertz(r); /* for base library support */
+    r = thread_init_perthread(); assertz(r); /* for tcache support */
     rmem_common_init_thread(&my_hthr->bkend_chan_id, my_hthr->rstats, 0);
     list_head_init(&my_hthr->fault_wait_q);
     my_hthr->n_wait_q = 0;
