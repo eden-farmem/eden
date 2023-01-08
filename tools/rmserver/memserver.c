@@ -33,6 +33,8 @@
 #include "base/log.h"
 #include "rdma.h"
 
+#define RDMA_SERVER_NSLABS (RDMA_SERVER_MEMORY_GB * 1073741824L / RMEM_SLAB_SIZE)
+
 static struct context *s_ctx = NULL;
 static volatile bool aborted = false;
 

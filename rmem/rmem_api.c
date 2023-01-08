@@ -154,8 +154,10 @@ void *rmalloc(size_t size)
 
     /* find available region and atomically grab memory */
     mr = get_available_region(size);
-    if (mr == NULL)
-        goto OUT;
+    if (mr == NULL) {
+        log_err("ERROR! out of remote memory for alloc; add more");
+        BUG();
+    }
 
     retptr = __alloc_new(mr, size);
 

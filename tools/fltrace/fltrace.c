@@ -52,6 +52,7 @@ extern int start_stats_thread(int stats_core);
 __thread bool __from_internal_jemalloc = false;
 __thread bool __init_in_progress = false;
 static atomic_t rmlib_state = ATOMIC_INIT(NOT_STARTED);
+unsigned long max_memory_mb = 1;
 int shm_id;
 
 /**
@@ -76,26 +77,41 @@ int shm_id;
 /**
  * Helpers 
  */
+int parse_numeric_env_setting(const char* name, long int* parsed_num)
+{
+    char *val_str;
+
+    val_str = getenv(name);
+    if (val_str == NULL)
+        return 1;
+
+    /* Hack: fix a bug wheren env variable has non-printable chars at start */
+    while (!isalnum(val_str[0]) && val_str[0] != 0)
+        val_str++;
+
+    *parsed_num = atoll(val_str);
+    ft_log_info("parsed env setting: %s=%ld", name, *parsed_num);
+    return 0;
+}
+
 int parse_env_settings()
 {
-    char *memory_limit; 
-    
-    /* set local memory */
-    memory_limit = getenv("LOCAL_MEMORY");
-    /* Hack: fix a bug wheren env variable has non-printable chars at start */
-    if (memory_limit != NULL)
-        while (!isalnum(memory_limit[0]) && memory_limit[0] != 0)
-            memory_limit++;
+    long int val;
 
-    if (memory_limit == NULL) {
-        ft_log_err("ERROR! set LOCAL_MEMORY (in bytes) env var to "
-            "enable remote memory");
+    /* parse local memory */
+    if (parse_numeric_env_setting("FLTRACE_LOCAL_MEMORY_MB", &val) != 0) {
+        ft_log_err("ERROR! set local mem using (FLTRACE_LOCAL_MEMORY_MB env)");
         return 1;
     }
-    local_memory = atoll(memory_limit);
+    local_memory = val * 1024 * 1024;
 
-    if (local_memory < 100 * PGSIZE_4KB)
-        ft_log_warn("WARN! very low LOCAL_MEMORY, not recommended");
+    /* parse number of handlers */
+    if (parse_numeric_env_setting("FLTRACE_NHANDLERS", &val) == 0)
+        nhandlers = val;
+
+    /* parse max backing memory */
+    if (parse_numeric_env_setting("FLTRACE_MAX_MEMORY_MB", &val) == 0)
+        max_memory_mb = val;
 
     return 0;
 }
@@ -167,6 +183,7 @@ static bool init(bool init_start_expected)
     bool ret, status;
     int r, oldval, shmid, initd;
     key_t key;
+    unsigned long nslabs;
 
     /* inf loop; a thread came back here during init */
     if (__init_in_progress) {
@@ -243,7 +260,8 @@ again:
     ft_log_debug("calling rmem init");
     rmem_enabled = true;
     rmbackend_type = RMEM_BACKEND_LOCAL;
-    r = rmem_common_init();
+    nslabs= max_memory_mb * 1024L * 1024L / RMEM_SLAB_SIZE;
+    r = rmem_common_init(nslabs, /*don't pin handler cores*/ -1, -1);
     if (r)  goto error;
 
     /* kick-off stats thread */
@@ -644,12 +662,12 @@ void *mremap(void *old_addr, size_t old_size, size_t new_size, int flags,
 
 static __attribute__((constructor)) void __init__(void)
 {
-    ft_log_info("ftrace constructor!");
+    ft_log_debug("ftrace constructor");
 }
 
 static __attribute__((destructor)) void finish(void)
 {
-    ft_log_info("ftrace destructor!");
+    ft_log_debug("ftrace destructor");
     /* NOTE: ideally we should free all remote memory resources
      * with rmem_common_destroy() here but since we assume that 
      * the program begins in "application" mode rather than in 

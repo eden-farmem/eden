@@ -141,7 +141,6 @@ static inline struct region_t *get_available_region(size_t size)
         }
     }
     release_region_lock();
-    log_info("available mr does not have enough memory to serve, add new slab");
     return NULL;
 }
 

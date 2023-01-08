@@ -226,11 +226,8 @@ int uffd_copy(int fd, unsigned long dst, unsigned long src, size_t size,
 /* check if write-protection is supported on the current kernel */
 bool uffd_is_wp_supported(int fd)
 {
-    /* only valid after init */
-    assert(saved_fd >= 0 && saved_fd == fd);
-
 #ifdef UFFDIO_WRITEPROTECT
-    return !!(saved_ioctls & (1ull << _UFFDIO_WRITEPROTECT));
+    return true;
 #else
     return false;
 #endif

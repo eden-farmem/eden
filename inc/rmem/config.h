@@ -28,10 +28,12 @@ typedef enum {
 #define RMEM_MAX_LOCAL_MEM      (64 * 1024L * 1024 * 1024)
 
 /********* Cluster *******************************************/
+#ifndef RMEM_STANDALONE
 #define VRG_SC2             // Intel Skylake - CX5
 // #define CLOUDLAB_R320    // Deprecated. Use C6220 instead
 // #define CLOUDLAB_D6515   // AMD EPYC Rome - CX5
 // #define CLOUDLAB_XL170   // Intel Broadwell - CX4
+#endif
 /*************************************************************/
 
 /********* Config for RDMA backend ***************************/
@@ -90,11 +92,7 @@ typedef enum {
 #define PIN_RACK_CNTRL_CORE         49
 #define PIN_RACK_CNTRL_POLLER_CORE  48
 
-#else
-#pragma GCC error "Specify memory size for selected machine"
 #endif
-#define RDMA_SERVER_NSLABS (RDMA_SERVER_MEMORY_GB * 1073741824L / RMEM_SLAB_SIZE)
-BUILD_ASSERT(RMEM_HANDLER_CORE_LOW <= RMEM_HANDLER_CORE_HIGH);
 /*************************************************************/
 
 /* Chunk size for remote memory handling (must be a power of 2 (KB)). */

@@ -42,11 +42,15 @@ __thread pgthread_t current_kthread_id = 0;
 /**
  * rmem_common_init - initializes remote memory
  */
-int rmem_common_init()
+int rmem_common_init(
+    unsigned long nslabs,
+    int pin_handlers_start_core,
+    int pin_handlers_end_core)
 {
-    int i, ret;
+    int i, ret, coreid;
     log_info("rmem_init with: ");
     log_info("local memory - %lu B", local_memory);
+    log_info("(initial) backing memory - %lu B", nslabs * RMEM_SLAB_SIZE);
     log_info("evict thr %.2lf, batch %d", eviction_threshold, evict_batch_size);
     BUG_ON(!rmem_enabled);
 
@@ -76,7 +80,7 @@ int rmem_common_init()
     assertz(ret);
 
     /* add some memory to start with */
-    ret = rmbackend->add_memory(NULL, RDMA_SERVER_NSLABS);
+    ret = rmbackend->add_memory(NULL, nslabs);
     assert(ret > 0);
 
     /* assign tcaches for faults */
@@ -98,10 +102,19 @@ int rmem_common_init()
     /* kick off rmem handlers - need at least one for kernel faults */
     BUG_ON(nhandlers <= 0);
     BUG_ON(nhandlers > MAX_HANDLER_CORES);
-    BUG_ON(nhandlers > (RMEM_HANDLER_CORE_HIGH - RMEM_HANDLER_CORE_LOW + 1));
+
+    coreid = -1;
+    if (pin_handlers_start_core >= 0) {
+        BUG_ON(pin_handlers_start_core < pin_handlers_end_core);
+        BUG_ON(nhandlers > (pin_handlers_end_core - pin_handlers_start_core + 1));
+        coreid = pin_handlers_end_core;  /* start high */
+    }
     handlers = malloc(nhandlers*sizeof(hthread_t*));
-    for (i = 0; i < nhandlers; i++)
-        handlers[i] = new_rmem_handler_thread(RMEM_HANDLER_CORE_HIGH - i);
+    for (i = 0; i < nhandlers; i++) {
+        handlers[i] = new_rmem_handler_thread(coreid);
+        if (coreid >= 0)
+            coreid--;
+    }
 
     return 0;
 }

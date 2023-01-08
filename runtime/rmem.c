@@ -27,6 +27,7 @@ bool rmem_hints_enabled = false;
 int rmem_init()
 {
     int r;
+    unsigned long nslabs;
 
     if (!rmem_enabled) {
         log_info("rmem not enabled, skipping init");
@@ -40,15 +41,14 @@ int rmem_init()
     }
 
     /* init rmem */
-    r = rmem_common_init();
-    if (r)
-        return r;
+    nslabs = (RDMA_SERVER_MEMORY_GB * 1073741824L / RMEM_SLAB_SIZE);
+    r = rmem_common_init(nslabs, RMEM_HANDLER_CORE_LOW, RMEM_HANDLER_CORE_HIGH);
+    if (r) return r;
 
 #ifdef USE_VDSO_CHECKS
     /* init vdso objects */
     r = __vdso_init();
-    if (r)
-        return r;
+    if (r) return r;
 #endif
 
     return 0;
