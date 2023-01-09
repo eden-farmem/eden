@@ -31,7 +31,7 @@ extern __thread pgthread_t current_kthread_id;
 
 /* init & destroy */
 int rmem_common_init(unsigned long nslabs, int pin_handlers_start_core,
-    int pin_handlers_end_core);
+    int pin_handlers_end_core, int fsampler_samples_per_sec);
 int rmem_common_init_thread(int* new_chan_id, uint64_t* stats_ptr, 
     pgthread_t kthr_id);
 int rmem_common_destroy_thread(void);

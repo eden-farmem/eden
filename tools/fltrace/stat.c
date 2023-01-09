@@ -107,6 +107,7 @@ static void* stats_worker(void *arg)
     int ret;
     
     fp = fopen(statsfile, "w");
+    assert(fp);
 
     while (true)
     {

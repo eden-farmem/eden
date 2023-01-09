@@ -54,6 +54,7 @@ __thread bool __init_in_progress = false;
 static atomic_t rmlib_state = ATOMIC_INIT(NOT_STARTED);
 unsigned long max_memory_mb = 1;
 int shm_id;
+int samples_per_sec = -1;
 
 /**
  * We need modified versions of logging calls that do not call 
@@ -112,6 +113,10 @@ int parse_env_settings()
     /* parse max backing memory */
     if (parse_numeric_env_setting("FLTRACE_MAX_MEMORY_MB", &val) == 0)
         max_memory_mb = val;
+
+    /* parse sampling rate */
+    if (parse_numeric_env_setting("FLTRACE_MAX_SAMPLES_PER_SEC", &val) == 0)
+        samples_per_sec = val;
 
     return 0;
 }
@@ -261,7 +266,8 @@ again:
     rmem_enabled = true;
     rmbackend_type = RMEM_BACKEND_LOCAL;
     nslabs= max_memory_mb * 1024L * 1024L / RMEM_SLAB_SIZE;
-    r = rmem_common_init(nslabs, /*don't pin handler cores*/ -1, -1);
+    r = rmem_common_init(nslabs, /*don't pin handler cores*/ -1, -1,
+            samples_per_sec);
     if (r)  goto error;
 
     /* kick-off stats thread */

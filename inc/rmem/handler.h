@@ -24,6 +24,7 @@ typedef struct hthread {
     struct list_head fault_wait_q;
     int n_wait_q;
     int fsampler_id;
+    int fsamples_per_sec;
     uint64_t rstats[RSTAT_NR];
 } hthread_t __aligned(CACHE_LINE_SIZE);
 extern __thread struct hthread *my_hthr;

@@ -42,7 +42,8 @@ int rmem_init()
 
     /* init rmem */
     nslabs = (RDMA_SERVER_MEMORY_GB * 1073741824L / RMEM_SLAB_SIZE);
-    r = rmem_common_init(nslabs, RMEM_HANDLER_CORE_LOW, RMEM_HANDLER_CORE_HIGH);
+    r = rmem_common_init(nslabs, RMEM_HANDLER_CORE_LOW, 
+            RMEM_HANDLER_CORE_HIGH, -1);
     if (r) return r;
 
 #ifdef USE_VDSO_CHECKS

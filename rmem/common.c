@@ -45,7 +45,8 @@ __thread pgthread_t current_kthread_id = 0;
 int rmem_common_init(
     unsigned long nslabs,
     int pin_handlers_start_core,
-    int pin_handlers_end_core)
+    int pin_handlers_end_core,
+    int fsampler_samples_per_sec)
 {
     int i, ret, coreid;
     log_info("rmem_init with: ");
@@ -96,7 +97,7 @@ int rmem_common_init(
 
 #ifdef FAULT_SAMPLER
     /* init fault samplers */
-    fsampler_init();
+    fsampler_init(fsampler_samples_per_sec);
 #endif
 
     /* kick off rmem handlers - need at least one for kernel faults */

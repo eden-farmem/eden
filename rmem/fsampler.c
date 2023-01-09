@@ -38,6 +38,7 @@ struct fsample fsample_data[MAX_FAULT_SAMPLERS] = {0};
 atomic_t nsamplers;
 int sigid;
 unsigned long sampler_start_tsc;
+int fsamples_per_sec = -1;
 
 /**
  * Ops for base sampler support
@@ -99,9 +100,10 @@ int fsampler_get_sampler()
 
     /* initialize sampler */
     sprintf(fsname, "fault_samples%d", 1 + fsid);
-    sampler_init(&fsamplers[fsid], fsname, SAMPLER_TYPE_NONE,
+    sampler_init(&fsamplers[fsid], fsname, 
+        fsamples_per_sec > 0 ? SAMPLER_TYPE_POISSON : SAMPLER_TYPE_NONE,
         &fault_sampler_ops, sizeof(struct fsample), 
-        /* queue size = */ 1000, /* sampling rate = */ 1000,
+        /* queue size = */ 1000, /* sampling rate = */ fsamples_per_sec,
         /* dumps per sec = */ 1, /* dump on full = */ true);
     log_info("initialized fault sampler %d", 1 + fsid);
 
@@ -211,10 +213,13 @@ void save_stacktrace(int signum, siginfo_t *siginfo, void *context)
 /**
  * sampler_init - initializes samplers for handler threads
  */
-int fsampler_init(void)
+int fsampler_init(int samples_per_sec)
 {
     int i, ret;
     struct sigaction act, oldact;
+
+    /* save sampling rate; <= 0 means record everything */
+    fsamples_per_sec = samples_per_sec;
 
     /* find a signal that hasn't been registered */
     for (i = SIGRTMIN; i < SIGRTMAX; i++) {
