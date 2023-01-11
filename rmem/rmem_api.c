@@ -120,9 +120,22 @@ static inline void __remove_and_unlock_page_range(struct region_t *mr,
             pgidx = get_index_from_pginfo(pginfo);
             pgnode = rmpage_get_node_by_id(pgidx);
             assert(pgnode->addr == page);
+
+            /* free the page node */
+#ifndef RMEM_STANDALONE
             rmpage_node_free(pgnode);
+#else
+            /* if running without shenango, application threads
+             * calling unmap(), etc. will not have the local tcache
+             * initialized, so we can't free the page nodes directly.
+             * Instead, we save them to the "to-be-freed" list from
+             * where the nodes are released back into the pool by
+             * the handler threads  */
+            rmpage_node_tbf_add(pgnode);
+#endif
+
             evicted++;
-            clrflags |= PFLAG_PRESENT;
+            clrflags |= (PFLAG_PRESENT | PFLAG_DIRTY);
         }
 
         /* unlock the page */

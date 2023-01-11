@@ -21,6 +21,7 @@
 #include "rmem/fsampler.h"
 #include "rmem/handler.h"
 #include "rmem/page.h"
+#include "rmem/pgnode.h"
 #include "rmem/region.h"
 #include "rmem/uffd.h"
 
@@ -269,7 +270,6 @@ static void* rmem_handler(void *arg)
     my_hthr->fsampler_id = fsampler_get_sampler();
 #endif
 
-
     /* do work */
     last_tsc = 0;
     while(!my_hthr->stop)
@@ -287,6 +287,12 @@ static void* rmem_handler(void *arg)
         need_eviction = false;
         work_done = false;
         nevicts = nevicts_needed = 0;
+
+#ifdef RMEM_STANDALONE
+        /* check for page nodes (from the pages unmapped on the 
+         * application threads) that are waiting to-be-freed */
+        rmpage_node_tbf_try_release();
+#endif
 
         /* pick faults from the backlog (wait queue) first */
         fault = list_top(&my_hthr->fault_wait_q, fault_t, link);

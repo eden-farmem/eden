@@ -19,6 +19,7 @@ size_t rmpage_node_count = 0;
 static size_t max_rmpage_nodes = 0;
 static size_t free_rmpage_node_count = 0;
 static rmpage_node_t** free_rmpage_nodes;
+static __thread bool local_tcache_inited = false;
 
 static void rmpage_node_tcache_free(struct tcache *tc, int nr, void **items)
 {
@@ -85,6 +86,7 @@ bool rmpage_is_node_valid(rmpage_node_t* pgnode)
 void rmpage_node_tcache_init_thread(void)
 {
     tcache_init_perthread(rmpage_node_tcache, &perthread_get(rmpage_node_pt));
+    local_tcache_inited = true;
 }
 
 /**
@@ -138,6 +140,9 @@ int rmpage_node_tcache_init(void)
     if (!rmpage_node_tcache)
         return -ENOMEM;
 
+    /* initialize to-be-freed support */
+    rmpage_node_tbf_init();
+
     log_info("inited rmem page node pool with %lu max nodes", max_rmpage_nodes);
     return 0;
 }
@@ -150,4 +155,59 @@ int rmpage_node_tcache_destroy(void)
 	munmap(free_rmpage_nodes, max_rmpage_nodes * sizeof(rmpage_node_t*));
 	munmap(rmpage_nodes, max_rmpage_nodes * sizeof(rmpage_node_t));
     return 0;
+}
+
+/**
+ * To-be-freed page node support
+ */
+
+/* state */
+static struct list_head tbf_nodes;
+static spinlock_t tbf_lock;
+static bool tbf_inited;
+
+/**
+ * rmpage_node_tbf_init - initialize resources
+ */
+void rmpage_node_tbf_init()
+{
+    list_head_init(&tbf_nodes);
+    spin_lock_init(&tbf_lock);
+    tbf_inited = true;
+}
+
+/**
+ * rmpage_node_tbf_add - add a page node to the to-be-freed list
+ */
+void rmpage_node_tbf_add(rmpage_node_t* node)
+{
+    assert(tbf_inited);
+    spin_lock(&tbf_lock);
+    list_add_tail(&tbf_nodes, &node->link);
+    spin_unlock(&tbf_lock);
+}
+
+/**
+ * rmpage_node_tbf_try_release - free page nodes in the to-be-freed 
+ * list into the current thread's local tcache. Must be called from 
+ * a thread with local tcached support i.e., rmpage_node_tcache_init()
+ */
+void rmpage_node_tbf_try_release()
+{
+    rmpage_node_t* node;
+
+    assert(tbf_inited);
+    assert(local_tcache_inited);
+
+    if (!spin_try_lock(&tbf_lock))
+        /* someone else is freeing */
+        return;
+
+    /* free all nodes in the list */
+    node = list_pop(&tbf_nodes, rmpage_node_t, link);
+    while(node != NULL) {
+        rmpage_node_free(node);
+        node = list_pop(&tbf_nodes, rmpage_node_t, link);
+    }
+    spin_unlock(&tbf_lock);
 }

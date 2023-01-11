@@ -78,5 +78,18 @@ static inline rmpage_node_t* rmpage_get_node_by_id(pgidx_t id)
     return &rmpage_nodes[id];
 }
 
+/**
+ * To-be-freed page nodes support - for properly releasing page nodes from
+ * threads that do not have the tcache support, and hence cannot use
+ * rmpage_node_free(). An example is the page nodes released by
+ * munmap() on the application threads (when using standalone remote
+ * memory). We collect these page nodes in a global list (protected by a 
+ * lock) and release them regularly in the handler threads - this is 
+ * naturally inefficient than freeing into thread-local tcaches but 
+ * hopefully will only be used in non-critical paths.
+ */
+void rmpage_node_tbf_init();
+void rmpage_node_tbf_add(rmpage_node_t* node);
+void rmpage_node_tbf_try_release();
 
 #endif    // __RMEM_PAGE_NODE_H_
