@@ -583,16 +583,14 @@ int munmap(void *ptr, size_t length)
      * by now as jemalloc calls are triggered by our own calls after init */
     if (__from_internal_jemalloc) {
         ft_log_debug("internal jemalloc munmap, fwd to RLib: addr=%p", ptr);
-        if (initd != INITIALIZED) {
-            ft_log_err("ERROR! rmlib not initialized before jemalloc munmap");
-            exit(1);
-        }
+        BUG_ON(initd != INITIALIZED);
         ret = rmlib_rmunmap(ptr, length);
         goto out;
     }
 
     if (from_runtime) {
         ft_log_debug("%s from runtime, using real munmap", __func__);
+        BUG_ON(within_memory_region(ptr));
         ret = real_munmap(ptr, length);
         goto out;
     }
@@ -624,7 +622,8 @@ out:
 int madvise(void *addr, size_t length, int advice)
 {
     int ret;
-    bool from_runtime, initd;
+    bool from_runtime;
+    enum init_state initd;
 
     from_runtime = IN_RUNTIME();
     RUNTIME_ENTER();
@@ -635,19 +634,42 @@ int madvise(void *addr, size_t length, int advice)
     if (advice == MADV_HUGEPAGE)    ft_log_debug("MADV_HUGEPAGE flag");
     if (advice == MADV_FREE)        ft_log_debug("MADV_FREE flag");
 
+        /* check init status */
+    initd = atomic_read(&rmlib_state);
+
+    /* First check for calls coming from jemalloc. These deallocations are 
+     * meant to be forwarded to remote memory; the tool must have been init'd 
+     * by now as jemalloc calls are triggered by our own calls after init */
+    if (__from_internal_jemalloc) {
+        ft_log_debug("internal jemalloc munmap, fwd to RLib: addr=%p", addr);
+        BUG_ON(initd != INITIALIZED);
+        assert(within_memory_region(addr));
+        ret = rmadvise(addr, length, advice);
+        goto out;
+    }
+
     if (from_runtime) {
         ft_log_debug("%s from runtime, using real madvise", __func__);
         ret = real_madvise(addr, length, advice);
-        ft_log_debug("real madvise; return=%d", ret);
         goto out;
     }
-    
-    /* rmlib status */
-    initd = init(false);
-    if (initd && within_memory_region(addr))
-        ret = rmadvise(addr, length, advice);
-    else
+
+    /* from the app, check on rmlib status again */
+    if (!init(false)) {
+        ft_log_debug("[%s] not initialized, using libc", __func__);
         ret = real_madvise(addr, length, advice);
+        goto out;
+    }
+
+    /* if we are here, this should be a remote pointer. just warn for now */
+    if (!within_memory_region(addr)) {
+        ft_log_debug("[%s] WARN - unexpected real ptr from app", __func__);
+        ret = real_madvise(addr, length, advice);
+        goto out;
+    }
+
+    ft_log_debug("madvise directly from the app, fwd to RLib: addr=%p", ptr);
+    ret = rmadvise(addr, length, advice);
 
 out:
     ft_log_debug("[%s] return=%d", __func__, ret);
