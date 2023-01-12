@@ -1,9 +1,42 @@
 
+This repository hosts `Eden`, a userspace runtime for Far
+Memory and `fltrace`, a page fault tracing tool.
+Below setup requirements apply for Eden whereas the tool runs 
+on most kernels with minimal dependencies.
+
 # Eden
 Eden is built on Shenango, a user-level thread scheduler & runtime.
 
+## How to build and link Eden
+1) Clone the Shenango repository.
 
-# Shenango
+```
+git clone https://github.com/eden-ucsd-vmware/eden
+cd eden
+```
+
+2) Setup and build DPDK and jemalloc dependecies. You'll need to 
+pick a DPDK version using `-dv=` argument (this depends on your 
+Kernel version and NIC drivers that are supported).
+
+```
+bash setup.sh -dv=20.11
+```
+
+3) Build Eden. TODO: provide example for linking it 
+```
+make clean && make
+```
+
+## Supported Platforms
+
+This code has been tested most thoroughly on Ubuntu 20.04, with kernel
+5.15.0. It has been tested with Mellanox ConnectX-5 Pro 100 Gbits/s NICs.
+In addition to the Shenango requirements (see below), the remote memory
+component of Eden requires a RDMA NIC and expects `rdmacm` and `libibverbs`
+installed.
+
+# About Shenango
 
 Shenango is a system that enables servers in datacenters to
 simultaneously provide low tail latency and high CPU efficiency, by
