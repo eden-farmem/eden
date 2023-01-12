@@ -1,0 +1,413 @@
+From c955e14ac4fbaf42db44b4866c4ab583755a1b2c Mon Sep 17 00:00:00 2001
+From: Anil Yelam <ayelam@vmware.com>
+Date: Tue, 29 Nov 2022 22:06:32 -0800
+Subject: [PATCH] Subject: [PATCH] userfaultfd: introduce UFFDIO_WRITEPROTECTV
+
+Write-protecting and -unprotecting non-contiguous ranges using
+UFFDIO_WRITEPROTECT ioctl is inefficient since it requires multiple
+ioctl-calls and, in the case of write-protecting, induces multiple TLB
+flushes instead of batching them.
+
+Introduce UFFDIO_WRITEPROTECTV ioctl to UFFD that allows to
+write-protect (and write-unprotect) vector of addresses. Provide as a
+result the size that was write-protected.
+
+Refactor the code that is mutual to the non-vectored and vectored
+write-protection IOCTLs into userfaultfd_writeprotect_common().
+
+Cc: Andrea Arcangeli <aarcange@redhat.com>
+Cc: Mike Rapoport <rppt@linux.vnet.ibm.com>
+Cc: Peter Xu <peterx@redhat.com>
+Signed-off-by: Nadav Amit <namit@vmware.com>
+---
+ fs/userfaultfd.c                 | 156 ++++++++++++++++++++++++++-----
+ include/linux/mm.h               |   5 +
+ include/linux/userfaultfd_k.h    |   6 +-
+ include/uapi/linux/userfaultfd.h |  15 +++
+ mm/mprotect.c                    |  23 +++++
+ mm/userfaultfd.c                 |  38 +++-----
+ 6 files changed, 195 insertions(+), 48 deletions(-)
+
+diff --git a/fs/userfaultfd.c b/fs/userfaultfd.c
+index 1a3c6a53f381..270c2b58d813 100644
+--- a/fs/userfaultfd.c
++++ b/fs/userfaultfd.c
+@@ -1801,18 +1801,102 @@ static int userfaultfd_zeropage(struct userfaultfd_ctx *ctx,
+ 	return ret;
+ }
+ 
+-static int userfaultfd_writeprotect(struct userfaultfd_ctx *ctx,
+-				    unsigned long arg)
++static ssize_t userfaultfd_writeprotect_common(struct userfaultfd_ctx *ctx,
++					   struct iov_iter *iter,
++					   __u64 mode)
+ {
+-	int ret;
+-	struct uffdio_writeprotect uffdio_wp;
+-	struct uffdio_writeprotect __user *user_uffdio_wp;
+-	struct userfaultfd_wake_range range;
+ 	bool mode_wp, mode_dontwake;
++	struct iov_iter wake_iter;
++	ssize_t cnt = 0;
++	int ret;
++
++	/*
++	 * Copy the iterator to later wake without holding the mmap lock. Do
++	 * not use dup_iter() since the underylying vector memory is kept.
++	 */
++	wake_iter = *iter;
+ 
+ 	if (atomic_read(&ctx->mmap_changing))
+ 		return -EAGAIN;
+ 
++	if (mode & ~(UFFDIO_WRITEPROTECT_MODE_DONTWAKE |
++		     UFFDIO_WRITEPROTECT_MODE_WP))
++		return -EINVAL;
++
++	mode_wp = mode & UFFDIO_WRITEPROTECT_MODE_WP;
++	mode_dontwake = mode & UFFDIO_WRITEPROTECT_MODE_DONTWAKE;
++
++	if (mode_wp && mode_dontwake)
++		return -EINVAL;
++
++	if (!mmget_not_zero(ctx->mm))
++		return -ESRCH;
++
++	mmap_read_lock(ctx->mm);
++	inc_tlb_flush_pending(ctx->mm);
++
++	/*
++	 * If memory mappings are changing because of non-cooperative operation
++	 * (e.g. mremap) running in parallel, bail out and request the user to
++	 * retry later.
++	 */
++	ret = -EAGAIN;
++	if (atomic_read(&ctx->mmap_changing))
++		goto out_unlock;
++
++	while (iov_iter_count(iter)) {
++		struct iovec iovec = iov_iter_iovec(iter);
++		size_t len = iov_iter_single_seg_count(iter);
++		__u64 base = (__u64)iovec.iov_base;
++		ssize_t wp_ret;
++
++		ret = validate_range(ctx->mm, base, len);
++		if (ret < 0)
++			goto out_unlock;
++
++		wp_ret = mwriteprotect_range(ctx->mm, base, len, mode_wp);
++		if (wp_ret < 0) {
++			ret = (int)wp_ret;
++			goto out_unlock;
++		}
++
++		cnt += wp_ret;
++		iov_iter_advance(iter, wp_ret);
++	}
++	ret = 0;
++
++out_unlock:
++	flush_tlb_mm(ctx->mm);
++	dec_tlb_flush_pending(ctx->mm);
++	mmap_read_unlock(ctx->mm);
++	mmput(ctx->mm);
++
++	if (!ret && !mode_wp && !mode_dontwake) {
++		while (iov_iter_count(&wake_iter)) {
++			struct iovec iovec = iov_iter_iovec(&wake_iter);
++			unsigned long base = (unsigned long)iovec.iov_base;
++			size_t len = iov_iter_single_seg_count(&wake_iter);
++			struct userfaultfd_wake_range range = {
++				.start = untagged_addr(base),
++				.len = len
++			};
++			wake_userfault(ctx, &range);
++			iov_iter_advance(&wake_iter, len);
++		}
++	}
++
++	return cnt > 0 ? cnt : ret;
++}
++
++static int userfaultfd_writeprotect(struct userfaultfd_ctx *ctx,
++				    unsigned long arg)
++{
++	struct uffdio_writeprotect __user *user_uffdio_wp;
++	struct uffdio_writeprotect uffdio_wp;
++	struct iov_iter i;
++	struct iovec iov;
++	ssize_t ret;
++
+ 	user_uffdio_wp = (struct uffdio_writeprotect __user *) arg;
+ 
+ 	if (copy_from_user(&uffdio_wp, user_uffdio_wp,
+@@ -1824,27 +1908,53 @@ static int userfaultfd_writeprotect(struct userfaultfd_ctx *ctx,
+ 	if (ret)
+ 		return ret;
+ 
+-	if (uffdio_wp.mode & ~(UFFDIO_WRITEPROTECT_MODE_DONTWAKE |
+-			       UFFDIO_WRITEPROTECT_MODE_WP))
+-		return -EINVAL;
++	iov.iov_base = (void __user *)uffdio_wp.range.start;
++	iov.iov_len = uffdio_wp.range.len;
++	iov_iter_init(&i, READ, &iov, 1, iov.iov_len);
+ 
+-	mode_wp = uffdio_wp.mode & UFFDIO_WRITEPROTECT_MODE_WP;
+-	mode_dontwake = uffdio_wp.mode & UFFDIO_WRITEPROTECT_MODE_DONTWAKE;
++	ret = userfaultfd_writeprotect_common(ctx, &i, uffdio_wp.mode);
++	if (ret > 0)
++		ret = 0;
+ 
+-	if (mode_wp && mode_dontwake)
+-		return -EINVAL;
++	return (int)ret;
+ 
+-	ret = mwriteprotect_range(ctx->mm, uffdio_wp.range.start,
+-				  uffdio_wp.range.len, mode_wp,
+-				  &ctx->mmap_changing);
+-	if (ret)
+-		return ret;
++}
+ 
+-	if (!mode_wp && !mode_dontwake) {
+-		range.start = uffdio_wp.range.start;
+-		range.len = uffdio_wp.range.len;
+-		wake_userfault(ctx, &range);
++static int userfault_writeprotectv(struct userfaultfd_ctx *ctx,
++				   unsigned long arg)
++{
++	struct uffdio_writeprotectv __user *user_uffdio_wpv;
++	struct uffdio_writeprotectv uffdio_wpv;
++	struct iovec iovstack[UIO_FASTIOV];
++	struct iovec *iov = iovstack;
++	struct iov_iter iter;
++	ssize_t cnt;
++	int ret;
++
++	user_uffdio_wpv = (struct uffdio_writeprotectv __user *) arg;
++
++	if (copy_from_user(&uffdio_wpv, user_uffdio_wpv,
++			   sizeof(struct uffdio_writeprotectv)))
++		return -EFAULT;
++
++	ret = import_iovec(READ, uffdio_wpv.iovec, uffdio_wpv.vlen,
++			   ARRAY_SIZE(iovstack), &iov, &iter);
++
++	if (ret < 0)
++		goto out;
++
++	cnt = userfaultfd_writeprotect_common(ctx, &iter,
++					      uffdio_wpv.mode);
++
++	if (cnt < 0) {
++		ret = (int)cnt;
++		cnt = 0;
+ 	}
++	if (unlikely(put_user(cnt, &user_uffdio_wpv->writeprotected)))
++		ret = -EFAULT;
++
++out:
++	kfree(iov);
+ 	return ret;
+ }
+ 
+@@ -2005,6 +2115,8 @@ static long userfaultfd_ioctl(struct file *file, unsigned cmd,
+ 	case UFFDIO_CONTINUE:
+ 		ret = userfaultfd_continue(ctx, arg);
+ 		break;
++	case UFFDIO_WRITEPROTECTV:
++		ret = userfault_writeprotectv(ctx, arg);
+ 	}
+ 	return ret;
+ }
+diff --git a/include/linux/mm.h b/include/linux/mm.h
+index be1f8fe60603..fa62f0cac190 100644
+--- a/include/linux/mm.h
++++ b/include/linux/mm.h
+@@ -33,6 +33,8 @@
+ #include <linux/pgtable.h>
+ #include <linux/kasan.h>
+ 
++#include <asm/tlbflush.h>
++
+ struct mempolicy;
+ struct anon_vma;
+ struct anon_vma_chain;
+@@ -1893,6 +1895,9 @@ extern unsigned long move_page_tables(struct vm_area_struct *vma,
+ #define  MM_CP_UFFD_WP_RESOLVE             (1UL << 3) /* Resolve wp */
+ #define  MM_CP_UFFD_WP_ALL                 (MM_CP_UFFD_WP | \
+ 					    MM_CP_UFFD_WP_RESOLVE)
++extern unsigned long change_protection_range_one(struct vm_area_struct *vma,
++		unsigned long addr, unsigned long end, pgprot_t newprot,
++		unsigned long cp_flags);
+ 
+ extern unsigned long change_protection(struct vm_area_struct *vma, unsigned long start,
+ 			      unsigned long end, pgprot_t newprot,
+diff --git a/include/linux/userfaultfd_k.h b/include/linux/userfaultfd_k.h
+index 33cea484d1ad..e270eda86d2f 100644
+--- a/include/linux/userfaultfd_k.h
++++ b/include/linux/userfaultfd_k.h
+@@ -67,9 +67,9 @@ extern ssize_t mfill_zeropage(struct mm_struct *dst_mm,
+ 			      atomic_t *mmap_changing);
+ extern ssize_t mcopy_continue(struct mm_struct *dst_mm, unsigned long dst_start,
+ 			      unsigned long len, atomic_t *mmap_changing);
+-extern int mwriteprotect_range(struct mm_struct *dst_mm,
+-			       unsigned long start, unsigned long len,
+-			       bool enable_wp, atomic_t *mmap_changing);
++extern ssize_t mwriteprotect_range(struct mm_struct *dst_mm,
++				   unsigned long start, unsigned long len,
++				   bool enable_wp);
+ 
+ /* mm helpers */
+ static inline bool is_mergeable_vm_userfaultfd_ctx(struct vm_area_struct *vma,
+diff --git a/include/uapi/linux/userfaultfd.h b/include/uapi/linux/userfaultfd.h
+index b450b1554f03..e2e7eeb72f05 100644
+--- a/include/uapi/linux/userfaultfd.h
++++ b/include/uapi/linux/userfaultfd.h
+@@ -63,6 +63,7 @@
+ #define _UFFDIO_ZEROPAGE		(0x04)
+ #define _UFFDIO_WRITEPROTECT		(0x06)
+ #define _UFFDIO_CONTINUE		(0x07)
++#define _UFFDIO_WRITEPROTECTV		(0x09)
+ #define _UFFDIO_API			(0x3F)
+ 
+ /* userfaultfd ioctl ids */
+@@ -83,6 +84,8 @@
+ 				      struct uffdio_writeprotect)
+ #define UFFDIO_CONTINUE		_IOWR(UFFDIO, _UFFDIO_CONTINUE,	\
+ 				      struct uffdio_continue)
++#define UFFDIO_WRITEPROTECTV	_IOWR(UFFDIO, _UFFDIO_WRITEPROTECTV, \
++				      struct uffdio_writeprotectv)
+ 
+ /* read() structure */
+ struct uffd_msg  {
+@@ -277,6 +280,18 @@ struct uffdio_writeprotect {
+ 	__u64 mode;
+ };
+ 
++struct uffdio_writeprotectv {
++	struct iovec *iovec;
++	__u32 vlen;
++	__u64 mode;
++
++	/*
++	 * Fields below here are written by the ioctl and must be at the end:
++	 * the copy_from_user will not read past here.
++	 */
++	__s64 writeprotected;
++};
++
+ struct uffdio_continue {
+ 	struct uffdio_range range;
+ #define UFFDIO_CONTINUE_MODE_DONTWAKE		((__u64)1<<0)
+diff --git a/mm/mprotect.c b/mm/mprotect.c
+index 4d8b70f898fa..e06985283f61 100644
+--- a/mm/mprotect.c
++++ b/mm/mprotect.c
+@@ -340,6 +340,29 @@ static inline unsigned long change_p4d_range(struct vm_area_struct *vma,
+ 	return pages;
+ }
+ 
++unsigned long change_protection_range_one(struct vm_area_struct *vma,
++		unsigned long addr, unsigned long end, pgprot_t newprot,
++		unsigned long cp_flags)
++{
++	struct mm_struct *mm = vma->vm_mm;
++	pgd_t *pgd;
++	unsigned long next;
++	unsigned long pages = 0;
++
++	BUG_ON(addr >= end);
++	pgd = pgd_offset(mm, addr);
++	flush_cache_range(vma, addr, end);
++	do {
++		next = pgd_addr_end(addr, end);
++		if (pgd_none_or_clear_bad(pgd))
++			continue;
++		pages += change_p4d_range(vma, pgd, addr, next, newprot,
++					  cp_flags);
++	} while (pgd++, addr = next, addr != end);
++
++	return pages;
++}
++
+ static unsigned long change_protection_range(struct vm_area_struct *vma,
+ 		unsigned long addr, unsigned long end, pgprot_t newprot,
+ 		unsigned long cp_flags)
+diff --git a/mm/userfaultfd.c b/mm/userfaultfd.c
+index 7a9008415534..c94eb2783ae2 100644
+--- a/mm/userfaultfd.c
++++ b/mm/userfaultfd.c
+@@ -670,13 +670,11 @@ ssize_t mcopy_continue(struct mm_struct *dst_mm, unsigned long start,
+ 			      mmap_changing, 0);
+ }
+ 
+-int mwriteprotect_range(struct mm_struct *dst_mm, unsigned long start,
+-			unsigned long len, bool enable_wp,
+-			atomic_t *mmap_changing)
++ssize_t mwriteprotect_range(struct mm_struct *dst_mm, unsigned long start,
++			    unsigned long len, bool enable_wp)
+ {
+ 	struct vm_area_struct *dst_vma;
+ 	pgprot_t newprot;
+-	int err;
+ 
+ 	/*
+ 	 * Sanitize the command parameters:
+@@ -687,40 +685,34 @@ int mwriteprotect_range(struct mm_struct *dst_mm, unsigned long start,
+ 	/* Does the address range wrap, or is the span zero-sized? */
+ 	BUG_ON(start + len <= start);
+ 
+-	mmap_read_lock(dst_mm);
+-
+ 	/*
+-	 * If memory mappings are changing because of non-cooperative
+-	 * operation (e.g. mremap) running in parallel, bail out and
+-	 * request the user to retry later
++	 * Handle the case in which the range is not in a single VMA. In this
++	 * case, only protect a single VMA and return later the length that was
++	 * actually write-protected.
+ 	 */
+-	err = -EAGAIN;
+-	if (mmap_changing && atomic_read(mmap_changing))
+-		goto out_unlock;
++	dst_vma = find_dst_vma(dst_mm, start, PAGE_SIZE);
+ 
+-	err = -ENOENT;
+-	dst_vma = find_dst_vma(dst_mm, start, len);
+ 	/*
+ 	 * Make sure the vma is not shared, that the dst range is
+ 	 * both valid and fully within a single existing vma.
+ 	 */
+ 	if (!dst_vma || (dst_vma->vm_flags & VM_SHARED))
+-		goto out_unlock;
++		return -ENOENT;
+ 	if (!userfaultfd_wp(dst_vma))
+-		goto out_unlock;
++		return -ENOENT;
+ 	if (!vma_is_anonymous(dst_vma))
+-		goto out_unlock;
++		return -ENOENT;
+ 
+ 	if (enable_wp)
+ 		newprot = vm_get_page_prot(dst_vma->vm_flags & ~(VM_WRITE));
+ 	else
+ 		newprot = vm_get_page_prot(dst_vma->vm_flags);
+ 
+-	change_protection(dst_vma, start, start + len, newprot,
+-			  enable_wp ? MM_CP_UFFD_WP : MM_CP_UFFD_WP_RESOLVE);
++	len = min(len, dst_vma->vm_end - dst_vma->vm_start);
+ 
+-	err = 0;
+-out_unlock:
+-	mmap_read_unlock(dst_mm);
+-	return err;
++	change_protection_range_one(dst_vma, start, start + len, newprot,
++				    enable_wp ? MM_CP_UFFD_WP :
++						MM_CP_UFFD_WP_RESOLVE);
++
++	return len;
+ }
+-- 
+2.25.1
+

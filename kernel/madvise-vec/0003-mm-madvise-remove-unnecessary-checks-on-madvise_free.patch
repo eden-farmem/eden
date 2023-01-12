@@ -1,0 +1,52 @@
+From 6f77fb2df17b19b4a09b43cceccbfde2e53c5d64 Mon Sep 17 00:00:00 2001
+From: Nadav Amit <namit@vmware.com>
+Date: Sun, 26 Sep 2021 09:12:54 -0700
+Subject: [PATCH 3/8] mm/madvise: remove unnecessary checks on
+ madvise_free_single_vma()
+
+madvise_free_single_vma() currently rechecks that the range fits within
+the VMA, adapts it accordingly, and returns -EINVAL if the range is
+entirely outside of the VMA.
+
+The error-code of -EINVAL is incorrect according to the man pages (as it
+should have been -ENOMEM), but anyhow the range that is provided to
+madvise_free_single_vma() should always be valid. It is set correctly in
+do_madvise() and then rechecked in madvise_dontneed_free() is the
+mmap-lock is dropped.
+
+Remove this check.
+
+Cc: Andrea Arcangeli <aarcange@redhat.com>
+Cc: Andrew Morton <akpm@linux-foundation.org>
+Cc: Minchan Kim <minchan@kernel.org>
+Cc: Colin Cross <ccross@google.com>
+Cc: Suren Baghdasarya <surenb@google.com>
+Cc: Mike Rapoport <rppt@linux.vnet.ibm.com>
+Signed-off-by: Nadav Amit <namit@vmware.com>
+---
+ mm/madvise.c | 8 +-------
+ 1 file changed, 1 insertion(+), 7 deletions(-)
+
+diff --git a/mm/madvise.c b/mm/madvise.c
+index fe843513a4e8..17e39c70704b 100644
+--- a/mm/madvise.c
++++ b/mm/madvise.c
+@@ -716,14 +716,8 @@ static int madvise_free_single_vma(struct vm_area_struct *vma,
+ 	if (!vma_is_anonymous(vma))
+ 		return -EINVAL;
+ 
+-	range.start = max(vma->vm_start, start_addr);
+-	if (range.start >= vma->vm_end)
+-		return -EINVAL;
+-	range.end = min(vma->vm_end, end_addr);
+-	if (range.end <= vma->vm_start)
+-		return -EINVAL;
+ 	mmu_notifier_range_init(&range, MMU_NOTIFY_CLEAR, 0, vma, mm,
+-				range.start, range.end);
++				start_addr, end_addr);
+ 
+ 	lru_add_drain();
+ 	tlb_gather_mmu(&tlb, mm);
+-- 
+2.25.1
+

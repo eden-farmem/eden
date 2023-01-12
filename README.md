@@ -34,7 +34,9 @@ This code has been tested most thoroughly on Ubuntu 20.04, with kernel
 5.15.0. It has been tested with Mellanox ConnectX-5 Pro 100 Gbits/s NICs.
 In addition to the Shenango requirements (see below), the remote memory
 component of Eden requires a RDMA NIC and expects `rdmacm` and `libibverbs`
-installed.
+installed. For best performance, Eden also requires some unpublished 
+userfaultfd changes in the kernel. See [kernel patches](./kernel/README.md)
+for more info.
 
 # About Shenango
 
