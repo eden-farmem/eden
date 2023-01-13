@@ -14,6 +14,7 @@ CC	= gcc
 AR	= ar
 SPARSE	= sparse
 CHECKFLAGS = -D__CHECKER__ -Waddress-space
+FLTRACE = fltrace.so
 
 # uncomment to autodetect MLX5
 MLX5=$(shell lspci | grep 'ConnectX-5' || echo "")
@@ -88,12 +89,19 @@ endif
 RDMA_LIBS=-lrdmacm -libverbs
 
 # dpdk
+dpdk = yes
+ifeq ($(MAKECMDGOALS),clean)
+	dpdk = no
+endif
+ifeq ($(MAKECMDGOALS),$(FLTRACE))
+	dpdk = no
+endif
+ifeq ($(dpdk),yes)
 DPDK_PATH = ${MKFILE_DIR}/dpdk
 DPDK_INCLUDES = $(shell cat $(DPDK_PATH)/dpdk_includes)
 DPDK_LIBS = $(shell cat $(DPDK_PATH)/dpdk_libs)
-ifneq ($(MAKECMDGOALS),clean)
 ifeq ($(DPDK_LIBS),)
-$(error DPDK libs not found. Please run ./setup.sh)
+$(error DPDK libs not found. Please run ./setup.sh -d -f)
 endif
 endif
 CFLAGS += $(DPDK_INCLUDES)
@@ -105,7 +113,7 @@ JEMALLOC_LIBS = $(shell cat $(JEMALLOC_PATH)/je_libs)
 JEMALLOC_STATIC_LIBS = $(shell cat $(JEMALLOC_PATH)/je_static_libs)
 ifneq ($(MAKECMDGOALS),clean)
 ifeq ($(JEMALLOC_STATIC_LIBS),)
-$(error JEMALLOC libs not found. Please run ./setup.sh)
+$(error JEMALLOC libs not found. Please run ./setup.sh -je -f)
 endif
 endif
 CFLAGS += $(JEMALLOC_INC)
@@ -152,7 +160,6 @@ memserver_src = tools/rmserver/memserver.c tools/rmserver/rdma.c
 memserver_obj = $(memserver_src:.c=.o)
 
 # fltrace - fault tracing library
-FLTRACE = fltrace.so
 fltrace_src = $(wildcard tools/fltrace/*.c)
 fltrace_obj = $(fltrace_src:.c=.o)
 ifeq ($(MAKECMDGOALS),$(FLTRACE))
@@ -239,6 +246,7 @@ ifneq ($(MAKECMDGOALS),clean)
 -include $(dep)   # include all dep files in the makefile
 endif
 
+ifneq ($(MAKECMDGOALS),$(FLTRACE))
 # rule to generate a dep file by using the C preprocessor
 # (see man cpp for details on the -MM and -MT options)
 %-noht.d %.d: %.c
@@ -246,6 +254,7 @@ endif
 
 %-noht.o: %.c
 	$(CC) $(CFLAGS) -Wno-unused-variable -DCORES_NOHT -c $< -o $@
+endif
 
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@

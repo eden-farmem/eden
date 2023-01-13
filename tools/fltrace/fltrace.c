@@ -668,7 +668,7 @@ int madvise(void *addr, size_t length, int advice)
         goto out;
     }
 
-    ft_log_debug("madvise directly from the app, fwd to RLib: addr=%p", ptr);
+    ft_log_debug("madvise directly from the app, fwd to RLib: addr=%p", addr);
     ret = rmadvise(addr, length, advice);
 
 out:
