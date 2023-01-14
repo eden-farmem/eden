@@ -153,16 +153,6 @@ void *rmlib_rmmap(void *addr, size_t length, int prot,
     return p;
 }
 
-int rmlib_rmunmap(void *ptr, size_t length)
-{
-    if (!ptr) return 0;
-    if (!within_memory_region(ptr)) {
-        return real_munmap(ptr, length);
-    } else {
-        return rmunmap(ptr, length);
-    }
-}
-
 /**
  * Main Initialization - every external (i.e., coming from the
  * application) memory alloc/map/free call we interpose on in this
@@ -584,13 +574,14 @@ int munmap(void *ptr, size_t length)
     if (__from_internal_jemalloc) {
         ft_log_debug("internal jemalloc munmap, fwd to RLib: addr=%p", ptr);
         BUG_ON(initd != INITIALIZED);
-        ret = rmlib_rmunmap(ptr, length);
+        assert(within_memory_region(ptr));
+        ret = rmunmap(ptr, length);
         goto out;
     }
 
     if (from_runtime) {
         ft_log_debug("%s from runtime, using real munmap", __func__);
-        BUG_ON(within_memory_region(ptr));
+        assert(!within_memory_region(ptr));
         ret = real_munmap(ptr, length);
         goto out;
     }
@@ -610,7 +601,7 @@ int munmap(void *ptr, size_t length)
     }
 
     ft_log_debug("munmap directly from the app, fwd to RLib: addr=%p", ptr);
-    ret = rmlib_rmunmap(ptr, length);
+    ret = rmunmap(ptr, length);
 
 out:
     ft_log_debug("[%s] return=%d", __func__, ret);
@@ -641,7 +632,7 @@ int madvise(void *addr, size_t length, int advice)
      * meant to be forwarded to remote memory; the tool must have been init'd 
      * by now as jemalloc calls are triggered by our own calls after init */
     if (__from_internal_jemalloc) {
-        ft_log_debug("internal jemalloc munmap, fwd to RLib: addr=%p", addr);
+        ft_log_debug("internal jemalloc madvise, fwd to RLib: addr=%p", addr);
         BUG_ON(initd != INITIALIZED);
         assert(within_memory_region(addr));
         ret = rmadvise(addr, length, advice);

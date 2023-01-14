@@ -129,19 +129,22 @@ void fsampler_add_fault_sample(int fsid, int kind, unsigned long addr, pid_t tid
     sampler = &fsamplers[fsid];
     sample = &fsample_data[fsid];
 
+    log_debug("sampler %d got fault %lx for thr %d", fsid, addr, tid);
     now_tsc = rdtsc();
-    if (!sampler_is_time(sampler, now_tsc))
+    if (!sampler_is_time(sampler, now_tsc)) {
+        log_debug("not time for the next sample yet, ignore");
         return;
+    }
 
-    /* wait for previous backtrace to finish */
-    log_debug("waiting for previous backtrace to finish");
+    /* if a sample in progress, wait for finish and record it */
+    if (sample->valid) {
+        log_debug("waiting for previous sample for thr %d to finish", tid);
+        while (load_acquire(&sample->busy))
+            cpu_relax();
 
-    while (load_acquire(&sample->busy))
-        cpu_relax();
-
-    /* record the previous backtrace */
-    if (sample->valid)
+        /* record it */
         sampler_add_provide_tsc(sampler, sample, sample->tstamp_tsc);
+    }
 
     /* prepare for next sample */
     sample->tstamp_tsc = now_tsc;
@@ -153,7 +156,7 @@ void fsampler_add_fault_sample(int fsid, int kind, unsigned long addr, pid_t tid
     store_release(&sample->busy, 1);
 
     /* send a signal to the thread to get the new backtrace */
-    log_debug("sampler %d sending sig %d to tid: %d\n", fsid, sigid, tid);
+    log_debug("sampler %d sending sig %d to tid: %d", fsid, sigid, tid);
     assert(tid);
     sginfo.si_signo = sigid;
     sginfo.si_code = SI_QUEUE;
@@ -192,7 +195,7 @@ void save_stacktrace(int signum, siginfo_t *siginfo, void *context)
     RUNTIME_ENTER();
 
     fsid = siginfo->si_value.sival_int;
-    log_debug("received signal %d for sampler %d", signum, fsid);
+    log_debug("thr %d received sig %d for sampler %d", gettid(), signum, fsid);
     assert(fsid >= 0 && fsid < MAX_FAULT_SAMPLERS);
     assert(fsample_data[fsid].valid);
     assert(fsample_data[fsid].busy);
@@ -203,7 +206,7 @@ void save_stacktrace(int signum, siginfo_t *siginfo, void *context)
 
     /* set done */
     store_release(&fsample_data[fsid].busy, 0);
-    log_debug("backtrace done for sampler %d", fsid);
+    log_debug("thr %d backtrace done for sampler %d", gettid(), fsid);
 
     /* exit runtime if necessary */
     if (!from_runtime)

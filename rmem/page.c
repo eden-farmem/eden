@@ -72,8 +72,9 @@ static const struct tcache_ops rmpage_node_tcache_ops = {
 bool rmpage_is_node_valid(rmpage_node_t* pgnode)
 {
     assert(rmpage_nodes && max_rmpage_nodes);  /* check inited */
-    log_debug("%s: node %p, base %p, len %ld", 
-        __func__, pgnode, rmpage_nodes, rmpage_node_count);
+    log_debug("%s: node %p, base %p, id %ld of %ld", 
+        __func__, pgnode, rmpage_nodes, 
+        (unsigned long)(pgnode - rmpage_nodes), rmpage_node_count);
     return pgnode >= rmpage_nodes
         && (unsigned long)(pgnode - rmpage_nodes) < rmpage_node_count
         && ((char*)pgnode - (char*)rmpage_nodes) % sizeof(rmpage_node_t) == 0;
@@ -182,6 +183,8 @@ void rmpage_node_tbf_init()
 void rmpage_node_tbf_add(rmpage_node_t* node)
 {
     assert(tbf_inited);
+    assert(rmpage_is_node_valid(node));
+
     spin_lock(&tbf_lock);
     list_add_tail(&tbf_nodes, &node->link);
     spin_unlock(&tbf_lock);
