@@ -97,6 +97,7 @@ static inline void __remove_and_unlock_page_range(struct region_t *mr,
     pginfo_t pginfo, oldinfo;
     struct rmpage_node *pgnode;
     unsigned long pressure;
+    struct page_list* evict_gen;
 
     /* unlock all pages while also setting them unregistered and freeing the 
      * page nodes for pages that were locally present (if munmap worked) */
@@ -120,6 +121,16 @@ static inline void __remove_and_unlock_page_range(struct region_t *mr,
             pgidx = get_index_from_pginfo(pginfo);
             pgnode = rmpage_get_node_by_id(pgidx);
             assert(pgnode->addr == page);
+
+            /* remove the node from eviction lists. we need a lock on the 
+             * list before removing but can't get the list information from
+             * the node. Only supporting this case for a single eviction 
+             * list and (TODO:) leaving multiple lists case to future */
+            BUG_ON(evict_ngens != 1 && evict_nprio != 1);
+            evict_gen = &evict_gens[0];
+            spin_lock(&evict_gen->lock);
+            list_del_from(&evict_gen->pages[0], &pgnode->link);
+            spin_unlock(&evict_gen->lock);
 
             /* free the page node */
 #ifndef RMEM_STANDALONE
