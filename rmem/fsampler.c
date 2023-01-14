@@ -99,7 +99,7 @@ int fsampler_get_sampler()
         fsid, atomic_read(&nsamplers));
 
     /* initialize sampler */
-    sprintf(fsname, "fault_samples%d", 1 + fsid);
+    sprintf(fsname, "fault-samples-%d-%d.out", getpid(), 1 + fsid);
     sampler_init(&fsamplers[fsid], fsname, 
         fsamples_per_sec > 0 ? SAMPLER_TYPE_POISSON : SAMPLER_TYPE_NONE,
         &fault_sampler_ops, sizeof(struct fsample), 

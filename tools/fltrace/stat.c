@@ -19,9 +19,6 @@
 #define STAT_INTERVAL_SECS  1
 #define MAX_STAT_STR_LEN    1500
 
-/* state */
-static const char statsfile[] = "fault-stats.out";
-
 static inline int append_stat(char *pos, size_t len, 
     const char *name, uint64_t val)
 {
@@ -102,11 +99,13 @@ static void* stats_worker(void *arg)
     RUNTIME_ENTER();
 
     char buf[MAX_STAT_STR_LEN];
+    char fname[100];
     unsigned long now;
     FILE* fp;
     int ret;
     
-    fp = fopen(statsfile, "w");
+    sprintf(fname, "fault-stats-%d.out", getpid());
+    fp = fopen(fname, "w");
     assert(fp);
 
     while (true)

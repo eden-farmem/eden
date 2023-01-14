@@ -32,6 +32,10 @@
 #include "rmem/common.h"
 #include "rmem/region.h"
 
+/* concurrent ld_preload in multiple procs; no reason not to allow it yet, 
+ * this might change if we introduce rdma-backed memory */
+#define ALLOW_CONCURRENT_TRACING
+
 /**
  * Defs 
  */
@@ -176,9 +180,9 @@ void *rmlib_rmmap(void *addr, size_t length, int prot,
 static bool init(bool init_start_expected)
 {
     bool ret, status;
-    int r, oldval, shmid, initd;
-    key_t key;
+    int r, oldval, initd, nchars;
     unsigned long nslabs;
+    char exepath[200];
 
     /* inf loop; a thread came back here during init */
     if (__init_in_progress) {
@@ -221,23 +225,32 @@ again:
     /* i started init */
     __init_in_progress = true;
 
-    /* check for fork'ed processes that inherit LD_PRELOAD */
+    /* print tracing process info */
+    nchars = readlink("/proc/self/exe", exepath, 200);
+    if (nchars < 0) nchars = 0;
+    ft_log_info("profiling process: %d exe path: %.*s",
+        getpid(), (int) nchars, exepath);
+
+#ifndef ALLOW_CONCURRENT_TRACING
+    /* check for fork'ed or other processes that inherit LD_PRELOAD */
+    key_t key;
+    int shmid;
+
     key = ftok("rmem_rmlib", 65);
     shmid = shmget(key, 1024, 0666 | IPC_CREAT | IPC_EXCL);
-    ft_log_debug("shm id for key %d: %d", key, shmid);
-
     if (shmid < 0) {
         ft_log_warn("failed to create new shmid, some other process or parent" 
             "process may already be running with rmlib. errno: %d", errno);
-        /* use libc for fork'ed processes */
+        /* use libc for other processes */
         goto error;
     }
 
-    /* just a hey! to whoever might be listening (aka debugging) */
+    /* write something to shmid for debugging */
     shm_id = shmid;
     char *str = (char *)shmat(shmid, (void *)0, 0);
     sprintf(str, "hello from pid %d", getpid());
     shmdt(str);
+#endif
 
     /* get settings from env */
     r = parse_env_settings();
