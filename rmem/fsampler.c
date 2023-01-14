@@ -138,9 +138,19 @@ void fsampler_add_fault_sample(int fsid, int kind, unsigned long addr, pid_t tid
 
     /* if a sample in progress, wait for finish and record it */
     if (sample->valid) {
-        log_debug("waiting for previous sample for thr %d to finish", tid);
-        while (load_acquire(&sample->busy))
-            cpu_relax();
+        log_debug("waiting for prev sample from thr %d to finish", tid);
+        if (load_acquire(&sample->busy)) {
+            /* normally we should poll wait here for previous sample
+             * to finish before sending another signal. however, I saw
+             * a rare race where a faulting thread would fault
+             * immediately again before handling the signal sent by
+             * the previous fault on the same thread, leading to a
+             * deadlock if we poll wait. It's easier to just ignore
+             * these faults that occur while handling the signal and
+             * worry about them if we ever see a large number of them */
+            log_warn_ratelimited("WARN: fsample missed during sig handling");
+            return;
+        }
 
         /* record it */
         sampler_add_provide_tsc(sampler, sample, sample->tstamp_tsc);
