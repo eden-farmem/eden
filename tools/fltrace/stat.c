@@ -104,7 +104,7 @@ static void* stats_worker(void *arg)
     FILE* fp;
     int ret;
     
-    sprintf(fname, "fault-stats-%d.out", getpid());
+    sprintf(fname, "fault-stats.out");
     fp = fopen(fname, "w");
     assert(fp);
 
