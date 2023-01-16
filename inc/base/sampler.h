@@ -44,6 +44,7 @@ struct sampler
     int sample_size;
     bool dump_on_full;
     sampler_ops_t* ops;
+    char* header;
 
     /* state */
     FILE* outfile;
@@ -54,6 +55,7 @@ struct sampler
     unsigned long next_sample_tsc;
     unsigned long next_dump_tsc;
     struct rand_state randst;
+    unsigned long ndumped;
 };
 typedef struct sampler sampler_t;
 
@@ -68,10 +70,10 @@ void __dump_samples_update_tsc(sampler_t* s, int max_str_len,
  * Sampler API
  */
 
-void sampler_init(sampler_t* s, const char* fname,
-    enum sampler_type stype, sampler_ops_t* ops,
-    int sample_size, int max_samples,
-    int samples_per_sec, int dumps_per_sec, bool dump_on_full);
+void sampler_init(sampler_t* s, const char* fname, const char* fheader,
+    enum sampler_type stype, sampler_ops_t* ops, int sample_size, 
+    int max_samples, int samples_per_sec, int dumps_per_sec, 
+    bool dump_on_full);
 void sampler_destroy(sampler_t* s);
 
 /**

@@ -79,18 +79,29 @@ void __dump_samples_update_tsc(sampler_t* s, int max_str_len,
      * do the same can give up and leave */
     s->next_dump_tsc = now_tsc + 
         (cycles_per_us * 1000000ULL / s->dumps_per_sec);
-    
-    /* dump */
+
+    /* dump samples */
     count = 0;
     log_debug("dumping samples at %lu: head - %d, tail - %d, next: %lu", 
         now_tsc, s->sq_head, s->sq_tail, s->next_dump_tsc);
-    while (s->sq_head != s->sq_tail) {
+    while (s->sq_head != s->sq_tail)
+    {
+        /* retrieve sample and convert to text */
         newhead = (s->sq_head + 1) % s->max_samples;
         s->ops->sample_to_str(s->samples + newhead * s->sample_size,
             sbuf, max_str_len);
+
+        /* add header if needed */
+        if (s->header != NULL && s->ndumped == 0)
+            fprintf(s->outfile, "%s\n", s->header);
+
+        /* write to file */
         fprintf(s->outfile, "%s\n", sbuf);
-        s->sq_head = newhead;
         count++;
+        s->ndumped++;
+
+        /* move on */
+        s->sq_head = newhead;
     }
     if (count > 0) {
         fflush(s->outfile);
@@ -103,6 +114,7 @@ void __dump_samples_update_tsc(sampler_t* s, int max_str_len,
  */
 void sampler_init(sampler_t* s,   /* sampler instance */
     const char* fname,            /* output file name */
+    const char* fheader,          /* add a header line, don't add if NULL */
     enum sampler_type stype,      /* sampling type */
     sampler_ops_t* ops,           /* base sampler ops */
     int sample_size,              /* size of each sample object */
@@ -111,6 +123,7 @@ void sampler_init(sampler_t* s,   /* sampler instance */
     int dumps_per_sec,            /* min buffer dump to file every sec */
     bool dump_on_full             /* dump on full queue without waiting */)
 {
+    /* save settings */
     s->type = stype;
     s->ops = ops;
     s->sample_size = sample_size;
@@ -120,6 +133,7 @@ void sampler_init(sampler_t* s,   /* sampler instance */
     s->sq_head = s->sq_tail = 0;
     s->next_sample_tsc = 0;
     s->dump_on_full = dump_on_full;
+    s->header = fheader;
 
     spin_lock_init(&s->lock);
     rand_seed(&s->randst, time(NULL));
@@ -131,6 +145,9 @@ void sampler_init(sampler_t* s,   /* sampler instance */
     assert(fname);
     s->outfile = fopen(fname, "w");
     BUG_ON(!s->outfile);
+
+    /* init others */
+    s->ndumped = 0;
 
     log_debug("sampler inited: %s, type: %d, %d samples/sec, %d max samples,"
         " %d sample size, %d dumps/sec", fname, stype, samples_per_sec,
