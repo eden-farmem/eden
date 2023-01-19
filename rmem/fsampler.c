@@ -63,7 +63,8 @@ void fault_sample_to_str(void* sample, char* sbuf, int max_len)
     for(i = 0; i < fs->trace_size && 
         strlen(trace) < (FAULT_TRACE_BUF_SIZE-1); i++)
             snprintf(&trace[strlen(trace)], 
-                (FAULT_TRACE_BUF_SIZE - 1 - strlen(trace)), "%p|", fs->bktrace[i]);
+                (FAULT_TRACE_BUF_SIZE - 1 - strlen(trace)),
+                "%p|", fs->bktrace[i]);
 
     /* write to string buf */
     n = snprintf(sbuf, max_len, "%lu,%lx,%d,%lx,%d,%s", 
@@ -99,8 +100,14 @@ int fsampler_get_sampler()
         fsid, atomic_read(&nsamplers));
 
     /* initialize sampler */
+<<<<<<< HEAD
     sprintf(fsname, "fault-samples-%d.out", 1 + fsid);
     sampler_init(&fsamplers[fsid], fsname, 
+=======
+    sprintf(fsname, "fault-samples-%d-%d.out", getpid(), 1 + fsid);
+    sampler_init(&fsamplers[fsid], fsname,
+        /* header= */ "tstamp,ip,kind,addr,tid,trace",
+>>>>>>> 4173e5b98163c76b87864f2b0135657a14e57015
         fsamples_per_sec > 0 ? SAMPLER_TYPE_POISSON : SAMPLER_TYPE_NONE,
         &fault_sampler_ops, sizeof(struct fsample), 
         /* queue size = */ 1000, /* sampling rate = */ fsamples_per_sec,
