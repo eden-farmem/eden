@@ -70,11 +70,18 @@ int samples_per_sec = -1;
     fprintf(stderr, "[%s][%s:%d]: " fmt "\n", __FILE__,     \
             __func__, __LINE__, ##__VA_ARGS__);             \
   } while (0)
-#define ft_log_info ft_log
-#define ft_log_warn ft_log
+#ifdef SUPPRESS_LOG
+#define ft_log_suppressible(fmt, ...) do {} while (0)
+#else
+#define ft_log_suppressible ft_log
+#endif
+
+/* log levels */
 #define ft_log_err  ft_log
+#define ft_log_info ft_log_suppressible
+#define ft_log_warn ft_log_suppressible
 #ifdef DEBUG
-#define ft_log_debug ft_log
+#define ft_log_debug ft_log_suppressible
 #else
 #define ft_log_debug(fmt, ...) do {} while (0)
 #endif
