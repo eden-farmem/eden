@@ -44,6 +44,10 @@ CFLAGS += -DSAFEMODE
 CFLAGS += -g -O0	# TODO: SAFEMODE fails iokernel with -O3; cause unknown.
 endif
 
+ifneq ($(SUPPRESS_LOG),)
+CFLAGS += -DSUPPRESS_LOG
+endif
+
 ifneq ($(NUMA_NODE),)
 CFLAGS += -DNUMA_NODE=$(NUMA_NODE)
 endif
