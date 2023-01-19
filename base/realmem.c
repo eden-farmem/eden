@@ -51,6 +51,12 @@ void *libc_memalign(size_t alignment, size_t size)
     return ptr;
 }
 
+size_t libc_malloc_usable_size(void * ptr)
+{
+    extern size_t __libc_malloc_usable_size(void *);
+    return __libc_malloc_usable_size(ptr);
+}
+
 void libc_free(void *ptr)
 {
     extern void __libc_free(void *);

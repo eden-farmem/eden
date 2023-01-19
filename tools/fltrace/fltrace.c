@@ -519,6 +519,41 @@ void *aligned_alloc(size_t alignment, size_t size)
     return __internal_aligned_alloc(alignment, size);
 }
 
+size_t malloc_usable_size(void * ptr)
+{
+    size_t size;
+    bool from_runtime;
+
+    from_runtime = IN_RUNTIME();
+    RUNTIME_ENTER();
+
+    ft_log_debug("[%s] ptr %p", __func__, ptr);
+
+    if (from_runtime) {
+        ft_log_debug("%s from runtime, using libc", __func__);
+        size = real_malloc_usable_size(ptr);
+        goto out;
+    }
+
+    /* rmlib status */
+    if (!init(false)) {
+        ft_log_debug("%s not initialized, using libc", __func__);
+        size = real_malloc_usable_size(ptr);
+        goto out;
+    }
+
+    /* application aligned alloc */
+    __from_internal_jemalloc = true;
+    size = rmlib_je_malloc_usable_size(ptr);
+    __from_internal_jemalloc = false;
+
+out:
+    ft_log_debug("[%s] return=%ld", __func__, size);
+    if (!from_runtime)
+        RUNTIME_EXIT();
+    return size;
+}
+
 /**
  * Memory management functions (sys/mman.h).
  */
