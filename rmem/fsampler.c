@@ -26,7 +26,7 @@ struct fsample {
     unsigned long tstamp_tsc;
     unsigned long ip;
     unsigned long addr;
-    int kind;
+    int flags;
     int tid;
     void* bktrace[FAULT_TRACE_STEPS];
     int trace_size;
@@ -67,9 +67,9 @@ void fault_sample_to_str(void* sample, char* sbuf, int max_len)
                 "%p|", fs->bktrace[i]);
 
     /* write to string buf */
-    n = snprintf(sbuf, max_len, "%lu,%lx,%d,%lx,%d,%s", 
+    n = snprintf(sbuf, max_len, "%lu,%lx,%lx,%d,%d,%s", 
             (fs->tstamp_tsc - sampler_start_tsc) / cycles_per_us,
-            fs->ip, fs->kind, fs->addr, fs->tid, trace);
+            fs->ip, fs->addr, fs->flags, fs->tid, trace);
     BUG_ON(n >= max_len);   /* truncated */
 }
 
@@ -102,7 +102,7 @@ int fsampler_get_sampler()
     /* initialize sampler */
     sprintf(fsname, "fault-samples-%d-%d.out", getpid(), 1 + fsid);
     sampler_init(&fsamplers[fsid], fsname,
-        /* header= */ "tstamp,ip,kind,addr,tid,trace",
+        /* header= */ "tstamp,ip,addr,flags,tid,trace",
         fsamples_per_sec > 0 ? SAMPLER_TYPE_POISSON : SAMPLER_TYPE_NONE,
         &fault_sampler_ops, sizeof(struct fsample), 
         /* queue size = */ 1000, /* sampling rate = */ fsamples_per_sec,
@@ -115,11 +115,11 @@ int fsampler_get_sampler()
 /**
  * Record the fault sample with a backtrace of the faulting thread
  * @fsid: the id of the sampler to use for recording
- * @kind: the kind of fault
  * @addr: the faulting address
+ * @flags: the flags associated with the fault (see FSAMPLER_FAULT_FLAG_*)
  * @tid: the faulting thread id
  */
-void fsampler_add_fault_sample(int fsid, int kind, unsigned long addr, pid_t tid)
+void fsampler_add_fault_sample(int fsid, unsigned long addr, int flags, pid_t tid)
 {
     int ret;
     struct sampler* sampler;
@@ -160,7 +160,7 @@ void fsampler_add_fault_sample(int fsid, int kind, unsigned long addr, pid_t tid
 
     /* prepare for next sample */
     sample->tstamp_tsc = now_tsc;
-    sample->kind = kind;
+    sample->flags = flags;
     sample->addr = addr;
     sample->tid = tid;
     sample->trace_size = 0;

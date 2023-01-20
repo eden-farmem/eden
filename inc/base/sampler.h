@@ -44,7 +44,7 @@ struct sampler
     int sample_size;
     bool dump_on_full;
     sampler_ops_t* ops;
-    char* header;
+    const char* header;
 
     /* state */
     FILE* outfile;
