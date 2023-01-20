@@ -177,6 +177,7 @@ static inline fault_t* read_uffd_fault()
     struct uffd_msg message;
     struct fault* fault;
     unsigned long long addr, flags;
+    struct region_t* mr;
 
     struct pollfd evt = { .fd = userfault_fd, .events = POLLIN };
     if (poll(&evt, 1, 0) > 0) {
@@ -232,9 +233,19 @@ static inline fault_t* read_uffd_fault()
         fault->rdahead  = 0;
         fault->evict_prio = 0;
 
+        /* find associated region */
+        mr = get_region_by_addr_safe(fault->page);
+        BUG_ON(!mr);  /* we dont do region deletions yet so it must exist */
+        assert(mr->addr);
+        fault->mr = mr;
+
 #ifdef FAULT_SAMPLER
-        /* record the fault information if sampling */
-        fsampler_add_fault_sample(my_hthr->fsampler_id, flags, addr,
+        /* check if this is the first fault on the page */
+        if (!(get_page_flags(mr, addr) & PFLAG_REGISTERED))
+            flags |= FSAMPLER_FAULT_FLAG_ZERO;
+
+        /* record if sampling faults */
+        fsampler_add_fault_sample(my_hthr->fsampler_id, addr, flags,
             message.arg.pagefault.feat.ptid);
 #endif
 
@@ -256,7 +267,6 @@ static void* rmem_handler(void *arg)
     fault_t *fault, *next;
     int nevicts, nevicts_needed, batch, r;
     enum fault_status fstatus;
-    struct region_t* mr;
     assert(arg != NULL);        /* expecting a hthread_t */
     my_hthr = (hthread_t*) arg; /* save our hthread_t */
     unsigned long now_tsc, last_tsc;
@@ -351,12 +361,6 @@ static void* rmem_handler(void *arg)
             if (fault->is_write)        RSTAT(FAULTS_W)++;
             if (fault->is_wrprotect)    RSTAT(FAULTS_WP)++;
             work_done = true;
-
-            /* find region */
-            mr = get_region_by_addr_safe(fault->page);
-            BUG_ON(!mr);  /* we dont do region deletions yet so it must exist */
-            assert(mr->addr);
-            fault->mr = mr;
 
             /* start handling fault */
             fstatus = handle_page_fault(my_hthr->bkend_chan_id, fault, 
