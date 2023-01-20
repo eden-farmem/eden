@@ -109,13 +109,23 @@ int parse_numeric_env_setting(const char* name, long int* parsed_num)
 int parse_env_settings()
 {
     long int val;
+    bool local_memory_set;
 
     /* parse local memory */
-    if (parse_numeric_env_setting("FLTRACE_LOCAL_MEMORY_MB", &val) != 0) {
-        ft_log_err("ERROR! set local mem using (FLTRACE_LOCAL_MEMORY_MB env)");
+    local_memory_set = false;
+    if (parse_numeric_env_setting("FLTRACE_LOCAL_MEMORY_BYTES", &val) == 0) {
+        local_memory = val;
+        local_memory_set = true;
+    }
+    if (parse_numeric_env_setting("FLTRACE_LOCAL_MEMORY_MB", &val) == 0) {
+        local_memory = val * 1024 * 1024;
+        local_memory_set = true;
+    }
+    if (!local_memory_set || local_memory < CHUNK_SIZE) {
+        ft_log_err("ERROR! local mem must be set (FLTRACE_LOCAL_MEMORY_BYTES or"
+            " FLTRACE_LOCAL_MEMORY_MB env) with at least %d bytes", CHUNK_SIZE);
         return 1;
     }
-    local_memory = val * 1024 * 1024;
 
     /* parse number of handlers */
     if (parse_numeric_env_setting("FLTRACE_NHANDLERS", &val) == 0)
@@ -275,9 +285,9 @@ again:
     ft_log_debug("calling rmem init");
     rmem_enabled = true;
     rmbackend_type = RMEM_BACKEND_LOCAL;
+    eviction_threshold = 1;
     nslabs= max_memory_mb * 1024L * 1024L / RMEM_SLAB_SIZE;
-    r = rmem_common_init(nslabs, /*don't pin handler cores*/ -1, -1,
-            samples_per_sec);
+    r = rmem_common_init(nslabs, -1, -1, samples_per_sec);
     if (r)  goto error;
 
     /* kick-off stats thread */
