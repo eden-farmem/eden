@@ -11,6 +11,7 @@
 #include <sys/syscall.h>
 #include <unistd.h>
 
+#include "base/map.h"
 #include "base/sampler.h"
 #include "rmem/common.h"
 #include "rmem/config.h"
@@ -18,11 +19,13 @@
 
 #define FAULT_TRACE_BUF_SIZE    (FAULT_TRACE_STEPS*15)
 #define MAX_FAULT_SAMPLE_LEN    1000
+#define FSAMPLER_MAX_BUFS       10000
 
 /* defs */
 struct fsample {
-    volatile int valid;     /* backtrace done */
-    volatile int busy;      /* backtrace in progress */
+    volatile int busy;                  /* sample buf slot is being used */
+    volatile int trace_in_progress;     /* backtrace in progress */
+    int fsid;
     unsigned long tstamp_tsc;
     unsigned long ip;
     unsigned long addr;
@@ -30,11 +33,19 @@ struct fsample {
     int tid;
     void* bktrace[FAULT_TRACE_STEPS];
     int trace_size;
+    int npages;
 } __aligned(CACHE_LINE_SIZE);
 
+struct fsampler {
+    struct sampler base;
+    /* TODO: allocate the below bufs dynamically */
+    struct fsample fsample_bufs[FSAMPLER_MAX_BUFS];
+    struct hashmap thread_buf_map;
+    int nbufs_used;
+};
+
 /* sampler global state */
-struct sampler fsamplers[MAX_FAULT_SAMPLERS];
-struct fsample fsample_data[MAX_FAULT_SAMPLERS] = {0};
+struct fsampler fsamplers[MAX_FAULT_SAMPLERS];
 atomic_t nsamplers;
 int sigid;
 unsigned long sampler_start_tsc;
@@ -67,9 +78,9 @@ void fault_sample_to_str(void* sample, char* sbuf, int max_len)
                 "%p|", fs->bktrace[i]);
 
     /* write to string buf */
-    n = snprintf(sbuf, max_len, "%lu,%lx,%lx,%d,%d,%s", 
+    n = snprintf(sbuf, max_len, "%lu,%lx,%lx,%d,%d,%d,%s", 
             (fs->tstamp_tsc - sampler_start_tsc) / cycles_per_us,
-            fs->ip, fs->addr, fs->flags, fs->tid, trace);
+            fs->ip, fs->addr, fs->npages, fs->flags, fs->tid, trace);
     BUG_ON(n >= max_len);   /* truncated */
 }
 
@@ -78,6 +89,147 @@ struct sampler_ops fault_sampler_ops = {
     .add_sample = fault_add_sample,
     .sample_to_str = fault_sample_to_str,
 };
+
+/**
+ * Record the fault sample with a backtrace of the faulting thread
+ * @fsid: the id of the sampler to use for recording
+ * @addr: the faulting address
+ * @flags: the flags associated with the fault (see FSAMPLER_FAULT_FLAG_*)
+ * @tid: the faulting thread id
+ */
+void fsampler_add_fault_sample(int fsid, unsigned long addr, int flags, pid_t tid)
+{
+    int ret, bufid;
+    struct sampler* sampler;
+    struct fsample* sample;
+    unsigned long now_tsc;
+    siginfo_t sginfo;
+    bool found;
+
+    log_debug("sampler %d got fault %lx for thr %d", fsid, addr, tid);
+    assert(fsid >= 0 && fsid < MAX_FAULT_SAMPLERS);
+    sampler = &fsamplers[fsid].base;
+
+    /* ignore if it is not time yet */
+    now_tsc = rdtsc();
+    if (!sampler_is_time(sampler, now_tsc)) {
+        log_debug("not time for the next sample yet, ignore");
+        return;
+    }
+
+    /* see if the current thread already has a buffer */
+    bufid = map_get(&fsamplers[fsid].thread_buf_map, tid);
+    found = bufid >= 0;
+    if (!found) {
+        /* no buffer for this thread, get a new one */
+        BUG_ON(fsamplers[fsid].nbufs_used >= FSAMPLER_MAX_BUFS);
+        bufid = fsamplers[fsid].nbufs_used++;
+        map_put(&fsamplers[fsid].thread_buf_map, tid, bufid);
+    }
+    assert(bufid >= 0 && bufid < fsamplers[fsid].nbufs_used);
+
+    /* retrieve the buffer */
+    sample = &fsamplers[fsid].fsample_bufs[bufid];
+    assert(!found || sample->tid == tid);
+
+    /* if a sample in progress, wait for finish and record it */
+    if (sample->busy) {
+        if (load_acquire(&sample->trace_in_progress)) {
+            /* another fault came from the same thread before it handled 
+             * the signal sent for the previous fault: there is only one 
+             * known scenario for this right now, which is that the kernel is
+             * sending back-to-back faults on an address range without ever
+             * unblocking the thread; counting all these faults towards the 
+             * original fault as the app remains faulted at the same location 
+             * during all of these repeat faults */
+            if (addr == sample->addr + sample->npages * PAGE_SIZE) {
+                log_debug("repeat range fault at fsid %d tid %d", fsid, tid);
+                sample->npages++;
+                return;
+            }
+
+            /* not sure what this case is, warn and ignore */
+            log_debug("unknown repeat fault at fsid %d tid %d", fsid, tid);
+            log_warn_ratelimited("WARN: fsample missed during sig handling");
+            return;
+        }
+
+        /* record it */
+        sampler_add_provide_tsc(sampler, sample, sample->tstamp_tsc);
+        sample->busy = 0;
+    }
+
+    /* prepare for next sample */
+    assert(!sample->busy);
+    sample->fsid = fsid;
+    sample->tstamp_tsc = now_tsc;
+    sample->flags = flags;
+    sample->addr = addr;
+    sample->tid = tid;
+    sample->trace_size = 0;
+    sample->busy = 1;
+    sample->npages = 1;
+    store_release(&sample->trace_in_progress, 1);
+
+    /* send a signal to the thread to get the new backtrace */
+    log_debug("sampler %d sending sig %d to tid %d using buf %d at time %lu",
+        fsid, sigid, tid, bufid, now_tsc);
+    assert(tid);
+    sginfo.si_signo = sigid;
+    sginfo.si_code = SI_QUEUE;
+    sginfo.si_value.sival_ptr = sample;
+    ret = syscall(SYS_rt_tgsigqueueinfo, getpid(), tid, sigid, &sginfo);
+    if (ret)
+        log_warn("failed to send signal to tid: %d, errno: %d", tid, errno);
+    assertz(ret);
+}
+
+/**
+ * Dump any recorded samples of a sampler
+ * @fsid: the sampler id
+ */
+void fsampler_dump(int fsid)
+{
+    assert(fsid >= 0 && fsid < MAX_FAULT_SAMPLERS);
+    sampler_dump(&fsamplers[fsid].base, MAX_FAULT_SAMPLE_LEN);
+}
+
+/* signal handler for saving stacktrace */
+void save_stacktrace(int signum, siginfo_t *siginfo, void *context)
+{
+    int fsid;
+    bool from_runtime;
+    struct fsample* sample;
+
+    /* this handler is only triggered on the application threads during 
+     * a page fault but faults can happen both in application or runtime 
+     * code (e.g., in interposed malloc). Make sure that we are in 
+     * runtime during this fn to avoid remote memory interpostion but 
+     * keep track of the original state and revert to it when exiting */
+    from_runtime = IN_RUNTIME();
+    RUNTIME_ENTER();
+
+    /* retrieve and check sample to write to */
+    sample = (struct fsample*) siginfo->si_value.sival_ptr;
+    fsid = sample->fsid;
+    assert(fsid >= 0 && fsid < MAX_FAULT_SAMPLERS);
+    assert(sample->busy);
+    assert(sample->trace_in_progress);
+    assert(sample->tid == gettid());
+    log_debug("thr %d received sig %d from sampler %d at fault addr %lx from "
+        "time %lu", gettid(), signum, fsid, sample->addr, sample->tstamp_tsc);
+
+    /* backtrace */
+    sample->trace_size = backtrace(sample->bktrace, FAULT_TRACE_STEPS);
+
+    /* set done */
+    store_release(&sample->trace_in_progress, 0);
+    log_debug("thr %d backtrace done for sampler %d", gettid(), fsid);
+
+    /* exit runtime if necessary */
+    if (!from_runtime)
+        RUNTIME_EXIT();
+}
 
 /**
  * Returns the next available sampler (id)
@@ -99,130 +251,20 @@ int fsampler_get_sampler()
     log_debug("sampler %d taken, num samplers: %d",
         fsid, atomic_read(&nsamplers));
 
-    /* initialize sampler */
+    /* initialize base sampler */
     sprintf(fsname, "fault-samples-%d-%d.out", getpid(), 1 + fsid);
-    sampler_init(&fsamplers[fsid], fsname,
-        /* header= */ "tstamp,ip,addr,flags,tid,trace",
+    sampler_init(&fsamplers[fsid].base, fsname,
+        /* header= */ "tstamp,ip,addr,pages,flags,tid,trace",
         fsamples_per_sec > 0 ? SAMPLER_TYPE_POISSON : SAMPLER_TYPE_NONE,
         &fault_sampler_ops, sizeof(struct fsample), 
         /* queue size = */ 1000, /* sampling rate = */ fsamples_per_sec,
         /* dumps per sec = */ 1, /* dump on full = */ true);
+
+    /* init hashmap */
+    map_init(&fsamplers[fsid].thread_buf_map, FSAMPLER_MAX_BUFS);
+    fsamplers[fsid].nbufs_used = 0;
     log_info("initialized fault sampler %d", 1 + fsid);
-
     return fsid;
-}
-
-/**
- * Record the fault sample with a backtrace of the faulting thread
- * @fsid: the id of the sampler to use for recording
- * @addr: the faulting address
- * @flags: the flags associated with the fault (see FSAMPLER_FAULT_FLAG_*)
- * @tid: the faulting thread id
- */
-void fsampler_add_fault_sample(int fsid, unsigned long addr, int flags, pid_t tid)
-{
-    int ret;
-    struct sampler* sampler;
-    struct fsample* sample;
-    unsigned long now_tsc;
-    siginfo_t sginfo;
-
-    assert(fsid >= 0 && fsid < MAX_FAULT_SAMPLERS);
-    sampler = &fsamplers[fsid];
-    sample = &fsample_data[fsid];
-
-    log_debug("sampler %d got fault %lx for thr %d", fsid, addr, tid);
-    now_tsc = rdtsc();
-    if (!sampler_is_time(sampler, now_tsc)) {
-        log_debug("not time for the next sample yet, ignore");
-        return;
-    }
-
-    /* if a sample in progress, wait for finish and record it */
-    if (sample->valid) {
-        log_debug("waiting for prev sample from thr %d to finish", tid);
-        if (load_acquire(&sample->busy)) {
-            /* normally we should poll wait here for previous sample
-             * to finish before sending another signal. however, I saw
-             * a rare race where a faulting thread would fault
-             * immediately again before handling the signal sent by
-             * the previous fault on the same thread, leading to a
-             * deadlock if we poll wait. It's easier to just ignore
-             * these faults that occur while handling the signal and
-             * worry about them if we ever see a large number of them */
-            log_warn_ratelimited("WARN: fsample missed during sig handling");
-            return;
-        }
-
-        /* record it */
-        sampler_add_provide_tsc(sampler, sample, sample->tstamp_tsc);
-    }
-
-    /* prepare for next sample */
-    sample->tstamp_tsc = now_tsc;
-    sample->flags = flags;
-    sample->addr = addr;
-    sample->tid = tid;
-    sample->trace_size = 0;
-    sample->valid = 1;
-    store_release(&sample->busy, 1);
-
-    /* send a signal to the thread to get the new backtrace */
-    log_debug("sampler %d sending sig %d to tid: %d", fsid, sigid, tid);
-    assert(tid);
-    sginfo.si_signo = sigid;
-    sginfo.si_code = SI_QUEUE;
-    sginfo.si_value.sival_int = fsid;
-    ret = syscall(SYS_rt_tgsigqueueinfo, getpid(), tid, sigid, &sginfo);
-    if (ret)
-        log_warn("failed to send signal to tid: %d, errno: %d", tid, errno);
-    assertz(ret);
-}
-
-/**
- * Dump any recorded samples of a sampler
- * @fsid: the sampler id
- */
-void fsampler_dump(int fsid)
-{
-    struct sampler* sampler;
-
-    assert(fsid >= 0 && fsid < MAX_FAULT_SAMPLERS);
-    sampler = &fsamplers[fsid];
-    sampler_dump(sampler, MAX_FAULT_SAMPLE_LEN);
-}
-
-/* signal handler for saving stacktrace */
-void save_stacktrace(int signum, siginfo_t *siginfo, void *context)
-{
-    int fsid;
-    bool from_runtime;
-
-    /* this handler is only triggered on the application threads during 
-     * a page fault but faults can happen both in application or runtime 
-     * code (e.g., in interposed malloc). Make sure that we are in 
-     * runtime during this fn to avoid remote memory interpostion but 
-     * keep track of the original state and revert to it when exiting */
-    from_runtime = IN_RUNTIME();
-    RUNTIME_ENTER();
-
-    fsid = siginfo->si_value.sival_int;
-    log_debug("thr %d received sig %d for sampler %d", gettid(), signum, fsid);
-    assert(fsid >= 0 && fsid < MAX_FAULT_SAMPLERS);
-    assert(fsample_data[fsid].valid);
-    assert(fsample_data[fsid].busy);
-
-    /* backtrace */
-    fsample_data[fsid].trace_size = 
-        backtrace(fsample_data[fsid].bktrace, FAULT_TRACE_STEPS);
-
-    /* set done */
-    store_release(&fsample_data[fsid].busy, 0);
-    log_debug("thr %d backtrace done for sampler %d", gettid(), fsid);
-
-    /* exit runtime if necessary */
-    if (!from_runtime)
-        RUNTIME_EXIT();
 }
 
 /**
@@ -270,7 +312,9 @@ int fsampler_init(int samples_per_sec)
 int fsampler_destroy(void)
 {
     int i;
-    for (i = 0; i < MAX_FAULT_SAMPLERS; i++)
-        sampler_destroy(&fsamplers[i]);
+    for (i = 0; i < MAX_FAULT_SAMPLERS; i++) {
+        sampler_destroy(&fsamplers[i].base);
+        map_destroy(&fsamplers[i].thread_buf_map);
+    }
     return 0;
 }
