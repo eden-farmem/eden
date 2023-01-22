@@ -147,7 +147,7 @@ static inline int rstat_write_buf(char *buf, char *buf_hthr, size_t len)
 	}
 
 	/* report memory used */
-	ret = append_stat(pos, end - pos, "memory_used", atomic64_read(&memory_used));
+	ret = append_stat(pos, end - pos, "memory_used", atomic64_read(&max_memory_used));
 	if (ret < 0) {
 		return -EINVAL;
 	} else if (ret >= end - pos) {

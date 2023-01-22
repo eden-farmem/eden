@@ -23,6 +23,7 @@ extern int evict_nprio;
 extern int nhandlers;
 extern hthread_t** handlers;
 extern atomic64_t memory_used;
+extern atomic64_t max_memory_used;
 extern atomic64_t memory_allocd;
 extern atomic64_t memory_freed;
 

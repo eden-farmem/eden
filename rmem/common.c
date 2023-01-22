@@ -32,6 +32,7 @@ int userfault_fd = -1;
 hthread_t** handlers = NULL;
 int nhandlers = 1;
 atomic64_t memory_used = ATOMIC_INIT(0);
+atomic64_t max_memory_used = ATOMIC_INIT(0);
 atomic64_t memory_allocd = ATOMIC_INIT(0);
 atomic64_t memory_freed = ATOMIC_INIT(0);
 

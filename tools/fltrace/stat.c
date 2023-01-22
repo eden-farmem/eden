@@ -97,7 +97,7 @@ static inline int rstat_write_buf(char *buf, size_t len)
     }
 
     /* report local memory usage stats */
-    APPEND_STAT("memory_used", atomic64_read(&memory_used));
+    APPEND_STAT("memory_used", atomic64_read(&max_memory_used));
     APPEND_STAT("memory_allocd", atomic64_read(&memory_allocd));
     APPEND_STAT("memory_freed", atomic64_read(&memory_freed));
 

@@ -468,6 +468,10 @@ pages_added_out:
         *nevicts_needed = (noverflow < nchunks) ? noverflow : nchunks;
     }
 
+    /* update maximum memory usage counter. FIXME: should use CAS! */
+    if (pressure > atomic64_read(&max_memory_used))
+        atomic64_write(&max_memory_used, pressure);
+
     log_debug("%s - %d page(s) added with return status %d, pressure %llu"
         " evicts %d", FSTR(fault), nchunks, status, pressure, *nevicts_needed);
     return status;
