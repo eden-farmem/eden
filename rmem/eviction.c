@@ -722,6 +722,7 @@ static inline void evict_page_done(struct region_t* mr, unsigned long pgaddr,
     clrbits |= PFLAG_PRESENT;
     clrbits |= PFLAG_DIRTY;
     clrbits |= PFLAG_ACCESSED;
+    clrbits |= PFLAG_PRESENT_ZERO_PAGED;
 
     if (discarded) {
         /* for pages that were discarded and not written-back, we can just 

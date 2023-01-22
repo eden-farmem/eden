@@ -180,7 +180,7 @@ static inline void fault_serve_zero_pages(fault_t* f, int nchunks)
     RSTAT(UFFD_RETRIES) += nretries;
     
     /* set page flags */
-    flags = PFLAG_REGISTERED | PFLAG_PRESENT;
+    flags = PFLAG_REGISTERED | PFLAG_PRESENT | PFLAG_PRESENT_ZERO_PAGED;
     if (!wrprotect) flags |= PFLAG_DIRTY;
     ret = set_page_flags_range(f->mr, f->page, nchunks * CHUNK_SIZE, flags);
     assert(ret == nchunks);

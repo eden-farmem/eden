@@ -22,22 +22,24 @@
 
 /* 1. Page flags (mask) */
 enum {
-    PSHIFT_REGISTERED = 0,
-    PSHIFT_PRESENT,
-    PSHIFT_DIRTY,
-    PSHIFT_WORK_ONGOING,
-    PSHIFT_EVICT_ONGOING,
-    PSHIFT_ACCESSED,
+    PSHIFT_REGISTERED = 0,      /* first fault (zero-page) was served */
+    PSHIFT_PRESENT,             /* page currently mapped in local memory */
+    PSHIFT_DIRTY,               /* page was mapped as writable */
+    PSHIFT_WORK_ONGOING,        /* page is currently locked for work */
+    PSHIFT_EVICT_ONGOING,       /* page is being evicted */
+    PSHIFT_ACCESSED,            /* page was accessed again after the fault */
+    PSHIFT_PRESENT_ZERO_PAGED,  /* page currently mapped due to first access */
     PAGE_FLAGS_NUM
 };
 BUILD_ASSERT(PAGE_FLAGS_NUM <= sizeof(pgflags_t) * 8);
-#define PFLAG_REGISTERED    (1u << PSHIFT_REGISTERED)
-#define PFLAG_PRESENT       (1u << PSHIFT_PRESENT)
-#define PFLAG_DIRTY         (1u << PSHIFT_DIRTY)
-#define PFLAG_WORK_ONGOING  (1u << PSHIFT_WORK_ONGOING)
-#define PFLAG_EVICT_ONGOING (1u << PSHIFT_EVICT_ONGOING)
-#define PFLAG_ACCESSED      (1u << PSHIFT_ACCESSED)
-#define PAGE_FLAGS_MASK     ((1u << PAGE_FLAGS_NUM) - 1)
+#define PFLAG_REGISTERED            (1u << PSHIFT_REGISTERED)
+#define PFLAG_PRESENT               (1u << PSHIFT_PRESENT)
+#define PFLAG_DIRTY                 (1u << PSHIFT_DIRTY)
+#define PFLAG_WORK_ONGOING          (1u << PSHIFT_WORK_ONGOING)
+#define PFLAG_EVICT_ONGOING         (1u << PSHIFT_EVICT_ONGOING)
+#define PFLAG_ACCESSED              (1u << PSHIFT_ACCESSED)
+#define PFLAG_PRESENT_ZERO_PAGED    (1u << PSHIFT_PRESENT_ZERO_PAGED)
+#define PAGE_FLAGS_MASK             ((1u << PAGE_FLAGS_NUM) - 1)
 
 /* 2. Page thread id (offset and mask) */
 #define PAGE_THREAD_SHIFT    (sizeof(pgflags_t) * 8)

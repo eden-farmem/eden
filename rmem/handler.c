@@ -240,8 +240,14 @@ static inline fault_t* read_uffd_fault()
         fault->mr = mr;
 
 #ifdef FAULT_SAMPLER
-        /* check if this is the first fault on the page */
-        if (!(get_page_flags(mr, addr) & PFLAG_REGISTERED))
+        /* check if this is the first fault on the page; there may be many 
+         * concurrent "first" faults to a page but only one of them can be 
+         * captured as zero-page fault if we just use PFLAG_REGISTERED. So we
+         * use PFLAG_PRESENT_ZERO_PAGED to indicate if a page is currently 
+         * exists in local memory before its first-ever eviction and any faults
+         * to such locally-present page must be a concurrent zero-page faults */
+        pgflags_t pflags = get_page_flags(mr, addr);
+        if (!(pflags & PFLAG_REGISTERED) || (pflags & PFLAG_PRESENT_ZERO_PAGED))
             flags |= FSAMPLER_FAULT_FLAG_ZERO;
 
         /* record if sampling faults */
@@ -397,7 +403,7 @@ eviction:
             /* if eviction wasn't already signaled by the earlier fault, 
              * see if we need one in general (since this is the handler thread)*/
             pressure = atomic64_read(&memory_used);
-            need_eviction = (pressure >= local_memory * eviction_threshold);
+            need_eviction = (pressure > local_memory * eviction_threshold);
         }
 
         /* start eviction */
