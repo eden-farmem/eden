@@ -158,7 +158,9 @@ void *rmlib_rmmap(void *addr, size_t length, int prot,
 
     if (!(flags & MAP_ANONYMOUS) || !(flags & MAP_ANON) || (prot & PROT_EXEC) 
             || (flags & (MAP_STACK | MAP_FIXED | MAP_DENYWRITE))
-            || (addr && !within_memory_region(addr))) {
+            || (addr && !within_memory_region(addr)))
+    {
+        log_warn_ratelimited("WARNING! non-anon mmap");
         p = real_mmap(addr, length, prot, flags, fd, offset);
     } else {
         /* we don't support these flags */
