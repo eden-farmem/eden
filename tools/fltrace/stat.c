@@ -59,6 +59,23 @@ unsigned long long get_process_vm_counter(const char* name)
     return value;
 }
 
+/* save latest process memory map information to a local file */
+void save_process_maps()
+{
+    char ch, fname[25];
+    FILE *source, *target;
+
+    /* we could use system("cp") to copy the file but it creates a new 
+     * process and causes issues with inherited LD_PRELOAD */
+    sprintf(fname, "procmaps-%d", getpid());
+    source = fopen("/proc/self/maps", "r");
+    target = fopen(fname, "w");
+    while ((ch = fgetc(source)) != EOF)
+        fputc(ch, target);
+    fclose(source);
+    fclose(target);
+}
+
 /* gather all rmem stats and write to the buffer */
 static inline int rstat_write_buf(char *buf, size_t len)
 {
@@ -147,6 +164,9 @@ static void* stats_worker(void *arg)
         }
         fprintf(fp, "%lu %s\n", now, buf);
         fflush(fp);
+
+        /* save latest process maps */
+        save_process_maps();
     }
 
     fclose(fp);
