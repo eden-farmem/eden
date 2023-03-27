@@ -983,7 +983,8 @@ int eviction_init(void)
 
 #ifdef LRU_EVICTION
     /* init LRU epoch distance estimator */
-    mov_p2estimator_init(&epoch_p2estimator, 0.9, 1000);
+    mov_p2estimator_init(&epoch_p2estimator, LRU_EVICTION_BUMP_THR, 10000);
+    log_info("inited LRU epoch distance with thr: %lf", LRU_EVICTION_BUMP_THR);
 #endif
 
     /* check if write-protect is supported */
