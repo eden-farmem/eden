@@ -31,13 +31,14 @@
 #define RUNTIME_MAX_THREADS		100000
 #define RUNTIME_STACK_SIZE		128 * KB
 #define RUNTIME_GUARD_SIZE		128 * KB
-#define RUNTIME_RQ_SIZE			64
-#define RUNTIME_SOFTIRQ_BUDGET	16
+#define RUNTIME_RQ_SIZE			128
+#define RUNTIME_SOFTIRQ_BUDGET	128
+
 #define RUNTIME_MAX_TIMERS		4096
 #define RUNTIME_SCHED_POLL_ITERS	4
 #define RUNTIME_SCHED_MIN_POLL_US	2
-#define RUNTIME_WATCHDOG_US		50
-#define RUNTIME_VISIT_US		50
+#define RUNTIME_WATCHDOG_US		500
+#define RUNTIME_VISIT_US		500
 BUILD_ASSERT(RUNTIME_VISIT_US <= RUNTIME_WATCHDOG_US);
 
 /*
@@ -250,7 +251,7 @@ enum {
 	STAT_THREADS_STOLEN,
 	STAT_SOFTIRQS_STOLEN,
 	STAT_SOFTIRQS_LOCAL,
-	STAT_PARKS,
+	STAT_PARKS,				/* FIXME: temporarily using it to count scheduler entries */
 	STAT_PREEMPTIONS,
 	STAT_PREEMPTIONS_STOLEN,
 	STAT_CORE_MIGRATIONS,
@@ -397,7 +398,7 @@ extern struct cpu_record cpu_map[NCPU];
  */
 
 /* the maximum number of events to handle in a softirq invocation */
-#define SOFTIRQ_MAX_BUDGET		128
+#define SOFTIRQ_MAX_BUDGET		RUNTIME_SOFTIRQ_BUDGET
 
 /* amount of active threads that signal congestion before we start 
  * pushing back on new work. TODO: is the value too high? */

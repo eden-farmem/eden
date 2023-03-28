@@ -318,6 +318,7 @@ static bool steal_work(struct kthread *l, struct kthread *r)
 		return true;
 	}
 
+#ifndef NO_WORK_STEALING
 	if (rmem_hints_enabled) {
 		assert(rmem_enabled);
 		/* then steal remote memory work */
@@ -345,6 +346,7 @@ static bool steal_work(struct kthread *l, struct kthread *r)
 		spin_unlock(&r->lock);
 		return true;
 	}
+#endif
 
 	/* no ready work to steal. if the thread has no pending faults either, 
 	 * detach it if it was already parked */
@@ -398,6 +400,7 @@ static __noreturn __noinline void schedule(void)
 
 	/* update entry stat counters */
 	STAT(RESCHEDULES)++;
+	STAT(PARKS)++;
 	start_tsc = rdtsc();
 	STAT(PROGRAM_CYCLES) += start_tsc - last_tsc;
 
@@ -575,7 +578,7 @@ static __always_inline void enter_schedule(thread_t *myth)
 	/* slow path: switch from the uthread stack to the runtime stack 
 	 * WHEN there are no ready threads or some time has passed if watchdog 
 	 * or remote memory is enabled */
-	visit_runtime = !disable_watchdog || (rmem_enabled && k->pf_pending > 0);
+	visit_runtime = false; // !disable_watchdog || (rmem_enabled && k->pf_pending > 0);
 	if (k->rq_head == k->rq_tail || 
 	    (visit_runtime && unlikely(rdtsc() - last_tsc > 
 			cycles_per_us * RUNTIME_VISIT_US))) {
@@ -731,8 +734,35 @@ schedule:
 	/* if we are blocking all work until the fault is resolved, 
 	 * keep checking for completions until it is resolved and return here */
 	assert(fstatus == FAULT_DONE || fstatus == FAULT_READ_POSTED);
+
+	int nready;
+	unsigned long start_tsc, end_tsc;
 	if (fstatus == FAULT_READ_POSTED)
-		while(!kthr_check_for_completions(k, RMEM_MAX_COMP_PER_OP));
+	{
+		/* start timer */
+		start_tsc = end_tsc = rdtsc();
+
+		/* check for completion once (before starting timer) */
+		nready = kthr_check_for_completions(k, RMEM_MAX_COMP_PER_OP);
+		if (nready > 0)
+			k->pf_pending -= nready;
+
+		while(!nready) {
+			end_tsc = rdtsc();
+
+			/* keep checking for completions while waiting */
+			nready = kthr_check_for_completions(k, RMEM_MAX_COMP_PER_OP);
+			if (nready > 0)
+				k->pf_pending -= nready;
+
+			cpu_relax();
+		}
+
+		/* record idle time */
+		end_tsc = rdtsc();
+		STAT(SCHED_CYCLES_IDLE) += end_tsc - start_tsc;
+	}
+
 	assert(th->state == THREAD_STATE_RUNNABLE);
 	th->state = THREAD_STATE_RUNNING;
 	th->stack_busy = false;

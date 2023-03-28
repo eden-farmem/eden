@@ -129,7 +129,7 @@ static struct page *lgpage_alloc_on_node(int numa_node)
 	if (!pg) {
 		if (unlikely(node->idx >= LGPAGE_META_ENTS)) {
 			spin_unlock(&node->lock);
-			log_err_once("out of page region addresses");
+			log_err_ratelimited("out of page region addresses");
 			return NULL;
 		}
 
@@ -140,7 +140,7 @@ static struct page *lgpage_alloc_on_node(int numa_node)
 	assert(!(pg->flags & PAGE_FLAG_IN_USE));
 	ret = lgpage_create(pg, numa_node);
 	if (ret) {
-		log_err_once("page: unable to create 2MB page,"
+		log_err_ratelimited("page: unable to create 2MB page,"
 			     "node = %d, ret = %d", numa_node, ret);
 		return NULL;
 	}
