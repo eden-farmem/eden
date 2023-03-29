@@ -53,6 +53,8 @@ struct mov_p2estimator epoch_p2estimator;
  */
 unsigned long evict_epoch_now __aligned(CACHE_LINE_SIZE) = 0;
 int evict_gen_now = 0;
+int evict_prio_now = 0;
+int evict_prio_quota_left = 1;
 
 /* get process memory from OS */
 unsigned long long get_process_mem()
@@ -112,6 +114,25 @@ void verify_eviction()
             }
         }
     }
+}
+
+/**
+ * Return the number of pages that must be popped off at each 
+ * priority level before moving to the next one
+ */
+static __always_inline int get_evict_prio_quota(int prio)
+{
+    assert(prio >= 0 && prio < evict_nprio);
+#if EVPRIORITY_LINEAR
+    /* pop off one extra page at each step */
+    return prio + 1;
+#elif EVPRIORITY_EXPONENITAL
+   /* FIXME: should be (1 << prio) instead */
+    return (prio == 0 ? 2 : 3); 
+#endif
+    /* absolute priority by default i.e., each prio level must 
+     * be fully exhausted before moving to the next one */
+    return -1;
 }
 
 /**
@@ -279,7 +300,7 @@ int drain_tmp_lists(struct list_head* evict_list, int max_drain,
 static inline int find_candidate_pages(struct list_head* evict_list,
     int batch_size)
 {
-    int npages, npopped, prio;
+    int npages, npopped, prio, prio_quota_left;
     int start_gen, gen_id, pg_next_gen;;
     pgflags_t flags, oldflags;
     struct rmpage_node *page, *next;
@@ -313,62 +334,72 @@ static inline int find_candidate_pages(struct list_head* evict_list,
         /* update epoch */
         update_evict_epoch_now();
 
-        /* pop pages off the list, starting with lowest prio */
-        for (prio = evict_nprio - 1; prio >= 0; prio--)
-        {
-            /* break if we have enough pages or we have tried/popped enough 
-             * pages out of page lists to find candidates */
-            if (npages >= batch_size ||
-                npopped >= EVICTION_MAX_BUMPS_PER_OP)
+        /* figure out where to begin popping pages */
+        prio = evict_prio_now;
+        prio_quota_left = evict_prio_quota_left;
+
+        do {
+            /* break if we are out of pages, or found/popped enough pages */
+            if (npages >= batch_size
+                    || npopped >= EVICTION_MAX_BUMPS_PER_OP
+                    || evict_gen->npages == 0)
                 break;
 
-            if (list_empty(&evict_gen->pages[prio]))
+            /* try popping a page from current prio */
+            page = list_pop(&evict_gen->pages[prio], rmpage_node_t, link);
+            if (unlikely(page == NULL)) {
+                /* if out of prio, move to next gen */
+                if (unlikely(prio == 0))
+                    break;
+                prio--;
                 continue;
+            }
 
-            do {
-                page = list_pop(&evict_gen->pages[prio], rmpage_node_t, link);
-                if (page == NULL)
-                    break;
+            /* popped a page */
+            log_debug("popped page %lx from gen %d prio %d", 
+                page->addr, gen_id, prio);
+            assert(evict_gen->npages > 0);
+            evict_gen->npages--;
+            npopped++;
 
-                /* removed a page */
-                log_debug("popped page %lx from gen %d prio %d", 
-                    page->addr, gen_id, prio);
-                assert(evict_gen->npages > 0);
-                evict_gen->npages--;
-                npopped++;
+            /* check page's destiny */
+            pg_next_gen = get_page_next_gen(page);
 
-                /* check page's destiny */
-                pg_next_gen = get_page_next_gen(page);
+            if (pg_next_gen == 0) {
+                /* page good for eviction */
+                /* save prio in case we need to add the page back */
+                assertz(page->evict_prio);
+                page->evict_prio = prio;
 
-                if (pg_next_gen == 0) {
-                    /* page good for eviction */
-                    /* save prio in case we need to add the page back */
-                    assertz(page->evict_prio);
-                    page->evict_prio = prio;
+                /* add it to evict list */
+                list_add_tail(evict_list, &page->link);
+                npages++;
+            }
+            else {
+                /* page selected to bumping to a higher list */
+                assert(pg_next_gen < evict_ngens);
+                assert(bitmap_test(tmplist_used, pg_next_gen)
+                    || tmp_evict_gens[pg_next_gen].npages == 0);
 
-                    /* add it to evict list */
-                    list_add_tail(evict_list, &page->link);
-                    npages++;
-                }
-                else {
-                    /* page selected to bumping to a higher list */
-                    assert(pg_next_gen < evict_ngens);
-                    assert(bitmap_test(tmplist_used, pg_next_gen)
-                        || tmp_evict_gens[pg_next_gen].npages == 0);
+                list_add_tail(&tmp_evict_gens[pg_next_gen].pages[prio],
+                    &page->link);
+                tmp_evict_gens[pg_next_gen].npages++;
+                bitmap_set(tmplist_used, pg_next_gen);
+            }
 
-                    list_add_tail(&tmp_evict_gens[pg_next_gen].pages[prio], 
-                        &page->link);
-                    tmp_evict_gens[pg_next_gen].npages++;
-                    bitmap_set(tmplist_used, pg_next_gen);
-                }
+            /* decrement prio quota TODO: should we do this only for 
+             * pages that are good for eviction instead of pages popped? */
+            if (prio_quota_left > 0)
+                prio_quota_left--;
 
-                /* enough searching for candidates so that we don't keep pulling 
-                * too many pages out of the lists before we put them all back */
-                if (npopped >= EVICTION_MAX_BUMPS_PER_OP)
-                    break;
-
-            } while(npages < batch_size);
-        }
+            /* if out of quota, move to next prio and reset quota */
+            if (prio_quota_left == 0) {
+                prio--;
+                if (prio < 0)
+                    prio = evict_nprio - 1;
+                prio_quota_left = get_evict_prio_quota(prio);
+            }
+        } while(true);
 
         /* got enough pages */
         if (npages == batch_size)
@@ -381,10 +412,23 @@ static inline int find_candidate_pages(struct list_head* evict_list,
         /* not enough candidates in this list, move to next list */
         assert(list_empty(&evict_gen->pages[0]) && !evict_gen->npages);
         evict_gen_now = (gen_id + 1) % evict_ngens;
+        evict_prio_now = evict_nprio - 1;
+        evict_prio_quota_left = get_evict_prio_quota(prio);
         spin_unlock(&evict_gen->lock);
         continue;
 
 found_enough:
+        /* specify where the next reclaim shoud begin: either from where the
+         * previousreclaim left off (if we're doing relative priorities) or 
+         * start at the lowest prio again (for absolute reclaim); */
+        if (prio_quota_left == -1) {
+            evict_prio_now = evict_nprio - 1;
+            evict_prio_quota_left = get_evict_prio_quota(prio);
+        }
+        else {
+            evict_prio_now = prio;
+            evict_prio_quota_left = prio_quota_left;
+        }
         spin_unlock(&evict_gen->lock);
         break;
 
@@ -991,6 +1035,11 @@ int eviction_init(void)
     if (!uffd_is_wp_supported(userfault_fd))
         log_warn("!!WARNING!! uffd write-protect not supported on this machine,"
             " eviction may corrupt the data. Proceed at your own risk!");
+
+    /* set initial eviction state */
+    evict_gen_now = 0;
+    evict_prio_now = evict_nprio - 1;
+    evict_prio_quota_left = get_evict_prio_quota(evict_prio_now);
 
     return 0;
 }

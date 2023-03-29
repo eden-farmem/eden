@@ -681,9 +681,10 @@ static __always_inline void enter_schedule_with_fault(thread_t *th, fault_t* f)
 
 	/* accounting */
 	RSTAT(FAULTS)++;
-    if (f->is_read)         RSTAT(FAULTS_R)++;
-    if (f->is_write)        RSTAT(FAULTS_W)++;
-    if (f->is_wrprotect)    RSTAT(FAULTS_WP)++;
+    if (f->is_read)       	RSTAT(FAULTS_R)++;
+    if (f->is_write)       	RSTAT(FAULTS_W)++;
+    if (f->is_wrprotect)  	RSTAT(FAULTS_WP)++;
+	if (f->evict_prio == 0) RSTAT(FAULTS_P0)++;
 
     /* find region */
     mr = get_region_by_addr_safe(f->page);

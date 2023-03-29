@@ -231,7 +231,7 @@ static inline fault_t* read_uffd_fault()
         fault->from_kernel = true;
         fault->rdahead_max = 0;   /*no readaheads for kernel faults*/
         fault->rdahead  = 0;
-        fault->evict_prio = 0;
+        fault->evict_prio = evict_nprio - 1;
 
         /* find associated region */
         mr = get_region_by_addr_safe(fault->page);
@@ -366,6 +366,7 @@ static void* rmem_handler(void *arg)
             if (fault->is_read)         RSTAT(FAULTS_R)++;
             if (fault->is_write)        RSTAT(FAULTS_W)++;
             if (fault->is_wrprotect)    RSTAT(FAULTS_WP)++;
+            if (fault->evict_prio == 0) RSTAT(FAULTS_P0)++;
             work_done = true;
 
             /* start handling fault */
