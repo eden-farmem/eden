@@ -4,6 +4,7 @@ extern "C" {
 }
 
 #include <string>
+#include "pgfault.h"
 #include "thread.h"
 #include "timer.h"
 
@@ -12,6 +13,7 @@ namespace {
 constexpr int kTestValue = 10;
 
 void foo(int arg) {
+  hint_read_fault(&arg);
   if (arg != kTestValue) BUG();
 }
 

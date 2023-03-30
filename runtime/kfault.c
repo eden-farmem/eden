@@ -2,64 +2,17 @@
  * kfault.c - fault handling in shenango kthreads
  */
 
-#include <sys/auxv.h>
-
 #include "base/lock.h"
 #include "base/log.h"
 #include "base/time.h"
-#include "base/vdso.h"
 #include "rmem/eviction.h"
 #include "rmem/fault.h"
 #include "rmem/page.h"
 #include "rmem/region.h"
 #include "runtime/thread.h"
-#include "runtime/pgfault.h"
 #include "runtime/sync.h"
 
 #include "defs.h"
-
-/* state */
-__thread struct region_t* __cached_mr = NULL;
-
-/* objects for vdso-based page checks */
-const char *version = "LINUX_2.6";
-const char *name_mapped = "__vdso_is_page_mapped";
-const char *name_wp = "__vdso_is_page_mapped_and_wrprotected";
-vdso_check_page_t __is_page_mapped_vdso;
-vdso_check_page_t __is_page_mapped_and_readonly_vdso;
-
-/**
- * Initialize vDSO page check calls
- */
-int __vdso_init()
-{
-#ifndef USE_VDSO_CHECKS
-    BUG();
-#endif
-
-    /* find vDSO symbols */
-    unsigned long sysinfo_ehdr;
-    sysinfo_ehdr = getauxval(AT_SYSINFO_EHDR);
-    if (!sysinfo_ehdr) {
-        log_err("AT_SYSINFO_EHDR is not present");
-        return -ENOENT;
-    }
-
-    vdso_init_from_sysinfo_ehdr(getauxval(AT_SYSINFO_EHDR));
-    __is_page_mapped_vdso = (vdso_check_page_t)vdso_sym(version, name_mapped);
-    if (!__is_page_mapped_vdso) {
-        log_err("Could not find %s in vdso", name_mapped);
-        return -ENOENT;
-    }
-    __is_page_mapped_and_readonly_vdso = (vdso_check_page_t)vdso_sym(version, name_wp);
-    if (!__is_page_mapped_and_readonly_vdso) {
-        log_err("Could not find %s in vdso", name_wp);
-        return -ENOENT;
-    }
-    
-    log_info("inited vdos page checks");
-    return 0;
-}
 
 /**
  * Fault handling after read completions
