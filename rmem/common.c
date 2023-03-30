@@ -107,7 +107,7 @@ int rmem_common_init(
 
     coreid = -1;
     if (pin_handlers_start_core >= 0) {
-        BUG_ON(pin_handlers_start_core < pin_handlers_end_core);
+        BUG_ON(pin_handlers_start_core > pin_handlers_end_core);
         BUG_ON(nhandlers > (pin_handlers_end_core - pin_handlers_start_core + 1));
         coreid = pin_handlers_end_core;  /* start high */
     }

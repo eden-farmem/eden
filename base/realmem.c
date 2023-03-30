@@ -14,6 +14,7 @@
 #include "base/realmem.h"
 
 /* thread-local pointers */
+__thread size_t (*__libc_malloc_usable_size)(void * ptr) = NULL;
 __thread void *(*__libc6_mmap)(void *, size_t, int, int, int, off_t) = NULL;
 __thread int (*__libc6_madvise)(void *, size_t, int) = NULL;
 __thread int (*__libc6_munmap)(void *, size_t) = NULL;
@@ -53,7 +54,22 @@ void *libc_memalign(size_t alignment, size_t size)
 
 size_t libc_malloc_usable_size(void * ptr)
 {
-    extern size_t __libc_malloc_usable_size(void *);
+    char *error;
+    if (!__libc_malloc_usable_size) {
+        dlerror();
+        /* TODO: not sure which of the lines below is correct. I suspect that 
+         * RTLD_NEXT will lead to bugs as we lookup once per thread. Also not 
+         * not sure if libc6 has the function. Do not have a use-case now to 
+         * test so raising BUG() here to test it when we actually hit it. */
+        // __libc_malloc_usable_size = dlsym(RTLD_NEXT, "malloc_usable_size");
+        // __libc_malloc_usable_size = dlsym(libc6, "malloc_usable_size");
+        fprintf(stderr, "fix the TODO!!\n", error);
+        exit(1);
+        if ((error = dlerror()) != NULL) {
+            fprintf(stderr, "Error in dlopen: %s\n", error);
+            exit(1);
+        }
+    }
     return __libc_malloc_usable_size(ptr);
 }
 
