@@ -7,11 +7,11 @@
 #endif
 
 #include <sys/mman.h>
-
 #include "rmem/backend.h"
 #include "rmem/config.h"
 #include "rmem/fault.h"
 #include "rmem/handler.h"
+#include "rmem/page.h"
 #include "rmem/region.h"
 #include "rmem/uffd.h"
 #include "runtime/pgfault.h"

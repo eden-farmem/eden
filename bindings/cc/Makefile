@@ -12,6 +12,8 @@ else
 CXXFLAGS += -DNDEBUG -O3
 endif
 
+CXXFLAGS += -DEDEN_HINTS
+
 # handy for debugging
 print-%  : ; @echo $* = $($*)
 
@@ -30,7 +32,7 @@ librt++.a: $(rt_obj)
 
 test: $(test_obj) librt++.a ../../libruntime.a ../../libnet.a ../../libbase.a
 	$(LD) $(LDFLAGS) -o $@ $(test_obj) librt++.a ../../libruntime.a \
-	../../libnet.a ../../libbase.a -lpthread
+	../../librmem.a ../../libnet.a ../../libbase.a -lpthread -lrdmacm -libverbs
 
 # general build rules for all targets
 src = $(rt_src) $(test_src)
