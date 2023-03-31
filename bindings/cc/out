@@ -1,0 +1,1293 @@
+g++ -g -Wall -std=gnu++11 -D_GNU_SOURCE -I../../inc -I./ -mssse3 -DNDEBUG -O3 -c test.cc -o test.o
+In file included from ../../inc/rmem/backend.h:8,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+../../inc/base/thread.h: In function ‘int __thread_next_active(int)’:
+../../inc/base/thread.h:64:23: warning: comparison of integer expressions of different signedness: ‘int’ and ‘unsigned int’ [-Wsign-compare]
+   64 |         while (thread < thread_count) {
+      |                ~~~~~~~^~~~~~~~~~~~~~
+In file included from ../../inc/rmem/backend.h:10,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+../../inc/rmem/fault.h: In function ‘fault_t* fault_alloc()’:
+../../inc/rmem/fault.h:82:24: error: invalid conversion from ‘void*’ to ‘fault_t*’ {aka ‘fault*’} [-fpermissive]
+   82 |     return tcache_alloc(&perthread_get(fault_pt));
+      |            ~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~
+      |                        |
+      |                        void*
+In file included from /usr/include/infiniband/verbs.h:51,
+                 from ../../inc/rmem/region.h:8,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/limits: At global scope:
+/usr/include/c++/11/limits:311:3: error: template with C linkage
+  311 |   template<typename _Tp>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from /usr/include/infiniband/verbs.h:51,
+                 from ../../inc/rmem/region.h:8,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/limits:363:3: error: template with C linkage
+  363 |   template<typename _Tp>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from /usr/include/infiniband/verbs.h:51,
+                 from ../../inc/rmem/region.h:8,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/limits:367:3: error: template with C linkage
+  367 |   template<typename _Tp>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from /usr/include/infiniband/verbs.h:51,
+                 from ../../inc/rmem/region.h:8,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/limits:371:3: error: template with C linkage
+  371 |   template<typename _Tp>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from /usr/include/infiniband/verbs.h:51,
+                 from ../../inc/rmem/region.h:8,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/limits:383:3: error: template specialization with C linkage
+  383 |   template<>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from /usr/include/infiniband/verbs.h:51,
+                 from ../../inc/rmem/region.h:8,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/limits:452:3: error: template specialization with C linkage
+  452 |   template<>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from /usr/include/infiniband/verbs.h:51,
+                 from ../../inc/rmem/region.h:8,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/limits:519:3: error: template specialization with C linkage
+  519 |   template<>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from /usr/include/infiniband/verbs.h:51,
+                 from ../../inc/rmem/region.h:8,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/limits:589:3: error: template specialization with C linkage
+  589 |   template<>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from /usr/include/infiniband/verbs.h:51,
+                 from ../../inc/rmem/region.h:8,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/limits:662:3: error: template specialization with C linkage
+  662 |   template<>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from /usr/include/infiniband/verbs.h:51,
+                 from ../../inc/rmem/region.h:8,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/limits:796:3: error: template specialization with C linkage
+  796 |   template<>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from /usr/include/infiniband/verbs.h:51,
+                 from ../../inc/rmem/region.h:8,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/limits:857:3: error: template specialization with C linkage
+  857 |   template<>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from /usr/include/infiniband/verbs.h:51,
+                 from ../../inc/rmem/region.h:8,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/limits:919:3: error: template specialization with C linkage
+  919 |   template<>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from /usr/include/infiniband/verbs.h:51,
+                 from ../../inc/rmem/region.h:8,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/limits:986:3: error: template specialization with C linkage
+  986 |   template<>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from /usr/include/infiniband/verbs.h:51,
+                 from ../../inc/rmem/region.h:8,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/limits:1059:3: error: template specialization with C linkage
+ 1059 |   template<>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from /usr/include/infiniband/verbs.h:51,
+                 from ../../inc/rmem/region.h:8,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/limits:1126:3: error: template specialization with C linkage
+ 1126 |   template<>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from /usr/include/infiniband/verbs.h:51,
+                 from ../../inc/rmem/region.h:8,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/limits:1198:3: error: template specialization with C linkage
+ 1198 |   template<>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from /usr/include/infiniband/verbs.h:51,
+                 from ../../inc/rmem/region.h:8,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/limits:1265:3: error: template specialization with C linkage
+ 1265 |   template<>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from /usr/include/infiniband/verbs.h:51,
+                 from ../../inc/rmem/region.h:8,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/limits:1338:3: error: template specialization with C linkage
+ 1338 |   template<>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from /usr/include/infiniband/verbs.h:51,
+                 from ../../inc/rmem/region.h:8,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/limits:1408:3: error: template specialization with C linkage
+ 1408 |   template<>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from /usr/include/infiniband/verbs.h:51,
+                 from ../../inc/rmem/region.h:8,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/limits:1635:3: error: template specialization with C linkage
+ 1635 |   __INT_N(__GLIBCXX_TYPE_INT_N_0, __GLIBCXX_BITSIZE_INT_N_0,
+      |   ^~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from /usr/include/infiniband/verbs.h:51,
+                 from ../../inc/rmem/region.h:8,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/limits:1635:3: error: template specialization with C linkage
+ 1635 |   __INT_N(__GLIBCXX_TYPE_INT_N_0, __GLIBCXX_BITSIZE_INT_N_0,
+      |   ^~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from /usr/include/infiniband/verbs.h:51,
+                 from ../../inc/rmem/region.h:8,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/limits:1667:3: error: template specialization with C linkage
+ 1667 |   template<>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from /usr/include/infiniband/verbs.h:51,
+                 from ../../inc/rmem/region.h:8,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/limits:1742:3: error: template specialization with C linkage
+ 1742 |   template<>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from /usr/include/infiniband/verbs.h:51,
+                 from ../../inc/rmem/region.h:8,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/limits:1817:3: error: template specialization with C linkage
+ 1817 |   template<>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from /usr/include/c++/11/atomic:41,
+                 from ../../inc/base/stdatomic.h:14,
+                 from ../../inc/rmem/region.h:13,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/bits/atomic_base.h:133:3: error: template with C linkage
+  133 |   template<typename _Tp>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from /usr/include/c++/11/atomic:41,
+                 from ../../inc/base/stdatomic.h:14,
+                 from ../../inc/rmem/region.h:13,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/bits/atomic_base.h:142:3: error: template with C linkage
+  142 |   template<typename _IntTp>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from /usr/include/c++/11/atomic:41,
+                 from ../../inc/base/stdatomic.h:14,
+                 from ../../inc/rmem/region.h:13,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/bits/atomic_base.h:154:3: error: template with C linkage
+  154 |   template<typename _Tp>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from /usr/include/c++/11/atomic:41,
+                 from ../../inc/base/stdatomic.h:14,
+                 from ../../inc/rmem/region.h:13,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/bits/atomic_base.h:157:3: error: template with C linkage
+  157 |   template<typename _Tp>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from /usr/include/c++/11/atomic:41,
+                 from ../../inc/base/stdatomic.h:14,
+                 from ../../inc/rmem/region.h:13,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/bits/atomic_base.h:316:3: error: template with C linkage
+  316 |   template<typename _ITp>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from /usr/include/c++/11/atomic:41,
+                 from ../../inc/base/stdatomic.h:14,
+                 from ../../inc/rmem/region.h:13,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/bits/atomic_base.h:686:3: error: template with C linkage
+  686 |   template<typename _PTp>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from ../../inc/base/stdatomic.h:14,
+                 from ../../inc/rmem/region.h:13,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/atomic:56:3: error: template with C linkage
+   56 |   template<typename _Tp>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from ../../inc/base/stdatomic.h:14,
+                 from ../../inc/rmem/region.h:13,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/atomic:61:3: error: template specialization with C linkage
+   61 |   template<>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from ../../inc/base/stdatomic.h:14,
+                 from ../../inc/rmem/region.h:13,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/atomic:195:3: error: template with C linkage
+  195 |   template<typename _Tp>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from ../../inc/base/stdatomic.h:14,
+                 from ../../inc/rmem/region.h:13,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/atomic:406:3: error: template with C linkage
+  406 |   template<typename _Tp>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from ../../inc/base/stdatomic.h:14,
+                 from ../../inc/rmem/region.h:13,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/atomic:698:3: error: template specialization with C linkage
+  698 |   template<>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from ../../inc/base/stdatomic.h:14,
+                 from ../../inc/rmem/region.h:13,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/atomic:721:3: error: template specialization with C linkage
+  721 |   template<>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from ../../inc/base/stdatomic.h:14,
+                 from ../../inc/rmem/region.h:13,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/atomic:744:3: error: template specialization with C linkage
+  744 |   template<>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from ../../inc/base/stdatomic.h:14,
+                 from ../../inc/rmem/region.h:13,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/atomic:767:3: error: template specialization with C linkage
+  767 |   template<>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from ../../inc/base/stdatomic.h:14,
+                 from ../../inc/rmem/region.h:13,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/atomic:790:3: error: template specialization with C linkage
+  790 |   template<>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from ../../inc/base/stdatomic.h:14,
+                 from ../../inc/rmem/region.h:13,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/atomic:813:3: error: template specialization with C linkage
+  813 |   template<>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from ../../inc/base/stdatomic.h:14,
+                 from ../../inc/rmem/region.h:13,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/atomic:836:3: error: template specialization with C linkage
+  836 |   template<>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from ../../inc/base/stdatomic.h:14,
+                 from ../../inc/rmem/region.h:13,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/atomic:859:3: error: template specialization with C linkage
+  859 |   template<>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from ../../inc/base/stdatomic.h:14,
+                 from ../../inc/rmem/region.h:13,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/atomic:882:3: error: template specialization with C linkage
+  882 |   template<>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from ../../inc/base/stdatomic.h:14,
+                 from ../../inc/rmem/region.h:13,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/atomic:905:3: error: template specialization with C linkage
+  905 |   template<>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from ../../inc/base/stdatomic.h:14,
+                 from ../../inc/rmem/region.h:13,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/atomic:928:3: error: template specialization with C linkage
+  928 |   template<>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from ../../inc/base/stdatomic.h:14,
+                 from ../../inc/rmem/region.h:13,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/atomic:951:3: error: template specialization with C linkage
+  951 |   template<>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from ../../inc/base/stdatomic.h:14,
+                 from ../../inc/rmem/region.h:13,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/atomic:999:3: error: template specialization with C linkage
+  999 |   template<>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from ../../inc/base/stdatomic.h:14,
+                 from ../../inc/rmem/region.h:13,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/atomic:1022:3: error: template specialization with C linkage
+ 1022 |   template<>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from ../../inc/base/stdatomic.h:14,
+                 from ../../inc/rmem/region.h:13,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/atomic:1202:3: error: conflicting declaration of C function ‘bool std::atomic_flag_test_and_set_explicit(volatile std::atomic_flag*, std::memory_order)’
+ 1202 |   atomic_flag_test_and_set_explicit(volatile atomic_flag* __a,
+      |   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/usr/include/c++/11/atomic:1197:3: note: previous declaration ‘bool std::atomic_flag_test_and_set_explicit(std::atomic_flag*, std::memory_order)’
+ 1197 |   atomic_flag_test_and_set_explicit(atomic_flag* __a,
+      |   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/usr/include/c++/11/atomic:1211:3: error: conflicting declaration of C function ‘void std::atomic_flag_clear_explicit(volatile std::atomic_flag*, std::memory_order)’
+ 1211 |   atomic_flag_clear_explicit(volatile atomic_flag* __a,
+      |   ^~~~~~~~~~~~~~~~~~~~~~~~~~
+/usr/include/c++/11/atomic:1207:3: note: previous declaration ‘void std::atomic_flag_clear_explicit(std::atomic_flag*, std::memory_order)’
+ 1207 |   atomic_flag_clear_explicit(atomic_flag* __a, memory_order __m) noexcept
+      |   ^~~~~~~~~~~~~~~~~~~~~~~~~~
+/usr/include/c++/11/atomic:1220:3: error: conflicting declaration of C function ‘bool std::atomic_flag_test_and_set(volatile std::atomic_flag*)’
+ 1220 |   atomic_flag_test_and_set(volatile atomic_flag* __a) noexcept
+      |   ^~~~~~~~~~~~~~~~~~~~~~~~
+/usr/include/c++/11/atomic:1216:3: note: previous declaration ‘bool std::atomic_flag_test_and_set(std::atomic_flag*)’
+ 1216 |   atomic_flag_test_and_set(atomic_flag* __a) noexcept
+      |   ^~~~~~~~~~~~~~~~~~~~~~~~
+/usr/include/c++/11/atomic: In function ‘bool std::atomic_flag_test_and_set(volatile std::atomic_flag*)’:
+/usr/include/c++/11/atomic:1221:46: error: invalid conversion from ‘volatile std::atomic_flag*’ to ‘std::atomic_flag*’ [-fpermissive]
+ 1221 |   { return atomic_flag_test_and_set_explicit(__a, memory_order_seq_cst); }
+      |                                              ^~~
+      |                                              |
+      |                                              volatile std::atomic_flag*
+/usr/include/c++/11/atomic:1197:50: note:   initializing argument 1 of ‘bool std::atomic_flag_test_and_set_explicit(std::atomic_flag*, std::memory_order)’
+ 1197 |   atomic_flag_test_and_set_explicit(atomic_flag* __a,
+      |                                     ~~~~~~~~~~~~~^~~
+/usr/include/c++/11/atomic: At global scope:
+/usr/include/c++/11/atomic:1228:3: error: conflicting declaration of C function ‘void std::atomic_flag_clear(volatile std::atomic_flag*)’
+ 1228 |   atomic_flag_clear(volatile atomic_flag* __a) noexcept
+      |   ^~~~~~~~~~~~~~~~~
+/usr/include/c++/11/atomic:1224:3: note: previous declaration ‘void std::atomic_flag_clear(std::atomic_flag*)’
+ 1224 |   atomic_flag_clear(atomic_flag* __a) noexcept
+      |   ^~~~~~~~~~~~~~~~~
+/usr/include/c++/11/atomic: In function ‘void std::atomic_flag_clear(volatile std::atomic_flag*)’:
+/usr/include/c++/11/atomic:1229:32: error: invalid conversion from ‘volatile std::atomic_flag*’ to ‘std::atomic_flag*’ [-fpermissive]
+ 1229 |   { atomic_flag_clear_explicit(__a, memory_order_seq_cst); }
+      |                                ^~~
+      |                                |
+      |                                volatile std::atomic_flag*
+/usr/include/c++/11/atomic:1207:43: note:   initializing argument 1 of ‘void std::atomic_flag_clear_explicit(std::atomic_flag*, std::memory_order)’
+ 1207 |   atomic_flag_clear_explicit(atomic_flag* __a, memory_order __m) noexcept
+      |                              ~~~~~~~~~~~~~^~~
+/usr/include/c++/11/atomic: At global scope:
+/usr/include/c++/11/atomic:1232:3: error: template with C linkage
+ 1232 |   template<typename _Tp>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from ../../inc/base/stdatomic.h:14,
+                 from ../../inc/rmem/region.h:13,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/atomic:1234:3: error: template with C linkage
+ 1234 |   template<typename _Tp>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from ../../inc/base/stdatomic.h:14,
+                 from ../../inc/rmem/region.h:13,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/atomic:1239:3: error: template with C linkage
+ 1239 |   template<typename _ITp>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from ../../inc/base/stdatomic.h:14,
+                 from ../../inc/rmem/region.h:13,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/atomic:1244:3: error: template with C linkage
+ 1244 |   template<typename _ITp>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from ../../inc/base/stdatomic.h:14,
+                 from ../../inc/rmem/region.h:13,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/atomic:1249:3: error: template with C linkage
+ 1249 |   template<typename _ITp>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from ../../inc/base/stdatomic.h:14,
+                 from ../../inc/rmem/region.h:13,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/atomic:1254:3: error: template with C linkage
+ 1254 |   template<typename _ITp>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from ../../inc/base/stdatomic.h:14,
+                 from ../../inc/rmem/region.h:13,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/atomic:1259:3: error: template with C linkage
+ 1259 |   template<typename _ITp>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from ../../inc/base/stdatomic.h:14,
+                 from ../../inc/rmem/region.h:13,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/atomic:1265:3: error: template with C linkage
+ 1265 |   template<typename _ITp>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from ../../inc/base/stdatomic.h:14,
+                 from ../../inc/rmem/region.h:13,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/atomic:1271:3: error: template with C linkage
+ 1271 |   template<typename _ITp>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from ../../inc/base/stdatomic.h:14,
+                 from ../../inc/rmem/region.h:13,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/atomic:1276:3: error: template with C linkage
+ 1276 |   template<typename _ITp>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from ../../inc/base/stdatomic.h:14,
+                 from ../../inc/rmem/region.h:13,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/atomic:1282:3: error: template with C linkage
+ 1282 |   template<typename _ITp>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from ../../inc/base/stdatomic.h:14,
+                 from ../../inc/rmem/region.h:13,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/atomic:1288:3: error: template with C linkage
+ 1288 |   template<typename _ITp>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from ../../inc/base/stdatomic.h:14,
+                 from ../../inc/rmem/region.h:13,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/atomic:1295:3: error: template with C linkage
+ 1295 |   template<typename _ITp>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from ../../inc/base/stdatomic.h:14,
+                 from ../../inc/rmem/region.h:13,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/atomic:1304:3: error: template with C linkage
+ 1304 |   template<typename _ITp>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from ../../inc/base/stdatomic.h:14,
+                 from ../../inc/rmem/region.h:13,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/atomic:1313:3: error: template with C linkage
+ 1313 |   template<typename _ITp>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from ../../inc/base/stdatomic.h:14,
+                 from ../../inc/rmem/region.h:13,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/atomic:1322:3: error: template with C linkage
+ 1322 |   template<typename _ITp>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from ../../inc/base/stdatomic.h:14,
+                 from ../../inc/rmem/region.h:13,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/atomic:1332:3: error: template with C linkage
+ 1332 |   template<typename _ITp>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from ../../inc/base/stdatomic.h:14,
+                 from ../../inc/rmem/region.h:13,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/atomic:1337:3: error: template with C linkage
+ 1337 |   template<typename _ITp>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from ../../inc/base/stdatomic.h:14,
+                 from ../../inc/rmem/region.h:13,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/atomic:1342:3: error: template with C linkage
+ 1342 |   template<typename _ITp>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from ../../inc/base/stdatomic.h:14,
+                 from ../../inc/rmem/region.h:13,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/atomic:1347:3: error: template with C linkage
+ 1347 |   template<typename _ITp>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from ../../inc/base/stdatomic.h:14,
+                 from ../../inc/rmem/region.h:13,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/atomic:1352:3: error: template with C linkage
+ 1352 |   template<typename _ITp>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from ../../inc/base/stdatomic.h:14,
+                 from ../../inc/rmem/region.h:13,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/atomic:1357:3: error: template with C linkage
+ 1357 |   template<typename _ITp>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from ../../inc/base/stdatomic.h:14,
+                 from ../../inc/rmem/region.h:13,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/atomic:1363:3: error: template with C linkage
+ 1363 |   template<typename _ITp>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from ../../inc/base/stdatomic.h:14,
+                 from ../../inc/rmem/region.h:13,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/atomic:1374:3: error: template with C linkage
+ 1374 |   template<typename _ITp>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from ../../inc/base/stdatomic.h:14,
+                 from ../../inc/rmem/region.h:13,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/atomic:1385:3: error: template with C linkage
+ 1385 |   template<typename _ITp>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from ../../inc/base/stdatomic.h:14,
+                 from ../../inc/rmem/region.h:13,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/atomic:1396:3: error: template with C linkage
+ 1396 |   template<typename _ITp>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from ../../inc/base/stdatomic.h:14,
+                 from ../../inc/rmem/region.h:13,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/atomic:1437:3: error: template with C linkage
+ 1437 |   template<typename _ITp>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from ../../inc/base/stdatomic.h:14,
+                 from ../../inc/rmem/region.h:13,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/atomic:1444:3: error: template with C linkage
+ 1444 |   template<typename _ITp>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from ../../inc/base/stdatomic.h:14,
+                 from ../../inc/rmem/region.h:13,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/atomic:1451:3: error: template with C linkage
+ 1451 |   template<typename _ITp>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from ../../inc/base/stdatomic.h:14,
+                 from ../../inc/rmem/region.h:13,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/atomic:1458:3: error: template with C linkage
+ 1458 |   template<typename _ITp>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from ../../inc/base/stdatomic.h:14,
+                 from ../../inc/rmem/region.h:13,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/atomic:1465:3: error: template with C linkage
+ 1465 |   template<typename _ITp>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from ../../inc/base/stdatomic.h:14,
+                 from ../../inc/rmem/region.h:13,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/atomic:1472:3: error: template with C linkage
+ 1472 |   template<typename _ITp>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from ../../inc/base/stdatomic.h:14,
+                 from ../../inc/rmem/region.h:13,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/atomic:1479:3: error: template with C linkage
+ 1479 |   template<typename _ITp>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from ../../inc/base/stdatomic.h:14,
+                 from ../../inc/rmem/region.h:13,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/atomic:1486:3: error: template with C linkage
+ 1486 |   template<typename _ITp>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from ../../inc/base/stdatomic.h:14,
+                 from ../../inc/rmem/region.h:13,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/atomic:1493:3: error: template with C linkage
+ 1493 |   template<typename _ITp>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from ../../inc/base/stdatomic.h:14,
+                 from ../../inc/rmem/region.h:13,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/atomic:1500:3: error: template with C linkage
+ 1500 |   template<typename _ITp>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from ../../inc/base/stdatomic.h:14,
+                 from ../../inc/rmem/region.h:13,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/atomic:1507:3: error: template with C linkage
+ 1507 |   template<typename _ITp>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from ../../inc/base/stdatomic.h:14,
+                 from ../../inc/rmem/region.h:13,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/atomic:1513:3: error: template with C linkage
+ 1513 |   template<typename _ITp>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from ../../inc/base/stdatomic.h:14,
+                 from ../../inc/rmem/region.h:13,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/atomic:1519:3: error: template with C linkage
+ 1519 |   template<typename _ITp>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from ../../inc/base/stdatomic.h:14,
+                 from ../../inc/rmem/region.h:13,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/atomic:1525:3: error: template with C linkage
+ 1525 |   template<typename _ITp>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from ../../inc/base/stdatomic.h:14,
+                 from ../../inc/rmem/region.h:13,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/atomic:1531:3: error: template with C linkage
+ 1531 |   template<typename _ITp>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from ../../inc/base/stdatomic.h:14,
+                 from ../../inc/rmem/region.h:13,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/atomic:1537:3: error: template with C linkage
+ 1537 |   template<typename _ITp>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from ../../inc/base/stdatomic.h:14,
+                 from ../../inc/rmem/region.h:13,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/atomic:1543:3: error: template with C linkage
+ 1543 |   template<typename _ITp>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from ../../inc/base/stdatomic.h:14,
+                 from ../../inc/rmem/region.h:13,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/atomic:1549:3: error: template with C linkage
+ 1549 |   template<typename _ITp>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from ../../inc/base/stdatomic.h:14,
+                 from ../../inc/rmem/region.h:13,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/atomic:1555:3: error: template with C linkage
+ 1555 |   template<typename _ITp>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+In file included from ../../inc/base/stdatomic.h:14,
+                 from ../../inc/rmem/region.h:13,
+                 from ../../inc/rmem/backend.h:11,
+                 from ../../inc/runtime/pgfault.h:8,
+                 from pgfault.h:6,
+                 from test.cc:9:
+/usr/include/c++/11/atomic:1561:3: error: template with C linkage
+ 1561 |   template<typename _ITp>
+      |   ^~~~~~~~
+In file included from test.cc:9:
+pgfault.h:5:1: note: ‘extern "C"’ linkage started here
+    5 | extern "C" {
+      | ^~~~~~~~~~
+make: *** [Makefile:49: test.o] Error 1

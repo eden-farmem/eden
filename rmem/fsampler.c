@@ -49,6 +49,7 @@ struct fsampler fsamplers[MAX_FAULT_SAMPLERS];
 atomic_t nsamplers;
 int sigid;
 unsigned long sampler_start_tsc;
+unsigned long sampler_start_unix_time;
 int fsamples_per_sec = -1;
 
 /**
@@ -78,8 +79,9 @@ void fault_sample_to_str(void* sample, char* sbuf, int max_len)
                 "%p|", fs->bktrace[i]);
 
     /* write to string buf */
-    n = snprintf(sbuf, max_len, "%lu,%lx,%lx,%d,%d,%d,%s", 
-            (fs->tstamp_tsc - sampler_start_tsc) / cycles_per_us,
+    n = snprintf(sbuf, max_len, "%lf,%lx,%lx,%d,%d,%d,%s", 
+            sampler_start_unix_time + 
+            (fs->tstamp_tsc - sampler_start_tsc) / (1000000.0 * cycles_per_us),
             fs->ip, fs->addr, fs->npages, fs->flags, fs->tid, trace);
     BUG_ON(n >= max_len);   /* truncated */
 }
@@ -302,6 +304,7 @@ int fsampler_init(int samples_per_sec)
 
     /* start timestamp */
     sampler_start_tsc = rdtsc();
+    sampler_start_unix_time = time(NULL);
     return 0;
 }
 

@@ -18,6 +18,7 @@ extern double eviction_threshold;
 extern int evict_batch_size;
 extern int evict_ngens;
 extern int evict_nprio;
+extern int fsampler_samples_per_sec;
 
 /* global state */
 extern int nhandlers;

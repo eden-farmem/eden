@@ -61,6 +61,23 @@ static inline int append_stat(char *pos, size_t len,
 	return snprintf(pos, len, "%s:%ld,", name, val);
 }
 
+/* save latest process memory map information to a local file */
+void save_process_maps()
+{
+    char ch, fname[25];
+    FILE *source, *target;
+
+    /* we could use system("cp") to copy the file but it creates a new 
+     * process and causes issues with inherited LD_PRELOAD */
+    sprintf(fname, "procmaps-%d", getpid());
+    source = fopen("/proc/self/maps", "r");
+    target = fopen(fname, "w");
+    while ((ch = fgetc(source)) != EOF)
+        fputc(ch, target);
+    fclose(source);
+    fclose(target);
+}
+
 /* gather all kthr sched stats and write to the buffer */
 static ssize_t stat_write_buf(char *buf, size_t len)
 {
@@ -265,6 +282,12 @@ static void* stat_worker_local(void *arg)
 		// 	continue;
 		// }
 		// fprintf("%s\n", buf);
+
+#ifdef FAULT_SAMPLER
+        /* save latest process maps if recording fault trace because 
+		 * we will need this data to look up code locations */
+        save_process_maps();
+#endif
 	}
 
 	fclose(fp);

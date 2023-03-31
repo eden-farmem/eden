@@ -25,6 +25,7 @@ rmem_backend_t rmbackend_type = RMEM_BACKEND_DEFAULT;
 uint64_t local_memory = LOCAL_MEMORY_SIZE;
 double eviction_threshold = EVICTION_THRESHOLD;
 int evict_batch_size = 1;
+int fsampler_samples_per_sec = -1;  /* dump every record by default */
 
 /* common global state for remote memory */
 struct rmem_backend_ops* rmbackend = NULL;

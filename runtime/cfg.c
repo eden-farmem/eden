@@ -297,6 +297,17 @@ static int parse_rmem_evict_nprio_flag(const char *name, const char *val)
 	return 0;
 }
 
+static int parse_rmem_fsampler_rate_flag(const char *name, const char *val)
+{
+	int ret;
+	long tmp;
+	
+	ret = str_to_long(val, &tmp);
+	BUG_ON(ret);
+	fsampler_samples_per_sec = tmp;
+	return 0;
+}
+
 static int parse_static_arp_entry(const char *name, const char *val)
 {
 	int ret;
@@ -370,6 +381,7 @@ static const struct cfg_handler cfg_handlers[] = {
 	{ "rmem_evict_batch_size", parse_rmem_evict_batch_size_flag, false },
 	{ "rmem_evict_ngens", parse_rmem_evict_ngens_flag, false },
 	{ "rmem_evict_nprio", parse_rmem_evict_nprio_flag, false },
+	{ "rmem_fsampler_rate", parse_rmem_fsampler_rate_flag, false }
 };
 
 /**
