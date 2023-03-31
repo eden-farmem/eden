@@ -63,7 +63,7 @@ size_t libc_malloc_usable_size(void * ptr)
          * test so raising BUG() here to test it when we actually hit it. */
         // __libc_malloc_usable_size = dlsym(RTLD_NEXT, "malloc_usable_size");
         // __libc_malloc_usable_size = dlsym(libc6, "malloc_usable_size");
-        fprintf(stderr, "fix the TODO!!\n", error);
+        fprintf(stderr, "fix the TODO!!\n");
         exit(1);
         if ((error = dlerror()) != NULL) {
             fprintf(stderr, "Error in dlopen: %s\n", error);
