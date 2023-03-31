@@ -18,9 +18,6 @@
 #include <base/log.h>
 #include <base/limits.h>
 
-/* to track whether we are in the runtime or application; one use-case 
- * is to check if memory allocations are internal or external */
-__thread bool __from_runtime = false;
 
 #if !defined(MAP_HUGE_2MB) || !defined(MAP_HUGE_1GB)
 #warning "Your system does not support specifying MAP_HUGETLB page sizes"

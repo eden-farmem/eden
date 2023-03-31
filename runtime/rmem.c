@@ -8,6 +8,7 @@
 
 #include <sys/mman.h>
 #include "rmem/backend.h"
+#include "rmem/common.h"
 #include "rmem/config.h"
 #include "rmem/fault.h"
 #include "rmem/handler.h"
@@ -17,9 +18,6 @@
 #include "runtime/pgfault.h"
 
 #include "defs.h"
-
-/* state */
-bool rmem_hints_enabled = false;
 
 /**
  * rmem_init - initializes remote memory
@@ -52,6 +50,7 @@ int rmem_init()
     if (r) return r;
 #endif
 
+    store_release(&rmem_inited, true);
     return 0;
 }
 

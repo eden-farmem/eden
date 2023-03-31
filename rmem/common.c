@@ -21,6 +21,7 @@
 
 /* externed global settings */
 bool rmem_enabled = false;
+bool rmem_hints_enabled = false;
 rmem_backend_t rmbackend_type = RMEM_BACKEND_DEFAULT;
 uint64_t local_memory = LOCAL_MEMORY_SIZE;
 double eviction_threshold = EVICTION_THRESHOLD;
@@ -35,6 +36,17 @@ atomic64_t memory_used = ATOMIC_INIT(0);
 atomic64_t max_memory_used = ATOMIC_INIT(0);
 atomic64_t memory_allocd = ATOMIC_INIT(0);
 atomic64_t memory_freed = ATOMIC_INIT(0);
+bool rmem_inited = false;
+
+/* variable to track whether we are in the runtime or application at 
+ * any point in time; this is used to track internal vs external 
+ * memory allocations when interposing on memory calls */
+__thread bool __from_runtime = 
+#ifdef RMEM_STANDALONE
+/* default when running without shenango = */ false;
+#else
+/* default when running with shenango = */ true;
+#endif
 
 /* common thread-local state for remote memory */
 __thread uint64_t* rstats_ptr = NULL;
