@@ -17,6 +17,7 @@
 #include <runtime/sync.h>
 #include <runtime/thread.h>
 #include <runtime/pgfault.h>
+#include "rmem/common.h"
 #include "rmem/eviction.h"
 
 #include "defs.h"

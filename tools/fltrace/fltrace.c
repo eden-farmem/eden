@@ -70,6 +70,14 @@ int samples_per_sec = -1;
     fprintf(stderr, "[%s][%s:%d]: " fmt "\n", __FILE__,     \
             __func__, __LINE__, ##__VA_ARGS__);             \
   } while (0)
+#define ft_bug_on(cond, fmt, ...)                           \
+    do {                                                    \
+        if (cond) {                                         \
+            ft_log(fmt, ##__VA_ARGS__);                     \
+            exit(1);                                        \
+        }                                                   \
+    } while (0)
+
 #ifdef SUPPRESS_LOG
 #define ft_log_suppressible(fmt, ...) do {} while (0)
 #else
@@ -231,7 +239,7 @@ again:
         case INITIALIZED:
             return true;
         default:
-            BUG();  /*unknown*/
+            ft_bug_on(true, "unknown case");  /*unknown*/
     }
 
     /* claim the one to be initing */
@@ -297,6 +305,7 @@ again:
     start_stats_thread(-1);
 
     /* done initializing */
+    ft_bug_on(!load_acquire(&rmem_inited), "rmem not inited");
     ret = atomic_cmpxchg(&rmlib_state, INIT_STARTED, INITIALIZED);
     if(!ret) goto error;
     status = true;
@@ -305,7 +314,7 @@ again:
 error:
     ft_log_warn("couldn't init remote memory; reverting to libc");
     ret = atomic_cmpxchg(&rmlib_state, INIT_STARTED, INIT_FAILED);
-    BUG_ON(!ret);
+    ft_bug_on(!ret, "atomic cmpxchg failed");
     status = false;
     goto out;
 

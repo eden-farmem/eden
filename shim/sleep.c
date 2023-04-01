@@ -64,4 +64,5 @@ void exit(int status)
 	if (!fn)
 		fn = dlsym(RTLD_NEXT, "exit");
 	fn(status);
+	unreachable();
 }

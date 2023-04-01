@@ -5,6 +5,10 @@ LD	= gcc
 CC	= gcc
 AR	= ar
 
+# Path and dir of this makefile
+MKFILE_PATH := $(abspath $(lastword $(MAKEFILE_LIST)))
+MKFILE_DIR := $(dir $(MKFILE_PATH))
+
 ifneq ($(DEBUG),)
 CFLAGS += -DDEBUG -DCCAN_LIST_DEBUG -rdynamic -O0 -ggdb
 LDFLAGS += -rdynamic
@@ -19,11 +23,25 @@ print-%  : ; @echo $* = $($*)
 shim_src = $(wildcard *.c)
 shim_obj = $(shim_src:.c=.o)
 
+# jemalloc dependency
+JEMALLOC_PATH = ${MKFILE_DIR}/../jemalloc
+JEMALLOC_INC = $(shell cat $(JEMALLOC_PATH)/je_includes)
+JEMALLOC_LIBS = $(shell cat $(JEMALLOC_PATH)/je_libs)
+JEMALLOC_STATIC_LIBS = $(shell cat $(JEMALLOC_PATH)/je_static_libs)
+ifneq ($(MAKECMDGOALS),clean)
+ifeq ($(JEMALLOC_STATIC_LIBS),)
+$(error JEMALLOC libs not found. Please run "./setup.sh -je -f" in shenango dir)
+endif
+endif
+CFLAGS += $(JEMALLOC_INC)
+
 # must be first
 all: libshim.a
 
+# NOTE: technically there is no need to parcel jemalloc as a part of libshim.a
+# but it avoids the need to link jemalloc in every app so we do it here
 libshim.a: $(shim_obj)
-	$(AR) rcs $@ $^
+	$(AR) rcs $@ $^ $(JEMALLOC_STATIC_LIBS)
 
 # general build rules for all targets
 src = $(shim_src)
