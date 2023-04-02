@@ -13,6 +13,7 @@
 
 #include "base/map.h"
 #include "base/sampler.h"
+#include "base/thread.h"
 #include "rmem/common.h"
 #include "rmem/config.h"
 #include "rmem/handler.h"
@@ -217,16 +218,16 @@ void save_stacktrace(int signum, siginfo_t *siginfo, void *context)
     assert(fsid >= 0 && fsid < MAX_FAULT_SAMPLERS);
     assert(sample->busy);
     assert(sample->trace_in_progress);
-    assert(sample->tid == gettid());
-    log_debug("thr %d received sig %d from sampler %d at fault addr %lx from "
-        "time %lu", gettid(), signum, fsid, sample->addr, sample->tstamp_tsc);
+    assert(sample->tid == thread_gettid());
+    log_debug("thr %d received sig %d from sampler %d at addr %lx, time %lu",
+        thread_gettid(), signum, fsid, sample->addr, sample->tstamp_tsc);
 
     /* backtrace */
     sample->trace_size = backtrace(sample->bktrace, FAULT_TRACE_STEPS);
 
     /* set done */
     store_release(&sample->trace_in_progress, 0);
-    log_debug("thr %d backtrace done for sampler %d", gettid(), fsid);
+    log_debug("thr %d backtrace done for sampler %d", thread_gettid(), fsid);
 
     /* exit runtime if necessary */
     if (!from_runtime)
