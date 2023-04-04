@@ -11,6 +11,7 @@
 #include <base/stddef.h>
 #include <base/log.h>
 #include <base/time.h>
+#include <base/thread.h>
 #include <asm/ops.h>
 
 #define MAX_LOG_LEN 4096
@@ -40,9 +41,9 @@ void logk(int level, const char* filename, const char *fmt, ...)
 
 	if (likely(base_init_done)) {
 		uint64_t us = microtime();
-		sprintf(buf, "[%3d.%06d] CPU %02d| <%d> [%20s] ",
+		sprintf(buf, "[%3d.%06d] CPU %02d| THR %d | <%d> [%20s] ",
 			(int)(us / ONE_SECOND), (int)(us % ONE_SECOND),
-			cpu, level, filename);
+			cpu, thread_gettid(), level, filename);
 	} else {
 		sprintf(buf, "CPU %02d| <%d> [%10s] ", cpu, level, filename);
 	}
