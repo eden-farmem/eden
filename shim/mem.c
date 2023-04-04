@@ -15,36 +15,13 @@
 #include "rmem/common.h"
 #include "runtime/preempt.h"
 
+#include "common.h"
+
 /* jemalloc state */
 __thread bool __from_jemalloc = false;
 #define JEMALLOC_BEGIN() __from_jemalloc = true
 #define JEMALLOC_END()   __from_jemalloc = false
 #define FROM_JEMALLOC()  __from_jemalloc
-
-/**
- * We need modified versions of logging calls that do not call 
- * malloc internally to avoid infinite loops. We will only use these 
- * functions for logging instead of <base/log.h> in this file.
- */
-#define shim_log(fmt, ...)                                  \
-    do {                                                    \
-        fprintf(stderr, "[%s][%s:%d]: " fmt "\n", __FILE__, \
-            __func__, __LINE__, ##__VA_ARGS__);             \
-    } while (0)
-#define shim_bug_on(cond, fmt, ...)                         \
-    do {                                                    \
-        if (cond) {                                         \
-            shim_log(fmt, ##__VA_ARGS__);                   \
-            exit(1);                                        \
-        }                                                   \
-    } while (0)
-
-/* debug */
-#ifdef DEBUG
-#define shim_log_debug              shim_log
-#else
-#define shim_log_debug(fmt, ...)    do {} while (0)
-#endif
 
 /**
  * Runtime entry/exit helpers
@@ -56,22 +33,18 @@ bool runtime_enter()
     bool from_runtime;
 
     from_runtime = IN_RUNTIME();    
-    if (!from_runtime) {
-        /* coming from the app */
-        shim_bug_on(!preempt_enabled(), "ERROR! preempt enabled");
-        preempt_disable();
+    if (!from_runtime)
         RUNTIME_ENTER();
-    }
+    preempt_disable();
     return from_runtime;
 }
 
 /* exit runtime if specified */
 void runtime_exit_on(bool exit)
 {
-    if (exit) {
-        preempt_enable();
+    preempt_enable();
+    if (exit)
         RUNTIME_EXIT();
-    }
 }
 
 /**

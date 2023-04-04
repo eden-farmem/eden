@@ -1,10 +1,10 @@
 
 #include <dlfcn.h>
-
 #include <pthread.h>
 
 #include <base/lock.h>
 #include <base/log.h>
+#include <rmem/common.h>
 #include <runtime/sync.h>
 #include <runtime/thread.h>
 
@@ -97,7 +97,7 @@ int pthread_create(pthread_t *thread, const pthread_attr_t *attr,
 {
 	static int (*fn)(pthread_t *, const pthread_attr_t *, void *(*)(void *),
 			 void *);
-	if (unlikely(!__self)) {
+	if (unlikely(!__self || IN_RUNTIME())) {
 		if (!fn)
 			fn = dlsym(RTLD_NEXT, "pthread_create");
 		return fn(thread, attr, start_routine, arg);
@@ -110,7 +110,7 @@ int pthread_create(pthread_t *thread, const pthread_attr_t *attr,
 int pthread_detach(pthread_t thread)
 {
 	static int (*fn)(pthread_t);
-	if (unlikely(!__self)) {
+	if (unlikely(!__self || IN_RUNTIME())) {
 		if (!fn)
 			fn = dlsym(RTLD_NEXT, "pthread_detach");
 		return fn(thread);
@@ -122,7 +122,7 @@ int pthread_detach(pthread_t thread)
 int pthread_join(pthread_t thread, void **retval)
 {
 	static int (*fn)(pthread_t, void **);
-	if (unlikely(!__self)) {
+	if (unlikely(!__self || IN_RUNTIME())) {
 		if (!fn)
 			fn = dlsym(RTLD_NEXT, "pthread_join");
 		return fn(thread, retval);
@@ -134,7 +134,7 @@ int pthread_join(pthread_t thread, void **retval)
 int pthread_yield(void)
 {
 	static int (*fn)(void);
-	if (unlikely(!__self)) {
+	if (unlikely(!__self || IN_RUNTIME())) {
 		if (!fn)
 			fn = dlsym(RTLD_NEXT, "pthread_yield");
 		return fn();
@@ -148,7 +148,7 @@ int pthread_setaffinity_np(pthread_t thread, size_t cpusetsize,
 	const cpu_set_t *cpuset)
 {
 	static int (*fn)(pthread_t, size_t, const cpu_set_t *);
-	if (unlikely(!__self)) {
+	if (unlikely(!__self || IN_RUNTIME())) {
 		if (!fn)
 			fn = dlsym(RTLD_NEXT, "pthread_setaffinity_np");
 		return fn(thread, cpusetsize, cpuset);

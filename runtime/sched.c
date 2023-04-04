@@ -581,7 +581,6 @@ static __always_inline void enter_schedule(thread_t *myth)
 	    (visit_runtime && unlikely(rdtsc() - last_tsc > 
 			cycles_per_us * RUNTIME_VISIT_US))) {
 		jmp_runtime_explicit(schedule, myth);
-		RUNTIME_EXIT();
 		return;
 	}
 

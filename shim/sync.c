@@ -2,7 +2,10 @@
 #include <dlfcn.h>
 #include <pthread.h>
 
+#include <rmem/common.h>
 #include <runtime/sync.h>
+
+#include "common.h"
 
 BUILD_ASSERT(sizeof(pthread_barrier_t) >= sizeof(barrier_t));
 BUILD_ASSERT(sizeof(pthread_mutex_t) >= sizeof(mutex_t));
@@ -13,7 +16,7 @@ BUILD_ASSERT(sizeof(pthread_rwlock_t) >= sizeof(rwmutex_t));
 int pthread_mutex_init(pthread_mutex_t *mutex,
 		       const pthread_mutexattr_t *mutexattr)
 {
-	if (unlikely(!__self)) {
+	if (unlikely(!__self || IN_RUNTIME())) {
 		static int (*fn)(pthread_mutex_t*, const pthread_mutexattr_t *);
 		if (!fn)
 			fn = dlsym(RTLD_NEXT, "pthread_mutex_init");
@@ -26,7 +29,7 @@ int pthread_mutex_init(pthread_mutex_t *mutex,
 
 int pthread_mutex_lock(pthread_mutex_t *mutex)
 {
-	if (unlikely(!__self)) {
+	if (unlikely(!__self || IN_RUNTIME())) {
 		static int (*fn)(pthread_mutex_t*);
 		if (!fn)
 			fn = dlsym(RTLD_NEXT, "pthread_mutex_lock");
@@ -39,7 +42,7 @@ int pthread_mutex_lock(pthread_mutex_t *mutex)
 
 int pthread_mutex_trylock(pthread_mutex_t *mutex)
 {
-	if (unlikely(!__self)) {
+	if (unlikely(!__self || IN_RUNTIME())) {
 		static int (*fn)(pthread_mutex_t*);
 		if (!fn)
 			fn = dlsym(RTLD_NEXT, "pthread_mutex_trylock");
@@ -52,7 +55,7 @@ int pthread_mutex_trylock(pthread_mutex_t *mutex)
 int pthread_mutex_unlock(pthread_mutex_t *mutex)
 {
 
-	if (unlikely(!__self)) {
+	if (unlikely(!__self || IN_RUNTIME())) {
 		static int (*fn)(pthread_mutex_t*);
 		if (!fn)
 			fn = dlsym(RTLD_NEXT, "pthread_mutex_unlock");
@@ -65,7 +68,7 @@ int pthread_mutex_unlock(pthread_mutex_t *mutex)
 
 int pthread_mutex_destroy(pthread_mutex_t *mutex)
 {
-	if (unlikely(!__self)) {
+	if (unlikely(!__self || IN_RUNTIME())) {
 		static int (*fn)(pthread_mutex_t*);
 		if (!fn)
 			fn = dlsym(RTLD_NEXT, "pthread_mutex_destroy");
@@ -79,7 +82,7 @@ int pthread_barrier_init(pthread_barrier_t *restrict barrier,
 			 const pthread_barrierattr_t *restrict attr,
 			 unsigned count)
 {
-	if (unlikely(!__self)) {
+	if (unlikely(!__self || IN_RUNTIME())) {
 		static int (*fn)(pthread_barrier_t * restrict,
 				 const pthread_barrierattr_t *restrict,
 				 unsigned);
@@ -95,7 +98,7 @@ int pthread_barrier_init(pthread_barrier_t *restrict barrier,
 
 int pthread_barrier_wait(pthread_barrier_t *barrier)
 {
-	if (unlikely(!__self)) {
+	if (unlikely(!__self || IN_RUNTIME())) {
 		static int (*fn)(pthread_barrier_t *);
 		if (!fn)
 			fn = dlsym(RTLD_NEXT, "pthread_barrier_wait");
@@ -110,7 +113,7 @@ int pthread_barrier_wait(pthread_barrier_t *barrier)
 
 int pthread_barrier_destroy(pthread_barrier_t *barrier)
 {
-	if (unlikely(!__self)) {
+	if (unlikely(!__self || IN_RUNTIME())) {
 		static int (*fn)(pthread_barrier_t *);
 		if (!fn)
 			fn = dlsym(RTLD_NEXT, "pthread_barrier_destroy");
@@ -122,7 +125,7 @@ int pthread_barrier_destroy(pthread_barrier_t *barrier)
 
 int pthread_spin_destroy(pthread_spinlock_t *lock)
 {
-	if (unlikely(!__self)) {
+	if (unlikely(!__self || IN_RUNTIME())) {
 		static int (*fn)(pthread_spinlock_t*);
 		if (!fn)
 			fn = dlsym(RTLD_NEXT, "pthread_spin_destroy");
@@ -134,7 +137,7 @@ int pthread_spin_destroy(pthread_spinlock_t *lock)
 
 int pthread_spin_init(pthread_spinlock_t *lock, int pshared)
 {
-	if (unlikely(!__self)) {
+	if (unlikely(!__self || IN_RUNTIME())) {
 		static int (*fn)(pthread_spinlock_t*, int);
 		if (!fn)
 			fn = dlsym(RTLD_NEXT, "pthread_spin_init");
@@ -147,7 +150,7 @@ int pthread_spin_init(pthread_spinlock_t *lock, int pshared)
 
 int pthread_spin_lock(pthread_spinlock_t *lock)
 {
-	if (unlikely(!__self)) {
+	if (unlikely(!__self || IN_RUNTIME())) {
 		static int (*fn)(pthread_spinlock_t*);
 		if (!fn)
 			fn = dlsym(RTLD_NEXT, "pthread_spin_lock");
@@ -160,7 +163,7 @@ int pthread_spin_lock(pthread_spinlock_t *lock)
 
 int pthread_spin_trylock(pthread_spinlock_t *lock)
 {
-	if (unlikely(!__self)) {
+	if (unlikely(!__self || IN_RUNTIME())) {
 		static int (*fn)(pthread_spinlock_t*);
 		if (!fn)
 			fn = dlsym(RTLD_NEXT, "pthread_spin_trylock");
@@ -172,7 +175,7 @@ int pthread_spin_trylock(pthread_spinlock_t *lock)
 
 int pthread_spin_unlock(pthread_spinlock_t *lock)
 {
-	if (unlikely(!__self)) {
+	if (unlikely(!__self || IN_RUNTIME())) {
 		static int (*fn)(pthread_spinlock_t*);
 		if (!fn)
 			fn = dlsym(RTLD_NEXT, "pthread_spin_unlock");
@@ -186,7 +189,7 @@ int pthread_spin_unlock(pthread_spinlock_t *lock)
 int pthread_cond_init(pthread_cond_t *__restrict cond,
 		      const pthread_condattr_t *__restrict cond_attr)
 {
-	if (unlikely(!__self)) {
+	if (unlikely(!__self || IN_RUNTIME())) {
 		static int (*fn)(pthread_cond_t *, const pthread_condattr_t *);
 		if (!fn)
 			fn = dlsym(RTLD_NEXT, "pthread_cond_init");
@@ -199,7 +202,7 @@ int pthread_cond_init(pthread_cond_t *__restrict cond,
 
 int pthread_cond_signal(pthread_cond_t *cond)
 {
-	if (unlikely(!__self)) {
+	if (unlikely(!__self || IN_RUNTIME())) {
 		static int (*fn)(pthread_cond_t*);
 		if (!fn)
 			fn = dlsym(RTLD_NEXT, "pthread_cond_signal");
@@ -212,7 +215,7 @@ int pthread_cond_signal(pthread_cond_t *cond)
 
 int pthread_cond_broadcast(pthread_cond_t *cond)
 {
-	if (unlikely(!__self)) {
+	if (unlikely(!__self || IN_RUNTIME())) {
 		static int (*fn)(pthread_cond_t*);
 		if (!fn)
 			fn = dlsym(RTLD_NEXT, "pthread_cond_broadcast");
@@ -225,7 +228,7 @@ int pthread_cond_broadcast(pthread_cond_t *cond)
 
 int pthread_cond_wait(pthread_cond_t *cond, pthread_mutex_t *mutex)
 {
-	if (unlikely(!__self)) {
+	if (unlikely(!__self || IN_RUNTIME())) {
 		static int (*fn)(pthread_cond_t*, pthread_mutex_t*);
 		if (!fn)
 			fn = dlsym(RTLD_NEXT, "pthread_cond_wait");
@@ -239,7 +242,7 @@ int pthread_cond_wait(pthread_cond_t *cond, pthread_mutex_t *mutex)
 int pthread_cond_timedwait(pthread_cond_t *cond, pthread_mutex_t *mutex,
 			   const struct timespec *abstime)
 {
-	if (unlikely(!__self)) {
+	if (unlikely(!__self || IN_RUNTIME())) {
 		static int (*fn)(pthread_cond_t*, pthread_mutex_t*,
 				 const struct timespec*);
 		if (!fn)
@@ -252,7 +255,7 @@ int pthread_cond_timedwait(pthread_cond_t *cond, pthread_mutex_t *mutex,
 
 int pthread_cond_destroy(pthread_cond_t *cond)
 {
-	if (unlikely(!__self)) {
+	if (unlikely(!__self || IN_RUNTIME())) {
 		static int (*fn)(pthread_cond_t*);
 		if (!fn)
 			fn = dlsym(RTLD_NEXT, "pthread_cond_destroy");
@@ -264,7 +267,7 @@ int pthread_cond_destroy(pthread_cond_t *cond)
 
 int pthread_rwlock_destroy(pthread_rwlock_t *r)
 {
-	if (unlikely(!__self)) {
+	if (unlikely(!__self || IN_RUNTIME())) {
 		static int (*fn)(pthread_rwlock_t*);
 		if (!fn)
 			fn = dlsym(RTLD_NEXT, "pthread_rwlock_destroy");
@@ -276,7 +279,7 @@ int pthread_rwlock_destroy(pthread_rwlock_t *r)
 
 int pthread_rwlock_init(pthread_rwlock_t *r, const pthread_rwlockattr_t *attr)
 {
-	if (unlikely(!__self)) {
+	if (unlikely(!__self || IN_RUNTIME())) {
 		static int (*fn)(pthread_rwlock_t*, const pthread_rwlockattr_t*);
 		if (!fn)
 			fn = dlsym(RTLD_NEXT, "pthread_rwlock_init");
@@ -289,7 +292,7 @@ int pthread_rwlock_init(pthread_rwlock_t *r, const pthread_rwlockattr_t *attr)
 
 int pthread_rwlock_rdlock(pthread_rwlock_t *r)
 {
-	if (unlikely(!__self)) {
+	if (unlikely(!__self || IN_RUNTIME())) {
 		static int (*fn)(pthread_rwlock_t*);
 		if (!fn)
 			fn = dlsym(RTLD_NEXT, "pthread_rwlock_rdlock");
@@ -302,7 +305,7 @@ int pthread_rwlock_rdlock(pthread_rwlock_t *r)
 
 int pthread_rwlock_tryrdlock(pthread_rwlock_t *r)
 {
-	if (unlikely(!__self)) {
+	if (unlikely(!__self || IN_RUNTIME())) {
 		static int (*fn)(pthread_rwlock_t*);
 		if (!fn)
 			fn = dlsym(RTLD_NEXT, "pthread_rwlock_tryrdlock");
@@ -314,7 +317,7 @@ int pthread_rwlock_tryrdlock(pthread_rwlock_t *r)
 
 int pthread_rwlock_trywrlock(pthread_rwlock_t *r)
 {
-	if (unlikely(!__self)) {
+	if (unlikely(!__self || IN_RUNTIME())) {
 		static int (*fn)(pthread_rwlock_t*);
 		if (!fn)
 			fn = dlsym(RTLD_NEXT, "pthread_rwlock_trywrlock");
@@ -326,7 +329,7 @@ int pthread_rwlock_trywrlock(pthread_rwlock_t *r)
 
 int pthread_rwlock_wrlock(pthread_rwlock_t *r)
 {
-	if (unlikely(!__self)) {
+	if (unlikely(!__self || IN_RUNTIME())) {
 		static int (*fn)(pthread_rwlock_t*);
 		if (!fn)
 			fn = dlsym(RTLD_NEXT, "pthread_rwlock_wrlock");
@@ -339,7 +342,7 @@ int pthread_rwlock_wrlock(pthread_rwlock_t *r)
 
 int pthread_rwlock_unlock(pthread_rwlock_t *r)
 {
-	if (unlikely(!__self)) {
+	if (unlikely(!__self || IN_RUNTIME())) {
 		static int (*fn)(pthread_rwlock_t*);
 		if (!fn)
 			fn = dlsym(RTLD_NEXT, "pthread_rwlock_unlock");
