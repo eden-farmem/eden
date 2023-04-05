@@ -8,6 +8,8 @@
 #include <base/compiler.h>
 #include <runtime/preempt.h>
 
+extern __thread unsigned int __curr_cpu;
+
 struct thread;
 typedef void (*thread_fn_t)(void *arg);
 typedef struct thread thread_t;
@@ -19,7 +21,6 @@ typedef struct thread thread_t;
  */
 
 extern void thread_park_and_unlock_np(spinlock_t *l);
-extern void thread_park_on_fault(void* address, bool write, int rdahead, int evprio);
 extern void thread_ready(thread_t *thread);
 extern thread_t *thread_create(thread_fn_t fn, void *arg);
 extern thread_t *thread_create_with_buf(thread_fn_t fn, void **buf, size_t len);
@@ -34,6 +35,10 @@ inline thread_t *thread_self(void)
 	return __self;
 }
 
+static inline int get_core_num(void)
+{ 
+	return ACCESS_ONCE(__curr_cpu);
+}
 
 /*
  * High-level routines, use this API most of the time.

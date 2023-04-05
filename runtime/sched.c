@@ -24,6 +24,8 @@
 
 /* the current running thread, or NULL if there isn't one */
 __thread thread_t *__self;
+/* the core number that current thread is running on */
+__thread unsigned int __curr_cpu;
 /* a pointer to the top of the per-kthread (TLS) runtime stack */
 static __thread void *runtime_stack;
 /* a pointer to the bottom of the per-kthread (TLS) runtime stack */

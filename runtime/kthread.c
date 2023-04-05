@@ -199,7 +199,7 @@ static void kthread_yield_to_iokernel(void)
 	}
 	BUG_ON(s != sizeof(uint64_t));
 
-	k->curr_cpu = assigned_core - 1;
+	__curr_cpu = k->curr_cpu = assigned_core - 1;
 	if (k->curr_cpu != last_core)
 		STAT(CORE_MIGRATIONS)++;
 	store_release(&cpu_map[assigned_core - 1].recent_kthread, k);
