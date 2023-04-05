@@ -332,6 +332,7 @@ BUILD_ASSERT(offsetof(struct kthread, stats) % CACHE_LINE_SIZE == 0);
 
 extern __thread struct kthread *mykthread;
 extern __thread int my_kthr_id;
+extern __thread unsigned int __curr_cpu;
 
 /**
  * myk - returns the per-kernel-thread data

@@ -45,7 +45,7 @@ static void softirq_gather_work(struct softirq_work *w, struct kthread *k,
 	unsigned int recv_cnt = 0, compl_cnt = 0, join_cnt = 0;
 	int budget_left, local_budget_left;
 
-	budget_left = min(budget, SOFTIRQ_MAX_BUDGET);
+	budget_left = MIN(budget, SOFTIRQ_MAX_BUDGET);
 	local_budget_left = SOFTIRQ_MAX_BUDGET;
 
 	if (rmem_enabled) {
