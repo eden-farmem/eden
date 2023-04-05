@@ -201,9 +201,13 @@ static inline int rstat_write_buf(char *buf, char *buf_hthr, size_t len)
 	}
 
 	/* report additional stats at the end */
-    APPEND_STAT("memory_used", atomic64_read(&memory_used));
 
-    /* report process vm stats from the status file */
+    /* local memory usage stats */
+    APPEND_STAT("memory_used", atomic64_read(&max_memory_used));
+    APPEND_STAT("memory_allocd", atomic64_read(&memory_allocd));
+    APPEND_STAT("memory_freed", atomic64_read(&memory_freed));
+
+    /* process vm stats from the status file */
     APPEND_STAT("vm_peak", get_process_vm_counter("VmPeak"));
     APPEND_STAT("vm_size", get_process_vm_counter("VmSize"));
     APPEND_STAT("vm_lock", get_process_vm_counter("VmLck"));
