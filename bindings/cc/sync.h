@@ -19,8 +19,18 @@ class Spin {
   // Locks the spin lock.
   void Lock() { spin_lock_np(&lock_); }
 
+  // Locks the spin lock, but with preemption enabled.
+  void LockWp() { spin_lock(&lock_); }
+
   // Unlocks the spin lock.
   void Unlock() { spin_unlock_np(&lock_); }
+
+  // Unlocks the spin lock, but with preemption enabled.
+  void UnlockWp() { spin_unlock(&lock_); }
+
+  // Locks the spin lock only if it is currently unlocked. Returns true if
+  // successful, but with preemption enabled.
+  bool TryLockWp() { return spin_try_lock(&lock_); }
 
   // Locks the spin lock only if it is currently unlocked. Returns true if
   // successful.
