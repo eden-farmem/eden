@@ -10,6 +10,12 @@
 #ifndef unlikely
 #define unlikely(x) __builtin_expect(!!(x), 0)
 #endif
+#ifndef very_likely
+#define very_likely(x) __builtin_expect_with_probability(!!(x), 1, 1.0)
+#endif
+#ifndef very_unlikely
+#define very_unlikely(x) __builtin_expect_with_probability(!!(x), 0, 1.0)
+#endif
 #define unreachable() __builtin_unreachable()
 
 #define prefetch0(x) __builtin_prefetch((x), 0, 3)
