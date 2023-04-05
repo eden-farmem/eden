@@ -170,7 +170,7 @@ if [[ $JEMALLOC ]]; then
     autoconf
     mkdir -p build
     pushd build
-    ../configure --with-jemalloc-prefix=rmlib_je_ --config-cache
+    ../configure --with-jemalloc-prefix=rmlib_je_ --config-cache --disable-cxx
     make -j$(nproc)
     popd
 

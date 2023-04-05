@@ -7,19 +7,38 @@ endif
 # shared toolchain definitions
 INC = -I$(ROOT_PATH)/inc
 FLAGS  = -g -Wall -D_GNU_SOURCE $(INC)
-LDFLAGS = -T $(ROOT_PATH)/base/base.ld
+LDFLAGS = -T $(ROOT_PATH)/base/base.ld -no-pie
 LD      = gcc
 CC      = gcc
 LDXX	= g++
 CXX		= g++
 AR      = ar
 SPARSE  = sparse
+RUNTIME_LIBS =
 
-# libraries to include
-RUNTIME_DEPS = $(ROOT_PATH)/libruntime.a $(ROOT_PATH)/libnet.a \
-	$(ROOT_PATH)/libbase.a
-RUNTIME_LIBS = $(ROOT_PATH)/libruntime.a $(ROOT_PATH)/libnet.a \
-	$(ROOT_PATH)/libbase.a -lpthread
+## libs for shimming
+ifneq ($(EDEN_SHIM),)
+# include jemalloc
+JEMALLOC_PATH = ${ROOT_PATH}/jemalloc
+JEMALLOC_INC = $(shell cat $(JEMALLOC_PATH)/je_includes)
+JEMALLOC_LIBS = $(shell cat $(JEMALLOC_PATH)/je_libs)
+ifneq ($(MAKECMDGOALS),clean)
+ifeq ($(JEMALLOC_LIBS),)
+$(error JEMALLOC libs not found. Please run ./setup.sh -je -f in rootdir)
+endif
+endif
+LDFLAGS += $(JEMALLOC_LIBS)
+
+# include shim lib
+RUNTIME_LIBS += -ljemalloc $(ROOT_PATH)/shim/libshim.a -ldl
+# LDFLAGS += -Wl,--wrap=main
+endif
+
+# core libraries to include
+RUNTIME_DEPS = $(ROOT_PATH)/libruntime.a $(ROOT_PATH)/librmem.a \
+	$(ROOT_PATH)/libnet.a $(ROOT_PATH)/libbase.a
+RUNTIME_LIBS += $(ROOT_PATH)/libruntime.a $(ROOT_PATH)/librmem.a \
+ 	$(ROOT_PATH)/libnet.a $(ROOT_PATH)/libbase.a -lpthread -lrdmacm -libverbs
 
 # parse configuration options
 ifeq ($(CONFIG_DEBUG),y)
