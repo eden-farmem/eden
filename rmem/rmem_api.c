@@ -329,8 +329,10 @@ int rmadvise(void *addr, size_t length, int advice)
         goto OUT;
 
     /* we don't know how to deal with other advices yet */
-    if (advice != MADV_FREE && advice != MADV_DONTNEED) 
+    if (advice != MADV_FREE && advice != MADV_DONTNEED) {
+        log_warn("rmadvise: advice %d not supported", advice);
         goto OUT;
+    }
 
     /* find associated region */
     mr = get_region_by_addr_safe((unsigned long) addr);

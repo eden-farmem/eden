@@ -16,6 +16,10 @@ else
 CFLAGS += -DNDEBUG -O3
 endif
 
+ifneq ($(NUMA_NODE),)
+CFLAGS += -DNUMA_NODE=$(NUMA_NODE)
+endif
+
 # handy for debugging
 print-%  : ; @echo $* = $($*)
 

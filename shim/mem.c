@@ -10,6 +10,7 @@
 #include <sys/mman.h>
 #include <jemalloc/jemalloc.h>
 
+#include "base/mem.h"
 #include "base/realmem.h"
 #include "rmem/api.h"
 #include "rmem/common.h"
@@ -63,7 +64,7 @@ void *rmlib_rmmap(void *addr, size_t length, int prot,
             || (flags & (MAP_STACK | MAP_FIXED | MAP_DENYWRITE))
             || (addr && !within_memory_region(addr)))
     {
-        log_warn_ratelimited("WARNING! non-anon mmap");
+        log_warn_ratelimited("WARNING! unexpected mmap");
         p = real_mmap(addr, length, prot, flags, fd, offset);
     } else {
         /* we don't support these flags */
@@ -294,6 +295,7 @@ void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset)
     if (FROM_JEMALLOC()) {
         shim_log_debug("internal jemalloc mmap, fwd to RLib: addr=%p", addr);
         shim_bug_on(!rmem_inited, "[je_mmap] ERROR! rmem not initialized");
+        shim_bug_on(flags & MAP_HUGETLB, "ERROR! MAP_HUGETLB from jemalloc");
         retptr = rmlib_rmmap(addr, length, prot, flags, fd, offset);
         goto out;
     }
@@ -302,6 +304,14 @@ void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset)
     if (from_runtime) {
         shim_log_debug("%s from runtime, using real mmap", __func__);
         retptr = real_mmap(addr, length, prot, flags, fd, offset);
+        goto out;
+    }
+
+    /* app asked for huge pages; use shenango's huge page support. huge page
+     * memory is always local as is the case with OS-based paging systems */
+    if (unlikely(flags & MAP_HUGETLB)) {
+        shim_log("WARNING! [%s] for huge pages, size: %lu", __func__, length);
+        retptr = mem_map_anom(addr, length, PGSIZE_2MB, NUMA_NODE);
         goto out;
     }
 
