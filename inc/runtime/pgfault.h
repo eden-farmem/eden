@@ -43,10 +43,12 @@ void thread_park_on_fault(void* address, bool write, int rdahead, int evprio);
  *  Other useful functions/macros
  **/
 
-#define EDEN_PAGE_SHIFT    12
-#define EDEN_PAGE_SIZE     (1UL << EDEN_PAGE_SHIFT)
-#define EDEN_PAGE_MASK     (~(EDEN_PAGE_SIZE-1))
-#define EDEN_MAX_READAHEAD 63
+#define EDEN_PAGE_SHIFT         12
+#define EDEN_PAGE_SIZE          (1UL << EDEN_PAGE_SHIFT)
+#define EDEN_PAGE_OFFSET_MASK   (EDEN_PAGE_SIZE-1)
+#define EDEN_PAGE_ID_MASK       (~(EDEN_PAGE_SIZE-1))
+#define EDEN_MAX_READAHEAD      63
+#define PAGE_ID(addr) (((unsigned long) addr) & EDEN_PAGE_ID_MASK)
 
 /* estimate number of pages to read-ahead based on a range */
 #define readahead(addr, size)     \
@@ -57,9 +59,8 @@ void thread_park_on_fault(void* address, bool write, int rdahead, int evprio);
 #define hint_seq_read_fault(addr)		                            \
 ({                                                                  \
     static unsigned long __last_page = 0;                           \
-    if (unlikely(!__last_page                                       \
-            || (addr & ~EDEN_PAGE_MASK) != __last_page)) {          \
-        __last_page = ((unsigned long) addr) & ~EDEN_PAGE_MASK;     \
+    if (unlikely(!__last_page || PAGE_ID(addr) != __last_page)) {   \
+        __last_page = PAGE_ID(addr);                                \
         hint_read_fault(addr);	                                    \
     }                                                               \
 })
@@ -68,9 +69,9 @@ void thread_park_on_fault(void* address, bool write, int rdahead, int evprio);
 ({                                                                  \
     static unsigned long __start = 0;	                            \
     static unsigned long __end = 0;		                            \
-    if (unlikely(!__start || addr < __start ||  addr > __end)) {    \
-        __start = ((unsigned long) addr) & ~EDEN_PAGE_MASK;         \
-        __end = __start + (rdahead << EDEN_PAGE_SHIFT) - 1;		    \
+    if (unlikely(!__start || addr < __start ||  addr >= __end)) {   \
+        __start = PAGE_ID(addr);                                    \
+        __end = __start + (rdahead << EDEN_PAGE_SHIFT);		        \
         hint_read_fault_rdahead(addr, rdahead);	                    \
     }                                                               \
 })
@@ -78,10 +79,9 @@ void thread_park_on_fault(void* address, bool write, int rdahead, int evprio);
 #define hint_seq_write_fault(addr)		                            \
 ({                                                                  \
     static unsigned long __last_page = 0;                           \
-    if (unlikely(!__last_page                                       \
-            || (addr & ~EDEN_PAGE_MASK) != __last_page)) {          \
-        __last_page = ((unsigned long) addr) & ~EDEN_PAGE_MASK;     \
-        hint_read_fault(addr);	                                    \
+    if (unlikely(!__last_page || PAGE_ID(addr) != __last_page)) {   \
+        __last_page = PAGE_ID(addr);                                \
+        hint_write_fault(addr);	                                    \
     }                                                               \
 })
 
@@ -89,9 +89,30 @@ void thread_park_on_fault(void* address, bool write, int rdahead, int evprio);
 ({                                                                  \
     static unsigned long __start = 0;	                            \
     static unsigned long __end = 0;		                            \
-    if (unlikely(!__start || addr < __start ||  addr > __end)) {    \
-        __start = ((unsigned long) addr) & ~EDEN_PAGE_MASK;         \
-        __end = __start + (rdahead << EDEN_PAGE_SHIFT) - 1;		    \
-        hint_read_fault_rdahead(addr, rdahead);	                    \
+    if (unlikely(!__start || addr < __start ||  addr >= __end)) {   \
+        __start = PAGE_ID(addr);                                    \
+        __end = __start + (rdahead << EDEN_PAGE_SHIFT);		        \
+        hint_write_fault_rdahead(addr, rdahead);	                \
     }                                                               \
 })
+
+/** 
+ * Page boundary-safe hints for small items
+ */
+#define hint_read_fault_pb_safe(start, size)                            \
+    if (unlikely(PAGE_ID((start)) !=                                    \
+            PAGE_ID((unsigned long) (start) + (size) - 1))) {           \
+        hint_read_fault_rdahead(start, 1);                              \
+        hint_read_fault((void*)((unsigned long) (start) + (size) - 1)); \
+    } else {                                                            \
+        hint_read_fault(start);                                         \
+    }
+
+#define hint_write_fault_pb_safe(start, size)                           \
+    if (unlikely(PAGE_ID((start)) !=                                    \
+            PAGE_ID((unsigned long) (start) + (size) - 1))) {           \
+        hint_write_fault_rdahead(start, 1);                             \
+        hint_write_fault((void*)((unsigned long) (start) + (size) - 1));\
+    } else {                                                            \
+        hint_write_fault(start);                                        \
+    }

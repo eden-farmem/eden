@@ -12,6 +12,8 @@
 #include "rmem/region.h"
 #include "runtime/pgfault.h"
 
+BUILD_ASSERT(EDEN_MAX_READAHEAD <= FAULT_MAX_RDAHEAD_SIZE);
+
 /* state */
 __thread struct region_t* __cached_mr;
 
