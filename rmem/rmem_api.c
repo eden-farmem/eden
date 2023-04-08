@@ -90,14 +90,13 @@ static inline void __unlock_page_range(struct region_t *mr,
 static inline void __remove_and_unlock_page_range(struct region_t *mr,
     void* start, size_t length, bool unregister)
 {
-    int evicted;
+    int evicted, i;
     unsigned long offset, page;
     pgflags_t clrflags, flags;
     pgidx_t pgidx;
     pginfo_t pginfo, oldinfo;
     struct rmpage_node *pgnode;
     unsigned long pressure;
-    struct page_list* evict_gen;
 
     /* unlock all pages while also setting them unregistered and freeing the 
      * page nodes for pages that were locally present (if munmap worked) */
@@ -111,7 +110,7 @@ static inline void __remove_and_unlock_page_range(struct region_t *mr,
 
         /* unregister the page if needed */
         if (unregister)
-            clrflags |= PFLAG_REGISTERED;
+            clrflags |= (PFLAG_REGISTERED | PFLAG_PRESENT_ZERO_PAGED);
 
         /* if the page was present, drop it and release the page node */
         pginfo = get_page_info(mr, page);
@@ -124,13 +123,13 @@ static inline void __remove_and_unlock_page_range(struct region_t *mr,
 
             /* remove the node from eviction lists. we need a lock on the 
              * list before removing but can't get the list information from
-             * the node. Only supporting this case for a single eviction 
-             * list and (TODO:) leaving multiple lists case to future */
-            BUG_ON(evict_ngens != 1 && evict_nprio != 1);
-            evict_gen = &evict_gens[0];
-            spin_lock(&evict_gen->lock);
-            list_del_from(&evict_gen->pages[0], &pgnode->link);
-            spin_unlock(&evict_gen->lock);
+             * the node. So I lock all the gens and remove the node without 
+             * using the list_head; this can be costly so just supporting 
+             * for 2 gens that SC_EVICTION, our most common use-case, needs. */
+            BUG_ON(evict_ngens > 2);
+            for (i = 0; i < evict_ngens; i++) spin_lock(&evict_gens[i].lock);
+            list_del(&pgnode->link);
+            for (i = 0; i < evict_ngens; i++) spin_unlock(&evict_gens[i].lock);
 
             /* free the page node */
 #ifndef RMEM_STANDALONE
@@ -159,6 +158,10 @@ static inline void __remove_and_unlock_page_range(struct region_t *mr,
         pressure = atomic64_sub_and_fetch(&memory_used, evicted * CHUNK_SIZE);
         log_debug("freed %d page(s), memory used=%ld", evicted, pressure);
     }
+
+    /* accounting */
+    if (unregister)
+        atomic64_add_and_fetch(&memory_freed, length);
 }
 
 /**
@@ -301,10 +304,7 @@ int rmunmap(void *addr, size_t length)
     ret = real_munmap(addr, length);
 
     /* remove pages and unlock */
-    if (ret == 0) {   
-        __remove_and_unlock_page_range(mr, addr, length, true);
-        atomic64_add_and_fetch(&memory_freed, length);
-    }
+    if (ret == 0) __remove_and_unlock_page_range(mr, addr, length, true);
     else __unlock_page_range(mr, addr, length);
 
     put_mr(mr);
