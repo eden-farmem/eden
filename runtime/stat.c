@@ -266,6 +266,9 @@ static inline int rstat_write_buf(char *buf, char *buf_hthr, size_t len)
 #ifdef STAT_REPORT_LOCAL
 static void* stat_worker_local(void *arg)
 {
+	/* part of runtime */
+	preempt_disable();
+
 	log_info("pinning stats worker to core %d", STATS_CORE);
 	int ret = cpu_pin_thread(pthread_self(), STATS_CORE);
 	if (ret) {

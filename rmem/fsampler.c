@@ -201,7 +201,6 @@ void fsampler_dump(int fsid)
 void save_stacktrace(int signum, siginfo_t *siginfo, void *context)
 {
     int fsid;
-    bool from_runtime;
     struct fsample* sample;
 
     /* this handler is only triggered on the application threads during 
@@ -209,8 +208,7 @@ void save_stacktrace(int signum, siginfo_t *siginfo, void *context)
      * code (e.g., in interposed malloc). Make sure that we are in 
      * runtime during this fn to avoid remote memory interpostion but 
      * keep track of the original state and revert to it when exiting */
-    from_runtime = IN_RUNTIME();
-    RUNTIME_ENTER();
+    preempt_disable();
 
     /* retrieve and check sample to write to */
     sample = (struct fsample*) siginfo->si_value.sival_ptr;
@@ -229,9 +227,8 @@ void save_stacktrace(int signum, siginfo_t *siginfo, void *context)
     store_release(&sample->trace_in_progress, 0);
     log_debug("thr %d backtrace done for sampler %d", thread_gettid(), fsid);
 
-    /* exit runtime if necessary */
-    if (!from_runtime)
-        RUNTIME_EXIT();
+    /* exit runtime */
+    preempt_enable();
 }
 
 /**

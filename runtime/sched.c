@@ -71,7 +71,6 @@ static __noreturn void jmp_thread(thread_t *th)
 			cpu_relax();
 	}
 
-	RUNTIME_EXIT();
 	__jmp_thread(&th->tf);
 }
 
@@ -114,7 +113,6 @@ static void jmp_runtime_explicit(runtime_fn_t fn, thread_t *th)
 	assert_preempt_disabled();
 	assert(th != NULL);
 
-	RUNTIME_ENTER();
 	__jmp_runtime(&th->tf, fn, runtime_stack, &th->stack_busy);
 }
 
@@ -142,8 +140,6 @@ static void jmp_runtime(runtime_fn_t fn)
 static __noreturn void jmp_runtime_nosave(runtime_fn_t fn)
 {
 	assert_preempt_disabled();
-
-	RUNTIME_ENTER();
 	__jmp_runtime_nosave(fn, runtime_stack);
 }
 
@@ -607,13 +603,11 @@ static __always_inline void enter_schedule(thread_t *myth)
 		assert(!__self || __self == th);
 		__self = th;
 		preempt_enable();
-		RUNTIME_EXIT();
 		return;
 	}
 
 	/* switch stacks and enter the next thread */
 	STAT(RESCHEDULES)++;
-	RUNTIME_EXIT();
 	jmp_thread_direct(myth, th);
 }
 
@@ -655,7 +649,7 @@ void thread_yield(void)
 	assert(myth->state == THREAD_STATE_RUNNING);
 	myth->state = THREAD_STATE_SLEEPING;
 	store_release(&myth->stack_busy, true);
-	thread_ready_preempt_off(myth);
+	thread_ready_preempt_disabled(myth);
 
 	enter_schedule(myth);
 }
@@ -807,7 +801,6 @@ activate_thread_and_return:
 	assert(__self == NULL);
 	__self = th;
 	preempt_enable();
-	RUNTIME_EXIT();
 	return;
 }
 
@@ -835,11 +828,11 @@ void thread_park_on_fault(void* address, bool write, int rdahead, int evprio)
 	 * stack frame until we get to jmp_runtime but we signal entering runtime 
 	 * early by resetting __self as what follows is all runtime work that we 
 	 * chose to do, to try and avoid context-switching if we can) */
+	BUG_ON(!preempt_enabled());
 	preempt_disable();
 	myth = thread_self();
 	__self = NULL;
 	assert(myth);
-	RUNTIME_ENTER();
 
 	/* park thread */
 	assert(myth->state == THREAD_STATE_RUNNING);
@@ -869,17 +862,16 @@ void thread_park_on_fault(void* address, bool write, int rdahead, int evprio)
 
     /* fault serviced when we get back here */
 	assert(!__is_fault_pending(address, write, false));
-    assert(NOT_IN_RUNTIME());
 }
 
 /**
- * thread_ready_preempt_off - marks a thread as a runnable
+ * thread_ready_preempt_disabled - marks a thread as a runnable
  * @th: the thread to mark runnable
  *
  * This function can only be called when @th is sleeping and 
  * preempt is disabled (so generally from within the runtime).
  */
-void thread_ready_preempt_off(thread_t *th)
+void thread_ready_preempt_disabled(thread_t *th)
 {
 	struct kthread *k;
 	uint32_t rq_tail;
@@ -937,7 +929,7 @@ void thread_ready_safe(struct kthread *k, thread_t *th)
 void thread_ready(thread_t *th)
 {
 	getk();
-	thread_ready_preempt_off(th);
+	thread_ready_preempt_disabled(th);
 	putk();
 }
 
@@ -1138,7 +1130,6 @@ static __noreturn void schedule_start(void)
 void sched_start(void)
 {
 	last_tsc = rdtsc();
-	preempt_disable();
 	jmp_runtime_nosave(schedule_start);
 }
 

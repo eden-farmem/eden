@@ -33,9 +33,7 @@ bool runtime_enter()
 {
     bool from_runtime;
 
-    from_runtime = IN_RUNTIME();    
-    if (!from_runtime)
-        RUNTIME_ENTER();
+    from_runtime = !preempt_enabled();    
     preempt_disable();
     return from_runtime;
 }
@@ -44,8 +42,6 @@ bool runtime_enter()
 void runtime_exit_on(bool exit)
 {
     preempt_enable();
-    if (exit)
-        RUNTIME_EXIT();
 }
 
 /**

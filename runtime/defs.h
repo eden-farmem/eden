@@ -509,7 +509,6 @@ extern void thread_yield_kthread();
 extern void join_kthread(struct kthread *k);
 
 /* internal thread management routines */
-extern void thread_ready_preempt_off(thread_t *thread);
 extern void thread_ready_safe(struct kthread *k, thread_t *th);
 
 /* kthread fault handling helpers */

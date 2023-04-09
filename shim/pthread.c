@@ -24,13 +24,15 @@ static void thread_trampoline(void *arg)
 	struct join_handle *j = arg;
 
 	j->retval = j->fn(j->args);
-	spin_lock_np(&j->lock);
+	preempt_disable();
+	spin_lock(&j->lock);
 	if (j->detached) {
-		spin_unlock_np(&j->lock);
+		spin_unlock(&j->lock);
+		preempt_enable();
 		return;
 	}
 	if (j->waiter != NULL) {
-		thread_ready(j->waiter);
+		thread_ready_preempt_disabled(j->waiter);
 	}
 	j->waiter = thread_self();
 	thread_park_and_unlock_np(&j->lock);
@@ -40,10 +42,14 @@ static int thread_spawn_joinable(struct join_handle **handle,
 				 void *(*fn)(void *), void *arg)
 {
 	struct join_handle *j;
+
+	preempt_disable();
 	thread_t *t = thread_create_with_buf(thread_trampoline, (void **)&j,
 					     sizeof(struct join_handle));
-	if (t == NULL)
+	if (t == NULL) {
+		preempt_enable();
 		return -ENOMEM;
+	}
 
 	j->fn = fn;
 	j->args = arg;
@@ -54,22 +60,26 @@ static int thread_spawn_joinable(struct join_handle **handle,
 	if (handle)
 		*handle = j;
 
-	thread_ready(t);
+	thread_ready_preempt_disabled(t);
+	preempt_enable();
 	return 0;
 }
 
 static int thread_detach(struct join_handle *j)
 {
-	spin_lock_np(&j->lock);
+	preempt_disable();
+	spin_lock(&j->lock);
 	if (j->detached) {
-		spin_unlock_np(&j->lock);
+		spin_unlock(&j->lock);
+		preempt_enable();
 		return -EINVAL;
 	}
 	j->detached = true;
 	if (j->waiter != NULL) {
-		thread_ready(j->waiter);
+		thread_ready_preempt_disabled(j->waiter);
 	}
-	spin_unlock_np(&j->lock);
+	spin_unlock(&j->lock);
+	preempt_enable();
 	return 0;
 }
 
@@ -97,7 +107,7 @@ int pthread_create(pthread_t *thread, const pthread_attr_t *attr,
 {
 	static int (*fn)(pthread_t *, const pthread_attr_t *, void *(*)(void *),
 			 void *);
-	if (unlikely(!__self || IN_RUNTIME())) {
+	if (unlikely(!__self || !preempt_enabled())) {
 		if (!fn)
 			fn = dlsym(RTLD_NEXT, "pthread_create");
 		return fn(thread, attr, start_routine, arg);
@@ -110,7 +120,7 @@ int pthread_create(pthread_t *thread, const pthread_attr_t *attr,
 int pthread_detach(pthread_t thread)
 {
 	static int (*fn)(pthread_t);
-	if (unlikely(!__self || IN_RUNTIME())) {
+	if (unlikely(!__self || !preempt_enabled())) {
 		if (!fn)
 			fn = dlsym(RTLD_NEXT, "pthread_detach");
 		return fn(thread);
@@ -122,7 +132,7 @@ int pthread_detach(pthread_t thread)
 int pthread_join(pthread_t thread, void **retval)
 {
 	static int (*fn)(pthread_t, void **);
-	if (unlikely(!__self || IN_RUNTIME())) {
+	if (unlikely(!__self || !preempt_enabled())) {
 		if (!fn)
 			fn = dlsym(RTLD_NEXT, "pthread_join");
 		return fn(thread, retval);
@@ -134,7 +144,7 @@ int pthread_join(pthread_t thread, void **retval)
 int pthread_yield(void)
 {
 	static int (*fn)(void);
-	if (unlikely(!__self || IN_RUNTIME())) {
+	if (unlikely(!__self || !preempt_enabled())) {
 		if (!fn)
 			fn = dlsym(RTLD_NEXT, "pthread_yield");
 		return fn();
@@ -148,7 +158,7 @@ int pthread_setaffinity_np(pthread_t thread, size_t cpusetsize,
 	const cpu_set_t *cpuset)
 {
 	static int (*fn)(pthread_t, size_t, const cpu_set_t *);
-	if (unlikely(!__self || IN_RUNTIME())) {
+	if (unlikely(!__self || !preempt_enabled())) {
 		if (!fn)
 			fn = dlsym(RTLD_NEXT, "pthread_setaffinity_np");
 		return fn(thread, cpusetsize, cpuset);

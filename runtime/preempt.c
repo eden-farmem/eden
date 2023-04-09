@@ -12,7 +12,7 @@
 #include "defs.h"
 
 /* the current preemption count */
-volatile __thread unsigned int preempt_cnt = PREEMPT_NOT_PENDING;
+volatile __thread unsigned int preempt_cnt = (PREEMPT_NOT_PENDING | 1);
 
 /* set a flag to indicate a preemption request is pending */
 static void set_preempt_needed(void)

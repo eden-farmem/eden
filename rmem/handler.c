@@ -266,7 +266,7 @@ static inline fault_t* read_uffd_fault()
 static void* rmem_handler(void *arg) 
 {
     /* handler threads run entirely in runtime */
-    RUNTIME_ENTER();
+    preempt_disable();
 
     bool need_eviction, work_done;
     unsigned long long pressure;
@@ -344,7 +344,7 @@ static void* rmem_handler(void *arg)
                         (now_tsc - fault->tstamp_tsc) > 
                             HANDLER_WAIT_BEFORE_STEAL_US * cycles_per_us))
                     {
-                        log_debug("%s - waited too long", FSTR(fault));
+                        log_warn_ratelimited("%s - waited too long", FSTR(fault));
                         fault->tstamp_tsc = now_tsc;
                         if (handler_try_unblock_fault(fault))
                             /* if unblocked, try this fault again */

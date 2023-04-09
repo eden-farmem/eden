@@ -10,7 +10,7 @@
 
 int usleep(useconds_t usec)
 {
-	if (unlikely(!__self || IN_RUNTIME())) {
+	if (unlikely(!__self || !preempt_enabled())) {
 		static int (*fn)(useconds_t);
 		if (!fn)
 			fn = dlsym(RTLD_NEXT, "usleep");
@@ -23,7 +23,7 @@ int usleep(useconds_t usec)
 
 unsigned int sleep(unsigned int seconds)
 {
-	if (unlikely(!__self || IN_RUNTIME())) {
+	if (unlikely(!__self || !preempt_enabled())) {
 		static int (*fn)(unsigned int);
 		if (!fn)
 			fn = dlsym(RTLD_NEXT, "sleep");
@@ -36,7 +36,7 @@ unsigned int sleep(unsigned int seconds)
 
 int nanosleep(const struct timespec *req, struct timespec *rem)
 {
-	if (unlikely(!__self || IN_RUNTIME())) {
+	if (unlikely(!__self || !preempt_enabled())) {
 		static int (*fn)(const struct timespec *, struct timespec *);
 		if (!fn)
 			fn = dlsym(RTLD_NEXT, "nanosleep");
@@ -59,7 +59,7 @@ void exit(int status)
 	 * reset __self because we can get here from shenango threads without going 
 	 * into runtime but exit() processing might require original std lib 
 	 * functions */
-	__self = NULL;
+	// __self = NULL;
 
 	static void (*fn)(int);
 	if (!fn)

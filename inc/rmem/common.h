@@ -31,20 +31,6 @@ extern bool rmem_inited;
 
 /* thread-local */
 extern __thread pgthread_t current_kthread_id;
-extern __thread bool __from_runtime;
-
-/* track application vs runtime */
-#define RUNTIME_ENTER()             \
-  do {                              \
-    __from_runtime = true;          \
-  } while (0)
-#define RUNTIME_EXIT()              \
-  do {                              \
-	assert(__from_runtime);	   		\
-    __from_runtime = false;         \
-  } while (0)
-#define IN_RUNTIME()      (__from_runtime)
-#define NOT_IN_RUNTIME()  (!__from_runtime)
 
 /* init & destroy */
 int rmem_common_init(unsigned long nslabs, int pin_handlers_start_core,

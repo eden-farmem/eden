@@ -18,16 +18,7 @@
 #include "rmem/page.h"
 #include "rmem/pgnode.h"
 #include "rmem/region.h"
-
-/**
- * When using interposition, make sure the API calls in 
- * this file are only called from the runtime
- */
-#ifdef RMEM_STANDALONE
-#define ASSERT_IN_RUNTIME() BUG_ON(!IN_RUNTIME())
-#else
-#define ASSERT_IN_RUNTIME() {}
-#endif
+#include "runtime/preempt.h"
 
 /**
  * Internal methods
@@ -172,7 +163,7 @@ void *rmalloc(size_t size)
     struct region_t *mr;
     void* retptr = NULL;
 
-    ASSERT_IN_RUNTIME();
+    assert_preempt_disabled();
 
     log_debug("rmalloc with size %ld", size);
     if (size <= 0)
@@ -207,7 +198,7 @@ void *rmrealloc(void *ptr, size_t size, size_t oldsize)
     if (ptr == NULL || oldsize <= 0)
         return rmalloc(size);
 
-    ASSERT_IN_RUNTIME();
+    assert_preempt_disabled();
 
     log_debug("rmrealloc at %p with size %ld", ptr, size);
     retptr = ptr;
@@ -278,7 +269,7 @@ int rmunmap(void *addr, size_t length)
     unsigned long max_addr;
     int ret = 0;
 
-    ASSERT_IN_RUNTIME();
+    assert_preempt_disabled();
 
     log_debug("rmunmap at %p", addr);
     if (!addr) 
@@ -322,7 +313,7 @@ int rmadvise(void *addr, size_t length, int advice)
     unsigned long max_addr;
     int ret = 0;
 
-    ASSERT_IN_RUNTIME();
+    assert_preempt_disabled();
 
     log_debug("rmadvise at %p size %ld advice %d", addr, length, advice);
     if (!addr) 
@@ -371,7 +362,7 @@ OUT:
  */
 int rmfree(void *ptr)
 {
-    ASSERT_IN_RUNTIME();
+    assert_preempt_disabled();
     log_debug("rfree");
     /* TODO */
     return 0;
@@ -382,7 +373,7 @@ int rmfree(void *ptr)
  */
 int rmpin(void *addr, size_t size)
 {
-    ASSERT_IN_RUNTIME();
+    assert_preempt_disabled();
     log_debug("rmpin for %p size %ld", addr, size);
     BUG();  /* not supported, should work with eviction */
     return 0;
@@ -393,7 +384,7 @@ int rmpin(void *addr, size_t size)
  */
 int rmflush(void *addr, size_t size, bool evict)
 {
-    ASSERT_IN_RUNTIME();
+    assert_preempt_disabled();
     log_debug("rflush for %p size %ld", addr, size);
     BUG();  /* not supported, should work with eviction */
     return 0;
