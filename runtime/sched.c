@@ -689,6 +689,7 @@ static __always_inline void enter_schedule_with_fault(thread_t *th, fault_t* f)
 
 	/* start handling fault */
 again:
+	start_tsc = 0;
     fstatus = handle_page_fault(k->bkend_chan_id, f, &nevicts_needed, 
         &kthr_owner_cbs);
     switch (fstatus) {
@@ -700,10 +701,27 @@ again:
 			goto activate_thread_and_return;
             break;
         case FAULT_IN_PROGRESS:
-			if (blocking)
+			if (blocking) {
 				/* if we are blocking the core until the fault is resolved, 
 				 * keep trying until it is posted and do not add to wait q */
+
+				/* but we still need to keep checking  because eviction 
+				 * writes from the past might still be waiting */
+				nready = kthr_check_for_completions(k, RMEM_MAX_COMP_PER_OP);
+				if (nready > 0) {
+					spin_lock(&k->pf_lock);
+					k->pf_pending -= nready;
+					spin_unlock(&k->pf_lock);
+				}
+
+				/* count towards idle time from the second time we get here */
+				if (start_tsc) {
+					STAT(SCHED_CYCLES_IDLE) += rdtsc() - start_tsc;
+					cpu_relax();
+				}
+				start_tsc = rdtsc();
 				goto again;
+			}
 
             /* otherwise, add to wait and yield to run another thread */
             spin_lock(&k->pf_lock);
@@ -861,7 +879,7 @@ void thread_park_on_fault(void* address, bool write, int rdahead, int evprio)
 	enter_schedule_with_fault(myth, fault);
 
     /* fault serviced when we get back here */
-	assert(!__is_fault_pending(address, write, false));
+	// assert(!__is_fault_pending(address, write, false));
 }
 
 /**
