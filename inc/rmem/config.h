@@ -137,4 +137,9 @@ BUILD_ASSERT((1 + FAULT_MAX_RDAHEAD_SIZE) <= RMEM_MAX_CHUNKS_PER_OP);
 /* Region settings  */
 #define RMEM_MAX_REGIONS            1
 
+/* Do-not-evict region defaults (per priority level) */
+#define RMEM_DNE_SIZE_MB            100
+#define RMEM_DNE_MAX_PAGES          (RMEM_DNE_SIZE_MB * 1024 * 1024 / PAGE_SIZE)
+BUILD_ASSERT(RMEM_DNE_MAX_PAGES >= RMEM_MAX_CHUNKS_PER_OP);
+
 #endif  // __CONFIG_H__

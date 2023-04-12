@@ -119,15 +119,19 @@ int __always_inline get_highest_evict_gen(void)
  * nodes to the eviction lists */
 static inline void fault_alloc_page_nodes(fault_t* f)
 {
-    int i;
+    int i, overhead, prio;
     struct rmpage_node* pgnode;
-    struct list_head tmp;
+    struct list_head new, popped;
     struct page_list* evict_gen;
     pgidx_t pgidx;
 
+    /* prio level */
+    prio = f->evict_prio;
+    assert(prio >= 0 && prio < evict_nprio);
+
     /* newly fetched pages - alloc page nodes (for both the base page and 
      * the read-ahead) */
-    list_head_init(&tmp);
+    list_head_init(&new);
     for (i = 0; i <= f->rdahead; i++) { 
         /* get a page node */
         pgnode = rmpage_node_alloc();
@@ -138,20 +142,50 @@ static inline void fault_alloc_page_nodes(fault_t* f)
         __get_mr(f->mr);
         pgnode->mr = f->mr;
         pgnode->addr = f->page + i * CHUNK_SIZE;
-        list_add_tail(&tmp, &pgnode->link);
+        pgnode->evict_prio = prio;
+        list_add_tail(&new, &pgnode->link);
 
         pgidx = rmpage_get_node_id(pgnode);
         pgidx = set_page_index(pgnode->mr, pgnode->addr, pgidx);
         assertz(pgidx); /* old index must be 0 */
     }
 
-    /* add to the most recent page list */
+#ifdef EVICTION_DNE_ON
+    /* check for space in DNE list or make space otherwise */
+    BUILD_ASSERT(RMEM_DNE_MAX_PAGES >= (1 + FAULT_MAX_RDAHEAD_SIZE));
+    list_head_init(&popped);
+    spin_lock(&dne_pages.locks[prio]);
+    overhead = ((int) dne_pages.npages[prio] + (1 + f->rdahead)) - RMEM_DNE_MAX_PAGES;
+    for (i = 0; i < overhead; i++) {
+        pgnode = list_pop(&dne_pages.pages[prio], struct rmpage_node, link);
+        assert(pgnode);
+        dne_pages.npages[prio]--;
+        list_add_tail(&popped, &pgnode->link);
+    }
+
+    /* add new pages to DNE list */
+    list_append_list(&dne_pages.pages[prio], &new);
+    dne_pages.npages[prio] += (1 + f->rdahead);
+    assert(dne_pages.npages[prio] <= RMEM_DNE_MAX_PAGES);
+    spin_unlock(&dne_pages.locks[prio]);
+
+    /* add any DNE popped pages to highest evict list */
+    if(overhead > 0) {
+        assert(!list_empty(&popped));
+        evict_gen = &evict_gens[get_highest_evict_gen()];
+        spin_lock(&evict_gen->lock);
+        list_append_list(&evict_gen->pages[prio], &popped);
+        evict_gen->npages += overhead;
+        spin_unlock(&evict_gen->lock);
+    }
+#else
+    /* add new pages to highest evict list */
     evict_gen = &evict_gens[get_highest_evict_gen()];
     spin_lock(&evict_gen->lock);
-    assert(f->evict_prio >= 0 && f->evict_prio < evict_nprio);
-    list_append_list(&evict_gen->pages[f->evict_prio], &tmp);
+    list_append_list(&evict_gen->pages[prio], &new);
     evict_gen->npages += (1 + f->rdahead);
     spin_unlock(&evict_gen->lock);
+#endif
 }
 
 /* serve zero pages for first-time faults without going to the backend */

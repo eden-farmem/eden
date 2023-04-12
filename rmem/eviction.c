@@ -36,6 +36,7 @@ int madv_pidfd = -1;
 
 /* lru state */
 struct page_list evict_gens[EVICTION_MAX_GENS];
+struct page_list_per_prio dne_pages;
 int evict_ngens = 1;
 int evict_gen_mask = 0;
 int evict_nprio = 1;
@@ -998,6 +999,19 @@ int eviction_init(void)
     }
     log_info("inited %s eviction with %d gens. gen mask: %x", 
         policy, evict_ngens, evict_gen_mask);
+
+#ifdef EVICTION_DNE_ON
+    /* init do-not-evict list */
+    log_info("do-not-evict size per prio: %d MB", RMEM_DNE_SIZE_MB);
+    for (j = 0; j < evict_nprio; j++) {
+        list_head_init(&dne_pages.pages[j]);
+        dne_pages.npages[j] = 0;
+        spin_lock_init(&dne_pages.locks[j]);
+    }
+    BUG_ON(local_memory <= RMEM_DNE_SIZE_MB * evict_nprio * 1024 * 1024);
+    if (local_memory <= RMEM_DNE_SIZE_MB * evict_nprio * 1024 * 1024 * 1.1)
+        log_warn("WARN! do-not-evict size is too close to max local memory!");
+#endif
 
     /* init epoch */
     epoch_start_tsc = rdtsc();
