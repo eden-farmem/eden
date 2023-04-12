@@ -25,7 +25,13 @@ struct page_list {
     size_t npages;
     spinlock_t lock;
 };
+struct page_list_per_prio {
+    struct list_head pages[EVICTION_MAX_PRIO];
+    size_t npages[EVICTION_MAX_PRIO];
+    spinlock_t locks[EVICTION_MAX_PRIO];
+};
 extern struct page_list evict_gens[EVICTION_MAX_GENS];
+struct page_list_per_prio dne_pages;
 extern int evict_gen_mask;
 extern int evict_gen_now;
 extern unsigned long evict_epoch_now;
