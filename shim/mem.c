@@ -98,7 +98,7 @@ void *rmlib_rmmap(void *addr, size_t length, int prot,
 /* 18 is the best, 17 is not far off. 16 roughly serves 50% */
 /* TODO: this only works for Dataframe, generalize it into 
  * an optional feature when merging */
-#define MAX_TOUCH_PAGES (1<<17)
+#define MAX_TOUCH_PAGES (1<<16)
 #define MAX_TOUCH_BYTES (MAX_TOUCH_PAGES << EDEN_PAGE_SHIFT)
 static void __always_inline touch_few_pages(void *addr, size_t length)
 {
