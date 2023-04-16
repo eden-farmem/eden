@@ -837,7 +837,7 @@ void thread_park_on_fault(void* address, bool write, int rdahead, int evprio)
 
     /* check pre-conditions */
     BUG_ON(!rmem_enabled);
-    BUG_ON(!rmem_hints_enabled);
+    // BUG_ON(!rmem_hints_enabled);
 	assert(rdahead <= FAULT_MAX_RDAHEAD_SIZE);		/* read ahead limit */
 	assert(evprio >= 0 && evprio < evict_nprio); 	/* evict priority limit */
 

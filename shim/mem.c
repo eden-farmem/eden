@@ -9,11 +9,14 @@
 
 #include <sys/mman.h>
 #include <jemalloc/jemalloc.h>
+#include <math.h>
 
+#include "base/stddef.h"
 #include "base/mem.h"
 #include "base/realmem.h"
 #include "rmem/api.h"
 #include "rmem/common.h"
+#include "runtime/pgfault.h"
 #include "runtime/preempt.h"
 
 #include "common.h"
@@ -42,6 +45,22 @@ bool runtime_enter()
 void runtime_exit_on(bool exit)
 {
     preempt_enable();
+}
+
+void collect_size_stats(size_t size)
+{
+    static size_t bin_size[50];
+    // bin by log of pages
+    int bin = (int)log2((size / PAGE_SIZE) + 1);
+    shim_bug_on(bin >= 50, "bin too large: %d", bin);
+    ACCESS_ONCE(bin_size[bin]) += 1;
+    // convert array to comma-seperated text
+    char buf[1024];
+    char *p = buf;
+    for (int i = 0; i < 50; i++) {
+        p += sprintf(p, "%lu,", bin_size[i]);
+    }
+    log_info_ratelimited("size stats: %s", buf);
 }
 
 /**
@@ -76,6 +95,28 @@ void *rmlib_rmmap(void *addr, size_t length, int prot,
     return p;
 }
 
+/* 18 is the best, 17 is not far off. 16 roughly serves 50% */
+/* TODO: this only works for Dataframe, generalize it into 
+ * an optional feature when merging */
+#define MAX_TOUCH_PAGES (1<<17)
+#define MAX_TOUCH_BYTES (MAX_TOUCH_PAGES << EDEN_PAGE_SHIFT)
+static void __always_inline touch_few_pages(void *addr, size_t length)
+{
+    /* touch a few pages allowed by the read-ahead to avoid costly 
+     * zero-page faults later */
+    int rdahead;
+    char *start, *end;
+
+    start = (char*)(align_down((unsigned long) addr, EDEN_PAGE_SIZE));
+    end = (char*)(align_down((unsigned long) addr + length, EDEN_PAGE_SIZE));
+    while (start <= end) {
+        rdahead = MIN((end - start) >> EDEN_PAGE_SHIFT, EDEN_MAX_READAHEAD);
+        if (__is_fault_pending(start, /*write=*/ true, false))
+            thread_park_on_fault(start, /*write=*/ true, rdahead , 0);
+        start += (((1 + rdahead)) << EDEN_PAGE_SHIFT);
+    }
+}
+
 /**
  *  Interface functions
  */
@@ -105,6 +146,12 @@ void *malloc(size_t size)
 out:
     shim_log_debug("[%s] return=%p", __func__, retptr);
     runtime_exit_on(!from_runtime);
+
+    /* touch application pages */
+    if (!from_runtime && retptr) {
+        // collect_size_stats(size);
+        touch_few_pages(retptr, size);
+    }
     return retptr;
 }
 
