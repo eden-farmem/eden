@@ -3,8 +3,8 @@ with a few patches to extend the userfaultfd interface.
 
 
 To install this kernel, you can follow the steps below.
-1. Clone kernel 5.15-rc1
-    https://kernel.ubuntu.com/~kernel-ppa/mainline/v5.15-rc1/
+1. Clone kernel 5.15
+    https://kernel.ubuntu.com/~kernel-ppa/mainline/v5.15/
 2. Apply patches from below.
 3. Build and boot into it. Helper scripts at `scripts/kernel/*`
 
