@@ -119,9 +119,9 @@ int __always_inline get_highest_evict_gen(void)
  * nodes to the eviction lists */
 static inline void fault_alloc_page_nodes(fault_t* f)
 {
-    int i, overhead, prio;
+    int i, prio;
     struct rmpage_node* pgnode;
-    struct list_head new, popped;
+    struct list_head new;
     struct page_list* evict_gen;
     pgidx_t pgidx;
 
@@ -151,6 +151,9 @@ static inline void fault_alloc_page_nodes(fault_t* f)
     }
 
 #ifdef EVICTION_DNE_ON
+    int popped;
+    struct list_head popped;
+
     /* check for space in DNE list or make space otherwise */
     BUILD_ASSERT(RMEM_DNE_MAX_PAGES >= (1 + FAULT_MAX_RDAHEAD_SIZE));
     list_head_init(&popped);
