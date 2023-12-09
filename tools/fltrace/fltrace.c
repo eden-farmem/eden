@@ -305,7 +305,6 @@ again:
     start_stats_thread(-1);
 
     /* done initializing */
-    ft_bug_on(!load_acquire(&rmem_inited), "rmem not inited");
     ret = atomic_cmpxchg(&rmlib_state, INIT_STARTED, INITIALIZED);
     if(!ret) goto error;
     status = true;
