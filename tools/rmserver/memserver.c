@@ -1,12 +1,3 @@
-// Copyright © 2018-2021 VMware, Inc. All Rights Reserved.
-// SPDX-License-Identifier: BSD-2-Clause
-
-/*****************************************************************************
-    Memory server
-    - memory management at one server
-    - local memory allocation and RDMA registration
-    - register w/ the rack controller and expose memory to the rack
- ****************************************************************************/
 
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE

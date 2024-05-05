@@ -44,7 +44,7 @@ static void tx_prepare_tx_mbuf(struct rte_mbuf *buf,
 	/* initialize mbuf to point to net_hdr->payload */
 	buf->buf_addr = (char *)net_hdr->payload;
 	page_number = PGN_2MB((uintptr_t)buf->buf_addr - (uintptr_t)p->region.base);
-	/* Anil: Followed commit 4be717272e5f73ca14b0a029b1449977c75cf994 of dpdk */
+	/* XXX: Followed commit 4be717272e5f73ca14b0a029b1449977c75cf994 of dpdk */
 	buf->buf_iova = p->page_paddrs[page_number] + PGOFF_2MB(buf->buf_addr);
 	buf->data_off = 0;
 	rte_mbuf_refcnt_set(buf, 1);

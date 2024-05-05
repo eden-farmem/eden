@@ -1,11 +1,3 @@
-// Copyright © 2018-2021 VMware, Inc. All Rights Reserved.
-// SPDX-License-Identifier: BSD-2-Clause
-
-/*****************************************************************************
-    Rack controller
-    Rack-level memory allocation and memory server list management
- ****************************************************************************/
-
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE
 #endif

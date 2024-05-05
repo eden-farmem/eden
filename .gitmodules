@@ -3,4 +3,4 @@
 	url = http://dpdk.org/git/dpdk
 [submodule "jemalloc"]
 	path = jemalloc
-	url = git@github.com:eden-ucsd-vmware/jemalloc.git
+	url = git@github.com:jemalloc/jemalloc.git
