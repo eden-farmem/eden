@@ -5,12 +5,12 @@ Memory based on Shenango and Userfaultfd.
 # Eden
 While Eden modifies Shenango's core runtime at many places to support
 page-faults in between thread switching, most Eden-specific code is
-concentrated in the following places:
-    - [rmem/](./rmem) : most remote memory/page fault handling code
-    - [runtime/rmem.c](./runtime/rmem.c) : remote memory setup & teardown from Shenango runtime
-    - [runtime/pgfault.c](./runtime/pgfault.c) : page fault handling in Shenango runtime (entry point for Eden's hints)
-    - [shim/mem.c](./shim/mem.c): transparent memory interposition layer with jemalloc-based memory allocations
-    - [tools](./tools): Page fault profiling tool and remote memory server
+concentrated in the following places:  
+    - [rmem/](./rmem) : most remote memory/page fault handling code  
+    - [runtime/rmem.c](./runtime/rmem.c) : remote memory setup & teardown from Shenango runtime  
+    - [runtime/pgfault.c](./runtime/pgfault.c) : page fault handling in Shenango runtime (entry point for Eden's hints)  
+    - [shim/mem.c](./shim/mem.c): transparent memory interposition layer with jemalloc-based memory allocations  
+    - [tools](./tools): Page fault profiling tool and remote memory server  
 
 ## How to build and link Eden
 1) Clone the repository.
